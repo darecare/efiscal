@@ -1,8 +1,8 @@
 ** ARCHITECTURE **
 
-Frontend - React
-Backend - Java
-Database - Postgres
+- Frontend - React
+- Backend - Java
+- Database - Postgres
 
 AUTHENTICATION FLOW:
 1. User submits credentials → Frontend
@@ -27,7 +27,7 @@ DATA FLOW:
 
 TECHNOLOGY STACK:
 • Frontend: React 19, Vite, React Router, Axios
-• Backend: Python 3.11, FastAPI, SQLAlchemy, Pydantic
+• Backend: Java
 • Database: PostgreSQL 15
 • Authentication: JWT (python-jose), bcrypt
 • Deployment: Docker, Docker Compose, Nginx
