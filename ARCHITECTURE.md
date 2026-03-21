@@ -1,4 +1,5 @@
 ** ARCHITECTURE **
+
 Frontend - React
 Backend - Java
 Database - Postgres
