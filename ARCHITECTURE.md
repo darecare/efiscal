@@ -1,8 +1,9 @@
 ** ARCHITECTURE **
 
 - Frontend - React
-- Backend - Java
+- Backend - Java 21 LTS (OpenJDK: Temurin/Corretto)
 - Database - Postgres
+- External Integrations - MerchantPro API, Serbian Tax Authority API
 
 AUTHENTICATION FLOW:
 1. User submits credentials → Frontend
@@ -16,19 +17,29 @@ AUTHENTICATION FLOW:
 
 DATA FLOW:
 ┌─────────┐    HTTP      ┌─────────┐    SQL       ┌──────────┐
-│ Browser │ ◄─────────► │ FastAPI │ ◄─────────► │ Postgres │
+│ Browser │ ◄─────────► │ Java API│ ◄─────────► │ Postgres │
 └─────────┘   JSON+JWT   └─────────┘              └──────────┘
-                              │
-                              │ HTTP+API Key
-                              ▼
-                         ┌────────────┐
-                         │ MerchantPro│
-                         └────────────┘
+
+Java API external calls:
+- Java API ──HTTP+API Key──► MerchantPro API
+- Java API ──HTTPS+Provider Auth──► Tax Authority Serbia API
+It is planned to have other API external calls for different online shoping platforms such as WooCommerce, Shopify etc. Each 
+
+INTEGRATION NOTE:
+- Java backend calls MerchantPro API directly.
+- Java backend calls Serbian Tax Authority API directly.
+- MerchantPro does not call Tax Authority API for this application.
 
 TECHNOLOGY STACK:
 • Frontend: React 19, Vite, React Router, Axios
-• Backend: Java
+• Backend: Java 21 LTS, Spring Boot 3.x
 • Database: PostgreSQL 15
-• Authentication: JWT (python-jose), bcrypt
-• Deployment: Docker, Docker Compose, Nginx
+• Authentication: JWT (Spring Security), bcrypt
+• Deployment: Docker, Docker Compose, Apache
 • Security: CORS, Password Hashing, Token Auth
+
+OPERATIONAL BASELINE (MVP):
+• Concurrent Users: 10 active users at launch
+• Capacity Headroom Target: up to 30 concurrent users without architecture changes
+• External API Reliability: timeout + retry with exponential backoff + circuit breaker
+• Observability: request correlation ID, structured logs, masked sensitive fields
