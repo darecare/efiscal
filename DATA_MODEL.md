@@ -53,7 +53,7 @@ On Organization level is defined connection to mail server. From this mail addre
 
 | Column         | Type         | Constraints              | Notes                         |
 |----------------|--------------|--------------------------|-------------------------------|
-| id             | UUID         | PK, NOT NULL             |                               |
+| org_id             | UUID         | PK, NOT NULL             |                               |
 | name           | VARCHAR(255) | NOT NULL                 |                               |
 | tax_id         | VARCHAR(50)  | UNIQUE, NOT NULL         | PIB (Serbia tax identifier)   |
 | isactive      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
@@ -181,13 +181,14 @@ CREATE TABLE IF NOT EXISTS adempiere.elf_apitemplate
     endpoint character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
 )
 
-### 2.4 sales_orders
+### 2.8 sales_orders
 Sales order imported/fetched from an external shopping platform.
 
 | Column              | Type         | Constraints              | Notes                              |
 |---------------------|--------------|--------------------------|------------------------------------|
-| id                  | UUID         | PK, NOT NULL             |                                    |
-| organization_id     | UUID         | FK → organizations.id    |                                    |
+| order_id                  | UUID         | PK, NOT NULL             |                                    |
+| org_id     | UUID         | FK → organizations.id    |                                    |
+| client_id | UUID | FF -> client.client_id|
 | platform_connection_id | UUID      | FK → platform_connections.id |                               |
 | external_order_id   | VARCHAR(255) | NOT NULL                 | ID from external platform          |
 | external_order_ref  | VARCHAR(255) |                          | Human-readable order number        |
@@ -203,7 +204,7 @@ UNIQUE constraint: `(platform_connection_id, external_order_id)`
 
 ---
 
-### 2.5 fiscal_documents
+### 2.9 fiscal_bill
 A fiscalization request submitted to Serbian Tax Authority API, linked to a sales order.
 
 | Column              | Type         | Constraints              | Notes                                    |
@@ -224,7 +225,51 @@ A fiscalization request submitted to Serbian Tax Authority API, linked to a sale
 
 ---
 
-### 2.6 fiscal_document_audit_log
+CREATE TABLE IF NOT EXISTS adempiere.elf_fiscalbill
+(
+    client_id numeric(10,0) NOT NULL,
+    org_id numeric(10,0) NOT NULL,
+    order_id numeric(10,0) DEFAULT NULL::numeric,
+    created timestamp without time zone NOT NULL,
+    createdby numeric(10,0) NOT NULL,
+    efiscal_address character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_businessname character varying(100) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_code character varying(1) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_encryptedinternaldata text COLLATE pg_catalog."default",
+    efiscal_invoicecounter character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_invoicecounterext character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_link character varying(2000) COLLATE pg_catalog."default",
+    efiscal_messages character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_mrc character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_name character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_qr text COLLATE pg_catalog."default",
+    efiscal_requestedby character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_sdcdatetime character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_sdc_invoiceno character varying(30) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_signature text COLLATE pg_catalog."default",
+    efiscal_signedby character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_taxgrouprevision numeric(10,0) DEFAULT NULL::numeric,
+    efiscal_tin character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_totalamount numeric,
+    efiscal_totalcounter numeric,
+    efiscal_transactiontypecounter numeric(10,0) DEFAULT NULL::numeric,
+    efiscal_type character varying(2) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    fiscalbill_id numeric(10,0) NOT NULL,
+    fiscalbill_uu character varying(36) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
+    processed character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'N'::bpchar,
+    processedon numeric,
+    updated timestamp without time zone NOT NULL,
+    updatedby numeric(10,0) NOT NULL,
+    value character varying(40) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_invoicetype numeric(10,0) DEFAULT NULL::numeric,
+    efiscal_transactiontype numeric(10,0) DEFAULT NULL::numeric,
+    efiscal_customername character varying(100) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_orderno character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+   
+)
+
+### 2.10 fiscal_document_audit_log
 Immutable audit trail for every status change on a fiscal document.
 
 | Column              | Type         | Constraints              | Notes                              |
