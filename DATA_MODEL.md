@@ -225,7 +225,7 @@ A fiscalization request submitted to Serbian Tax Authority API, linked to a sale
 
 ---
 
-CREATE TABLE IF NOT EXISTS adempiere.elf_fiscalbill
+CREATE TABLE IF NOT EXISTS fiscalbill
 (
     client_id numeric(10,0) NOT NULL,
     org_id numeric(10,0) NOT NULL,
@@ -269,7 +269,7 @@ CREATE TABLE IF NOT EXISTS adempiere.elf_fiscalbill
    
 )
 
-### 2.10 fiscal_document_audit_log
+### 2.10 fiscal_tax
 Immutable audit trail for every status change on a fiscal document.
 
 | Column              | Type         | Constraints              | Notes                              |
@@ -283,9 +283,47 @@ Immutable audit trail for every status change on a fiscal document.
 | note                | TEXT         |                          |                                    |
 | created_at          | TIMESTAMPTZ  | NOT NULL                 | Immutable — no updated_at          |
 
-> **Audit requirement**: rows in this table must NEVER be updated or deleted.
+CREATE TABLE IF NOT EXISTS fiscaltax
+(
+    ad_client_id numeric(10,0) NOT NULL,
+    ad_org_id numeric(10,0) NOT NULL,
+    amount numeric,
+    efiscal_categoryname character varying(60) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    created timestamp without time zone NOT NULL,
+    createdby numeric(10,0) NOT NULL,
+    efiscal_taxlabel character varying(1) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    elf_fiscalbill_id numeric(10,0) DEFAULT NULL::numeric,
+    elf_fiscaltax_id numeric(10,0) NOT NULL,
+    elf_fiscaltax_uu character varying(36) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
+    processed character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'N'::bpchar,
+    processedon numeric,
+    rate numeric,
+    updated timestamp without time zone NOT NULL,
+    updatedby numeric(10,0) NOT NULL,
+    value character varying(40) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_categorytype numeric(10,0) DEFAULT NULL::numeric,
 
 ---
+
+### 2.11 fiscal config per org
+CREATE TABLE IF NOT EXISTS adempiere.elf_fiscalbillconfig
+(
+    ad_client_id numeric(10,0) DEFAULT NULL::numeric,
+    ad_org_id numeric(10,0) DEFAULT NULL::numeric,
+    ad_printformat_id numeric(10,0) DEFAULT NULL::numeric,
+    created timestamp without time zone DEFAULT getdate(),
+    createdby numeric(10,0) DEFAULT NULL::numeric,
+    elf_fiscalbillconfig_id numeric(10,0) NOT NULL DEFAULT NULL::numeric,
+    elf_fiscalbillconfig_uu character varying(36) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
+    r_mailtext_id numeric(10,0) DEFAULT NULL::numeric,
+    updated timestamp without time zone DEFAULT getdate(),
+    updatedby numeric(10,0) DEFAULT NULL::numeric,
+    email_from character varying(60) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    email_bcc character varying(60) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    email_test character varying(60) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    istest character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'N'::bpchar,
 
 ## 3. Entity Relationships
 
