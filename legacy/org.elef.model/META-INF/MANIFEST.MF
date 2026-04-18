@@ -1,0 +1,14 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: ElefModel
+Bundle-RequiredExecutionEnvironment: JavaSE-17
+Bundle-SymbolicName: org.elef.model;singleton:=true
+Bundle-Version: 1.0.1.qualifier
+Export-Package: org.elef.model
+Require-Bundle: org.adempiere.base;bundle-version="12.0.0",
+ org.adempiere.plugin.utils;bundle-version="12.0.0"
+Service-Component: OSGI-INF/ElefComponent.xml
+Automatic-Module-Name: org.elef.model
+Bundle-ActivationPolicy: lazy
+Bundle-Activator: org.adempiere.plugin.utils.Incremental2PackActivator
+Import-Package: org.json

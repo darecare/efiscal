@@ -17,45 +17,121 @@ Represents authenticated users of the eFiscal application.
 
 | Column         | Type         | Constraints              | Notes                         |
 |----------------|--------------|--------------------------|-------------------------------|
-| id             | UUID         | PK, NOT NULL             | Generated UUID                |
+| user_id             | UUID         | PK, NOT NULL             | Generated UUID                |
 | email          | VARCHAR(255) | UNIQUE, NOT NULL         |                               |
 | password_hash  | VARCHAR(255) | NOT NULL                 | bcrypt hash, never plaintext  |
-| role           | VARCHAR(50)  | NOT NULL                 | SUPER_ADMIN, USER, AUDITOR    |
-| organization_id| UUID         | FK → organizations.id    | NULL for SuperAdmin           |
+| role_id           | VARCHAR(50)  | NOT NULL                 | SUPER_ADMIN, USER, AUDITOR    |
 | is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | deleted_at     | TIMESTAMPTZ  | NULL                     | Soft delete                   |
 
----
 
-### 2.2 organizations
+
+
+---
+### 2.2 Client
+Table name: client
+CREATE TABLE IF NOT EXISTS client
+(
+    client_id numeric(10,0) NOT NULL,
+    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
+    created timestamp without time zone NOT NULL DEFAULT now(),
+    createdby numeric(10,0) NOT NULL,
+    updated timestamp without time zone NOT NULL DEFAULT now(),
+    updatedby numeric(10,0) NOT NULL,
+    value character varying(40) COLLATE pg_catalog."default" NOT NULL,
+    name character varying(60) COLLATE pg_catalog."default" NOT NULL,
+    description character varying(255) COLLATE pg_catalog."default",
+)
+
+
+### 2.3 organizations
 Represents a merchant/client organization using eFiscal.
+Table name: org
+On Organization level is defined connection to mail server. From this mail address system will send mail notifications.
 
 | Column         | Type         | Constraints              | Notes                         |
 |----------------|--------------|--------------------------|-------------------------------|
 | id             | UUID         | PK, NOT NULL             |                               |
 | name           | VARCHAR(255) | NOT NULL                 |                               |
 | tax_id         | VARCHAR(50)  | UNIQUE, NOT NULL         | PIB (Serbia tax identifier)   |
-| is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
-| created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
-| updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
-| deleted_at     | TIMESTAMPTZ  | NULL                     | Soft delete                   |
+| isactive      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
+| created     | TIMESTAMPTZ  | NOT NULL                 |                               |
+| updated     | TIMESTAMPTZ  | NOT NULL                 |                               |
+| deleted     | TIMESTAMPTZ  | NULL                     | Soft delete                   |
 
----
+CREATE TABLE IF NOT EXISTS org
+(
+    org_id numeric(10,0) NOT NULL,
+    client_id numeric(10,0) NOT NULL,
+    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
+    created timestamp without time zone NOT NULL DEFAULT now(),
+    createdby numeric(10,0) NOT NULL,
+    updated timestamp without time zone NOT NULL DEFAULT now(),
+    updatedby numeric(10,0) NOT NULL,
+    value character varying(40) COLLATE pg_catalog."default" NOT NULL,
+    name character varying(60) COLLATE pg_catalog."default" NOT NULL,
+    description character varying(255) COLLATE pg_catalog."default",
+    tax_id,
+    registration_id  , //maticni broj firme
+    city ,
+    address ,
+    postal_code ,
+    smtp_out_server character varying(255),
+    smtp_username character varying(255),
+    smtp_port character varying(255),
+    smtp_password character varying(255)      
+    smtp_sender_address character varying(255)  //From address that will be visible by receiver
+    smtp_secure_conn character varying(255) //will have options none, TLS, SSL
 
-### 2.3 platform_connections
+)
+
+### 2.4 role
+table name: role
+
+CREATE TABLE IF NOT EXISTS role
+(
+    role_id numeric(10,0) NOT NULL,
+    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
+    created timestamp without time zone NOT NULL DEFAULT now(),
+    createdby numeric(10,0) NOT NULL,
+    updated timestamp without time zone NOT NULL DEFAULT now(),
+    updatedby numeric(10,0) NOT NULL,
+    value character varying(40) COLLATE pg_catalog."default" NOT NULL,
+    name character varying(60) COLLATE pg_catalog."default" NOT NULL,
+    description character varying(255) COLLATE pg_catalog."default",
+
+)
+
+### 2.5 User organization access
+table name: user_orgaccess
+description: list of organizations where user has access
+CREATE TABLE IF NOT EXISTS user_orgaccess
+(
+    user_id numeric(10,0) NOT NULL,
+    org_id numeric(10,0) NOT NULL,
+    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
+    created timestamp without time zone NOT NULL DEFAULT now(),
+    createdby numeric(10,0) NOT NULL,
+    updated timestamp without time zone NOT NULL DEFAULT now(),
+    updatedby numeric(10,0) NOT NULL,
+    value character varying(40) COLLATE pg_catalog."default" NOT NULL,
+)
+
+
+### 2.6 platform_connections
+table name: apiconn
 Stores connection config for each external shopping platform (MerchantPro, WooCommerce, Shopify, etc.) per organization.
 
 | Column           | Type         | Constraints              | Notes                                      |
 |------------------|--------------|--------------------------|--------------------------------------------|
-| id               | UUID         | PK, NOT NULL             |                                            |
-| organization_id  | UUID         | FK → organizations.id    |                                            |
-| platform         | VARCHAR(50)  | NOT NULL                 | MERCHANTPRO, WOOCOMMERCE, SHOPIFY, etc.    |
+| apiconn_id               | UUID         | PK, NOT NULL             |                                            |
+| org_id  | UUID         | FK → organizations.id    |                                            |
+| api_platform         | VARCHAR(50)  | NOT NULL                 | MERCHANTPRO, WOOCOMMERCE, SHOPIFY, etc.    |
 | display_name     | VARCHAR(255) |                          | User-facing label                          |
 | api_base_url     | VARCHAR(500) |                          | Platform-specific endpoint                 |
-| credentials_ref  | VARCHAR(500) | NOT NULL                 | Reference to secret store, NOT raw secret  |
-| is_active        | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                                            |
+| isactive        | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                                            |
 | created_at       | TIMESTAMPTZ  | NOT NULL                 |                                            |
 | updated_at       | TIMESTAMPTZ  | NOT NULL                 |                                            |
 | deleted_at       | TIMESTAMPTZ  | NULL                     | Soft delete                                |
@@ -63,6 +139,47 @@ Stores connection config for each external shopping platform (MerchantPro, WooCo
 > **Security**: API keys and credentials must NEVER be stored in plain text. Store a reference to a secret manager (e.g., env variable name, Vault path, or encrypted blob).
 
 ---
+
+CREATE TABLE IF NOT EXISTS apiconn
+(
+    client_id numeric(10,0) NOT NULL,
+    org_id numeric(10,0) NOT NULL,
+    created timestamp without time zone NOT NULL,
+    createdby numeric(10,0) NOT NULL,
+    apiauthtype character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying, //type of authorization, will be a dropdown list such as Basic Auth, Oauth, mTLS...
+    apiconn_id numeric(10,0) NOT NULL,
+    apiconn_uu character varying(36) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    apikey character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying, //in case of basic auth will hold api key
+    apisecret character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying, // in case of basic auth will hold api secret
+    api_platform character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying, // will be dropdown list on frontend MP - MerchantPro, EF - EFiscal, WO - Woocommerce ...
+    api_base_url character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
+    updated timestamp without time zone NOT NULL,
+    updatedby numeric(10,0) NOT NULL,
+)
+
+### 2.7 API Templates
+table name: apitemplate
+description: define template for api calls such as POST, GET, PATCH ...
+
+CREATE TABLE IF NOT EXISTS adempiere.elf_apitemplate
+(
+    client_id numeric(10,0) NOT NULL,
+    org_id numeric(10,0) NOT NULL,
+    created timestamp without time zone NOT NULL,
+    createdby numeric(10,0) NOT NULL,
+    apiconn_id numeric(10,0) NOT NULL DEFAULT NULL::numeric,
+    apicontenttype character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying, // can be "application/json". "text/xml" ...
+    apirequesttype character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying, // can be "PATCH", "POST", "GET" ..
+    apitemplate_id numeric(10,0) NOT NULL,
+    apitemplate_uu character varying(36) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
+    name character varying(60) COLLATE pg_catalog."default" NOT NULL,
+    updated timestamp without time zone NOT NULL,
+    updatedby numeric(10,0) NOT NULL,
+    value character varying(40) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    endpoint character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+)
 
 ### 2.4 sales_orders
 Sales order imported/fetched from an external shopping platform.

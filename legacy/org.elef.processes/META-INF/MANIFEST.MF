@@ -1,0 +1,17 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Products
+Bundle-RequiredExecutionEnvironment: JavaSE-17
+Bundle-SymbolicName: org.elef.processes;singleton:=true
+Bundle-Version: 1.0.0.qualifier
+Import-Package: javax.xml.soap;version="[1.4.0,2.0.0)",
+ org.elef.model,
+ org.onerp.statement.email.utils,
+ org.w3c.dom
+Require-Bundle: org.adempiere.base;bundle-version="12.0.0",
+ json;bundle-version="20231013.0.0",
+ org.adempiere.replication
+Service-Component: ElefProductsComponents.xml
+Automatic-Module-Name: org.elef.products
+Bundle-ActivationPolicy: lazy
+Bundle-ClassPath: .
