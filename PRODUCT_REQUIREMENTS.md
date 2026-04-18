@@ -2,8 +2,21 @@
 
 ## 1. Product Overview
 - Product Name: eFiscal
-- Purpose: App will be used to issue fiscal bills based on sales orders from online shop. App will be able to connect to different online shopping platforms
+- Purpose: App will be used to issue fiscal bills based on sales orders from online shop. App will be able to connect to different online shopping platforms.
+App will be later extended to different platforms and functions for each platform. Example connect online shop with courier service. 
+Example 2: connect online shop with ERP system.
+App will serve as a bridge between 2 systems which both have API, but have no direct connection, and exchange data between system based on various functions.
 - Primary Market: [e.g., Serbia small/medium online merchants]
+- app will be made as modular, so that new API modules can be added. Example: connect app to various platforms for online shops, such as WooCommerce, MerchantPro, Shopify etc.
+First module to be implemented is MerchantPro.
+- Other API modules will be Tax Authorities, API Courier services, ERPs, or external accounting apps.
+- For every API module (connection) it will be possible to create functions that operate per defined module. 
+Example 1: Issue fiscal bill for module Tax Authority, based on sales order from MerchantPro.
+Example 2: Create shipment for module "Slanje paketa" (courier service, ), based on sales order from MerchantPro.
+Example 3: Create product for module "Slanje paketa", based on product from MerchantPro.
+- Each user will be linked to its own Client and Organizations. Client can have more organizations, example one user has 2 online shops, each shop will be one organization.
+
+
 
 ## 2. Goals and Success Metrics
 - Goal 1: [e.g., Issue compliant fiscal bills from webshop sales orders
@@ -50,7 +63,7 @@
 3. User accesses protected modules
 
 ### 6.2 Process Merchant Order
-1. App receives or fetches order from MerchantPro
+1. App receives or fetches order from MerchantPro - data will be in json format, kept in memory. Only if fiscall bill is issued succesfully for order, then some of order data will be stored in database. Main source of data for orders and products is MerchantPro shop, not local tables.
 2. User/system validates required fiscal data
 3. User selects orders for fiscalization
 3. Backend sends request to Tax Authority API per each selected order
