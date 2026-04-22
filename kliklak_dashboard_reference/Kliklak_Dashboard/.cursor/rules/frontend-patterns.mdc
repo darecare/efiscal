@@ -1,0 +1,32 @@
+---
+description: React frontend patterns (auth, API client, routing)
+globs: frontend/**/*.{jsx,tsx,js,ts}
+alwaysApply: false
+---
+
+# Frontend Patterns
+
+## Structure
+- Pages in `frontend/src/pages/` (Login, Register, Dashboard, Orders, Users)
+- Components in `frontend/src/components/` (e.g. ProtectedRoute)
+- Auth in `frontend/src/contexts/AuthContext.jsx`
+- API client in `frontend/src/services/api.js`
+
+## Auth Flow
+- JWT stored in localStorage after login
+- Axios interceptor adds `Authorization: Bearer <token>` to requests
+- ProtectedRoute wraps pages requiring auth
+- Superusers see "Users" menu; regular users do not
+
+## API Client
+- Base URL: `/api` (proxied in dev)
+- Use Axios from `frontend/src/services/api.js` (includes auth interceptor)
+- Handle 401 → redirect to login; 403 → show error
+
+## UI Conventions
+- Use modal dialogs for error messages (per FUNCTIONS_SPECS)
+- Loading spinners during API calls
+- Denormalize order data: one table row per line item when displaying orders
+- Orders page supports grouped-by-order mode; selection should persist across grouped/product view toggles
+- Keep bulk-action options view-aware: product actions in product view, order actions in grouped view
+- Combined processing flow ("Preuzmite za obradu") uses three fixed payment combinations and refresh-after-action should preserve that scope

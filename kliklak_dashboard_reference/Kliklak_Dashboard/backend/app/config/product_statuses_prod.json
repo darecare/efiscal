@@ -1,0 +1,37 @@
+[
+    {
+        "id": 31,
+        "name": "10 - Poslat upit",
+        "color": "#FFFF00FF"
+    },
+    {
+        "id": 28,
+        "name": "20 - Dostupno",
+        "color": "#00FFFFFF"
+    },
+    {
+        "id": 37,
+        "name": "30 - Poručeno za WEB",
+        "color": "#000000FF"
+    },
+    {
+        "id": 25,
+        "name": "40 - Poručeno za VP",
+        "color": "#0000FFFF"
+    },
+    {
+        "id": 22,
+        "name": "50 - Stiglo u VP",
+        "color": "#38761DFF"
+    },
+    {
+        "id": 34,
+        "name": "60 - Nije stiglo",
+        "color": "#FF9900FF"
+    },
+    {
+        "id": 19,
+        "name": "70 - Nema na stanju",
+        "color": "#FF0000FF"
+    }
+]

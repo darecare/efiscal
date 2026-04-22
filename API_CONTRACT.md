@@ -121,6 +121,49 @@ Integration boundary clarification:
 ```
 - Errors: `401`, `429`, `500`, `502`, `504`
 
+## 5A. Access Control Endpoints (Role and Action Management)
+
+### GET /roles
+- Description: List roles for active client scope.
+- 200 Response: role list with metadata.
+- Errors: `401`, `403`, `500`
+
+### POST /roles
+- Description: Create new role.
+- Request includes role name/code and active flag.
+- 201 Response: created role object.
+- Errors: `400`, `401`, `403`, `409`, `500`
+
+### PUT /roles/{roleId}
+- Description: Update role metadata.
+- Errors: `400`, `401`, `403`, `404`, `409`, `500`
+
+### GET /actions
+- Description: List available module actions (permission catalog).
+- Query examples: `module=MERCHANTPRO`, `module=FISCAL`.
+- Errors: `401`, `403`, `500`
+
+### PUT /roles/{roleId}/actions
+- Description: Replace or update role action assignments.
+- Request:
+```json
+{
+  "actions": [
+    "MERCHANTPRO_FETCH_ORDERS",
+    "FISCAL_CREATE_BILL"
+  ]
+}
+```
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### PUT /users/{userId}/role
+- Description: Assign role to user.
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### PUT /users/{userId}/organizations
+- Description: Assign organization access scope to user.
+- Errors: `400`, `401`, `403`, `404`, `500`
+
 ## 6. Error Model
 All non-2xx responses should follow:
 ```json
@@ -144,6 +187,8 @@ All non-2xx responses should follow:
 ## 8. Security Requirements
 - JWT validation on all protected routes
 - Role-based access controls per endpoint
+- Action-based authorization checks per endpoint (module action code)
+- Client and organization scope checks for all scoped business operations
 - Input validation on all payloads
 - Mask sensitive fields in logs
 - Rate limiting on auth and expensive endpoints

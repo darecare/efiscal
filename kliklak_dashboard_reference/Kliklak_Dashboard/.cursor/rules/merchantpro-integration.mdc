@@ -1,0 +1,31 @@
+---
+description: MerchantPro API integration patterns
+globs: backend/**/*.py,frontend/**/*.{jsx,tsx}
+alwaysApply: false
+---
+
+# MerchantPro Integration
+
+## Backend
+- Credentials from `.env`: `MERCHANTPRO_API_URL`, `MERCHANTPRO_API_USERNAME`, `MERCHANTPRO_API_PASSWORD`
+- Environment selector from `.env`: `ENVIRONMENT` (`dev|qa|prod`) for config files like `product_statuses_<ENVIRONMENT>.json` with fallback to default files
+- Basic Auth for MerchantPro API calls
+- Service layer: `backend/app/services/merchantpro.py`, `backend/app/services/orders.py`
+- App-level rate limit guard: ~3 calls/sec and 90 calls/min in service layer; still handle MerchantPro `429` gracefully
+- Retry: 3 retries with exponential backoff on 5xx
+- Timeout: 30 seconds
+
+## Orders Endpoint
+- MerchantPro: `GET /api/v2/orders` (see https://docs.merchantpro.com/api/endpoints/orders)
+- Pagination: `start` offset (default 0) + `limit` (app defaults to 100, max 100)
+- Response: `{ data: [...], meta: { count, links } }`
+- Thin proxy route `GET /api/merchantpro/orders` uses query param `order_status` and maps it to MerchantPro `status`
+
+## Data Model
+- Orders have `line_items[]` with `meta_fields.dobavljac`, `meta_fields.komercijalista`
+- Line items have `status` with `id`, `name`, `color`
+- Denormalize for table: one row per line item, order data repeated
+
+## Error Handling
+- 401/403 → redirect to login or show auth error
+- 500/504 → show "Service unavailable" or "Request timed out" in modal

@@ -30,17 +30,14 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - External API success rate (MerchantPro/Tax API): [target %]
 
 ## 3. User Roles
-- SuperAdmin
-  - [all permisions]
-- User
-  - Change account
-  - Sales Order list page
-  - Fiscal bill page
-  - Fiscal bill list page
-  - Reports
-  - per Organization
-- Read-only/Auditor (optional)
-  - [permissions]
+- Role model is configurable, not hardcoded by user type labels.
+- System must include one bootstrap SuperAdmin account at initial deployment.
+- Bootstrap SuperAdmin has full privileges across all clients and all organizations.
+- System must support Role Definition where admins define reusable roles.
+- User is assigned to one defined role and can access one or more organizations.
+- Access scope is limited by Client and Organization.
+- Each role has explicit action permissions (for example: Fetch Orders, Create Fiscal Bill, Retry Fiscal Bill, Manage Users).
+- When a new module function/action is added, it must be assignable to roles without code changes in permission data.
 
 ## 4. In Scope (MVP)
 - User authentication and authorization
@@ -82,6 +79,13 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 3. System sends request to Tax Authority API to issue fiscal bill
 4. App stores response and status - if response is 200, fiscal bill data will be stored in database tables
 
+### 6.5 Role and Access Management
+1. SuperAdmin/Admin opens Role Definition page.
+2. Admin creates or updates a role.
+3. Admin assigns allowed actions to role (for example Fetch Orders, Create Fiscal Bill).
+4. Admin assigns user to role and grants organization access.
+5. System enforces access by role action permissions plus client/organization scope.
+
 ## 7. Functional Requirements
 - FR-001: System must authenticate users and protect all non-public endpoints.
 - FR-002: System must integrate with MerchantPro API for order data.
@@ -89,6 +93,14 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - FR-004: System must persist all request/response references required for audit.
 - FR-005: System must provide transaction status visibility to users.
 - FR-006: System must allow safe retry for transient external API failures.
+- FR-007: System must reuse the current look-and-feel baseline of the Account page from Kliklak_Dashboard, with extension points for additional eFiscal fields.
+- FR-008: System must reuse the current look-and-feel baseline of the Users page from Kliklak_Dashboard for user management operations.
+- FR-009: System must reuse the Orders page structure from Kliklak_Dashboard for these sections: Fetch Filters, Actions Bar, and Orders Summary Table view.
+- FR-010: System must provide a dedicated Role Definition page for creating and maintaining roles.
+- FR-011: System must support action-based permissions per role (module + action level), not only page-level visibility.
+- FR-012: System must allow new module actions to be assigned to roles through configuration/data, without code-level permission rewrites.
+- FR-013: System must enforce user access by both role action permissions and client/organization scope.
+- FR-014: System must provision one initial SuperAdmin account during first setup, with unrestricted permissions across all clients and organizations.
 
 ## 8. Non-Functional Requirements (Product-Level)
 - NFR-001: MVP supports 10 concurrent active users.
@@ -103,6 +115,13 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - [ ] Failed external API calls are visible and can be retried safely.
 - [ ] Every fiscal bill issuing has auditable status history.
 - [ ] Basic KPI and error visibility available for operations.
+- [ ] Account page keeps Kliklak_Dashboard baseline layout and interaction style while allowing additional eFiscal-specific fields.
+- [ ] Users page keeps Kliklak_Dashboard baseline layout and interaction style for list and maintenance actions.
+- [ ] Orders page implements three structural sections aligned with Kliklak_Dashboard reference: Fetch Filters section, Actions Bar section, and Summary Table view grouped by order.
+- [ ] Admin can create/update roles and assign action permissions on a dedicated Role Definition page.
+- [ ] User can execute only actions granted by role and only within assigned client/organization scope.
+- [ ] New module actions can be added to permission catalog and assigned to roles without backend authorization code redesign.
+- [ ] Initial deployment creates exactly one bootstrap SuperAdmin account with global client/organization access and full permission scope.
 
 ## 10. Open Questions
 - OQ-001: [question] — Owner: [name] — Due: [date]

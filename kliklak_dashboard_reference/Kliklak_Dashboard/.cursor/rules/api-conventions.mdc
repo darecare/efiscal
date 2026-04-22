@@ -1,0 +1,32 @@
+---
+description: Backend API conventions (FastAPI, auth, error handling)
+globs: backend/**/*.py
+alwaysApply: false
+---
+
+# Backend API Conventions
+
+## Structure
+- API routes in `backend/app/api/` (auth, users, merchantpro, orders)
+- Business logic in `backend/app/services/`
+- Models in `backend/app/models/`, schemas in `backend/app/schemas/`
+- Config in `backend/app/core/config.py`, security in `backend/app/core/security.py`
+
+## Authentication
+- Most endpoints require JWT Bearer token; current public endpoint exception: `GET /api/config/product-statuses`
+- Use `get_current_user` dependency for protected routes
+- Superuser-only routes: check `current_user.is_superuser`
+
+## Error Responses
+Return FastAPI `HTTPException` with consistent format:
+- 400: Validation/bad request
+- 401: "Could not validate credentials"
+- 403: "Not enough permissions"
+- 404: "Resource not found"
+- 500: Internal error message
+
+## Patterns
+- Use Pydantic schemas for request/response validation
+- Use SQLAlchemy models for DB access
+- Password hashing: bcrypt via `backend/app/core/security.py`
+- JWT: python-jose, 30 min expiry (configurable)

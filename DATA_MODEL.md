@@ -18,9 +18,10 @@ Represents authenticated users of the eFiscal application.
 | Column         | Type         | Constraints              | Notes                         |
 |----------------|--------------|--------------------------|-------------------------------|
 | user_id             | UUID         | PK, NOT NULL             | Generated UUID                |
+| client_id       | UUID         | FK → client.client_id, NOT NULL | User belongs to exactly one client |
 | email          | VARCHAR(255) | UNIQUE, NOT NULL         |                               |
 | password_hash  | VARCHAR(255) | NOT NULL                 | bcrypt hash, never plaintext  |
-| role_id           | VARCHAR(50)  | NOT NULL                 | SUPER_ADMIN, USER, AUDITOR    |
+| role_id           | UUID         | FK → role.role_id, NOT NULL | Assigned role definition      |
 | is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
@@ -90,6 +91,21 @@ CREATE TABLE IF NOT EXISTS org
 ### 2.4 role
 table name: role
 
+Represents reusable access profile definitions per client.
+
+| Column         | Type         | Constraints              | Notes                         |
+|----------------|--------------|--------------------------|-------------------------------|
+| role_id        | UUID         | PK, NOT NULL             | Generated UUID                |
+| client_id      | UUID         | FK → client.client_id, NOT NULL | Role is client-scoped      |
+| role_code      | VARCHAR(100) | NOT NULL                 | Unique code per client        |
+| name           | VARCHAR(120) | NOT NULL                 | Display label                 |
+| description    | VARCHAR(255) |                          |                               |
+| is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
+| created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
+| updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
+
+UNIQUE constraint: `(client_id, role_code)`
+
 CREATE TABLE IF NOT EXISTS role
 (
     role_id numeric(10,0) NOT NULL,
@@ -107,6 +123,47 @@ CREATE TABLE IF NOT EXISTS role
 ### 2.5 User organization access
 table name: user_orgaccess
 description: list of organizations where user has access
+
+| Column         | Type         | Constraints              | Notes                         |
+|----------------|--------------|--------------------------|-------------------------------|
+| user_id        | UUID         | FK → users.user_id, NOT NULL |                           |
+| org_id         | UUID         | FK → organizations.org_id, NOT NULL |                     |
+| is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
+| created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
+| updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
+
+UNIQUE constraint: `(user_id, org_id)`
+
+### 2.5A action_catalog
+table name: action_catalog
+description: list of assignable module actions (permission catalog).
+
+| Column         | Type         | Constraints              | Notes                         |
+|----------------|--------------|--------------------------|-------------------------------|
+| action_id      | UUID         | PK, NOT NULL             |                               |
+| module_code    | VARCHAR(80)  | NOT NULL                 | MERCHANTPRO, FISCAL, USERS    |
+| action_code    | VARCHAR(120) | NOT NULL                 | MERCHANTPRO_FETCH_ORDERS, FISCAL_CREATE_BILL |
+| name           | VARCHAR(120) | NOT NULL                 | Human-readable label          |
+| description    | VARCHAR(255) |                          |                               |
+| is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
+| created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
+| updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
+
+UNIQUE constraint: `(module_code, action_code)`
+
+### 2.5B role_action_access
+table name: role_action_access
+description: mapping between roles and allowed actions.
+
+| Column         | Type         | Constraints              | Notes                         |
+|----------------|--------------|--------------------------|-------------------------------|
+| role_id        | UUID         | FK → role.role_id, NOT NULL |                             |
+| action_id      | UUID         | FK → action_catalog.action_id, NOT NULL |                 |
+| is_allowed     | BOOLEAN      | NOT NULL, DEFAULT TRUE   | Future-proofing for deny model |
+| created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
+| updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
+
+UNIQUE constraint: `(role_id, action_id)`
 CREATE TABLE IF NOT EXISTS user_orgaccess
 (
     user_id numeric(10,0) NOT NULL,
@@ -329,7 +386,7 @@ CREATE TABLE IF NOT EXISTS adempiere.elf_fiscalbillconfig
 
 ```
 organizations
-  ├── users (1:N)
+    ├── user_orgaccess (1:N)
   ├── platform_connections (1:N)
   └── sales_orders (1:N)
         └── fiscal_documents (1:1)
@@ -337,6 +394,11 @@ organizations
 
 platform_connections → sales_orders (1:N)
 users → fiscal_document_audit_log (0:N, optional)
+client → users (1:N)
+client → roles (1:N)
+users → user_orgaccess (1:N)
+roles → role_action_access (1:N)
+action_catalog → role_action_access (1:N)
 ```
 
 ---
@@ -346,6 +408,11 @@ users → fiscal_document_audit_log (0:N, optional)
 | Table                      | Index                                          | Purpose                         |
 |----------------------------|------------------------------------------------|---------------------------------|
 | users                      | email                                          | Login lookup                    |
+| users                      | (client_id, role_id)                           | Scoped access and role joins    |
+| user_orgaccess             | (user_id, org_id)                              | User organization scope lookup  |
+| role                       | (client_id, role_code)                         | Role uniqueness per client      |
+| action_catalog             | (module_code, action_code)                     | Permission catalog lookup       |
+| role_action_access         | (role_id, action_id)                           | Effective permission lookup     |
 | sales_orders               | (organization_id, status)                      | Filtered list views             |
 | sales_orders               | (platform_connection_id, external_order_id)    | Deduplication on import         |
 | fiscal_documents           | (organization_id, status)                      | Status dashboards               |
@@ -360,6 +427,7 @@ users → fiscal_document_audit_log (0:N, optional)
 - Naming: `V<version>__<description>.sql` (Flyway) or equivalent
 - Rule: migrations are append-only; never edit an applied migration
 - Baseline: V1 creates all tables from this document
+- Bootstrap seed: initial migration (or paired seed migration) must create exactly one global SuperAdmin account with full client/organization scope and role-action access to all actions.
 
 ---
 

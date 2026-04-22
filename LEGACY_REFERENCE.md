@@ -92,6 +92,22 @@ This starter matrix maps new-spec behaviors to legacy references. Expand it duri
 | Tax breakdown persistence | I_ELF_FiscalTax + eFiscalUtils | Recreate tax-result capture model suitable for new schema |
 | Platform connection profile | I_ELF_ApiConn | Redesign secure connection entity and validation rules |
 
+## 7A. Frontend Reference Matrix (Kliklak_Dashboard)
+
+This matrix defines UI reference usage from the imported frontend project.
+
+| New app spec area | Frontend reference source | How to use it |
+| --- | --- | --- |
+| Account page baseline | kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/pages/Account.jsx | Recreate page shell, account form layout, and save-feedback interaction; extend with eFiscal fields without changing visual language |
+| Users page baseline | kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/pages/Users.jsx | Recreate users management structure (header + card table + CRUD modal flow) in eFiscal style baseline |
+| Orders page: Fetch Filters section | kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/pages/Orders.jsx | Recreate prefetch filter block and fetch action buttons as the first section on Orders page |
+| Orders page: Actions Bar section | kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/pages/Orders.jsx | Recreate selection scope controls and action-apply bar pattern |
+| Orders page: Summary view table | kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/pages/Orders.jsx | Recreate grouped-by-order summary table with expandable order item details |
+
+Supporting style hooks:
+- kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/styles/index.css
+- Use as styling reference only; do not copy stylesheet blocks directly.
+
 ## 8. Delivery Controls
 
 Definition of Done checks:
@@ -100,6 +116,8 @@ Definition of Done checks:
 3. Code review confirms behavioral parity and structural reimplementation.
 4. Error handling and idempotency follow API_CONTRACT, not legacy runtime assumptions.
 5. Data modeling follows DATA_MODEL decisions even when legacy differs.
+6. Frontend work that reuses Kliklak_Dashboard patterns cites one row in Section 7A.
+7. Frontend PR review confirms "structure/style parity" and "clean reimplementation" for Account, Users, and Orders selected sections.
 
 PR template recommendation:
 - Reference row from Section 7:
