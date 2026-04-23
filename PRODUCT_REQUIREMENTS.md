@@ -101,6 +101,13 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - FR-012: System must allow new module actions to be assigned to roles through configuration/data, without code-level permission rewrites.
 - FR-013: System must enforce user access by both role action permissions and client/organization scope.
 - FR-014: System must provision one initial SuperAdmin account during first setup, with unrestricted permissions across all clients and organizations.
+- FR-015 - system must have scheduler, with Cron job definition, to run tasks in background. Same tasks that can run manually by user, can be done using scheduler. Task list with predefined parameters/filters for API calls and run order can be defined.
+ - FR-016 system must provide issuing of Fiscal bills from Order list page.
+ - FR-017 system must provide issuing of all types of fiscal bills
+ - FR-018 system must provide issue of fiscal bill with multiple payment methods defined per one fiscal bill.
+ - FR-019 System must have option to send email to customers, with mail template  defined and attachment with PDF document for fiscal bill.
+ - FR-020 For each API call to Serbian Tax authority system will store log data in dedicated database log table.
+
 
 ## 8. Non-Functional Requirements (Product-Level)
 - NFR-001: MVP supports 10 concurrent active users.

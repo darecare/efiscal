@@ -25,6 +25,12 @@ Java API external calls:
 - Java API ──HTTPS+Provider Auth──► Tax Authority Serbia API
 It is planned to have other API external calls for different online shoping platforms such as WooCommerce, Shopify etc. Each 
 
+BACKEND FLOW:
+- Java API > module (per external system) > Function call
+Modules: MerchantPro, Shopify, Woo, ERP, Courier service
+Functions: Fetch Orders, Post Fiscal Bill, Post shipment request, Save Log data etc.
+- Backend must use modern design patterns.
+
 INTEGRATION NOTE:
 - Java backend calls MerchantPro API directly.
 - Java backend calls Serbian Tax Authority API directly.

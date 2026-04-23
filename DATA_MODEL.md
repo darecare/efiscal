@@ -364,17 +364,17 @@ CREATE TABLE IF NOT EXISTS fiscaltax
 ---
 
 ### 2.11 fiscal config per org
-CREATE TABLE IF NOT EXISTS adempiere.elf_fiscalbillconfig
+CREATE TABLE IF NOT EXISTS fiscalbillconfig
 (
-    ad_client_id numeric(10,0) DEFAULT NULL::numeric,
-    ad_org_id numeric(10,0) DEFAULT NULL::numeric,
-    ad_printformat_id numeric(10,0) DEFAULT NULL::numeric,
+    client_id numeric(10,0) DEFAULT NULL::numeric,
+    org_id numeric(10,0) DEFAULT NULL::numeric,
+    printformat_id numeric(10,0) DEFAULT NULL::numeric,
     created timestamp without time zone DEFAULT getdate(),
     createdby numeric(10,0) DEFAULT NULL::numeric,
-    elf_fiscalbillconfig_id numeric(10,0) NOT NULL DEFAULT NULL::numeric,
-    elf_fiscalbillconfig_uu character varying(36) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    fiscalbillconfig_id numeric(10,0) NOT NULL DEFAULT NULL::numeric,
+    fiscalbillconfig_uu character varying(36) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
     isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
-    r_mailtext_id numeric(10,0) DEFAULT NULL::numeric,
+    mailtemplate_id numeric(10,0) DEFAULT NULL::numeric,
     updated timestamp without time zone DEFAULT getdate(),
     updatedby numeric(10,0) DEFAULT NULL::numeric,
     email_from character varying(60) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
