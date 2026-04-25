@@ -70,6 +70,10 @@ export const orgsApi = {
     const response = await api.get('/orgs', { params })
     return response.data
   },
+  async myAccess() {
+    const response = await api.get('/orgs/my-access')
+    return response.data
+  },
   async create(payload) {
     const response = await api.post('/orgs', payload)
     return response.data
@@ -119,8 +123,11 @@ export const apiTemplateApi = {
 }
 
 export const ordersApi = {
-  async fetch(filters) {
-    const response = await api.post('/merchantpro/orders', filters)
+  async fetch({ orgId, createdAfter, shippingStatus, start = 0, limit = 100 }) {
+    const params = { orgId, start, limit }
+    if (createdAfter) params.createdAfter = createdAfter
+    if (shippingStatus) params.shippingStatus = shippingStatus
+    const response = await api.get('/merchantpro/orders', { params })
     return response.data
   },
 }

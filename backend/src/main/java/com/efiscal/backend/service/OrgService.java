@@ -2,8 +2,10 @@ package com.efiscal.backend.service;
 
 import com.efiscal.backend.model.ClientEntity;
 import com.efiscal.backend.model.OrgEntity;
+import com.efiscal.backend.repository.AppUserRepository;
 import com.efiscal.backend.repository.ClientRepository;
 import com.efiscal.backend.repository.OrgRepository;
+import com.efiscal.backend.repository.UserOrgAccessRepository;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -11,17 +13,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-
-
 @Service
 public class OrgService {
 
     private final OrgRepository orgRepository;
     private final ClientRepository clientRepository;
+    private final AppUserRepository appUserRepository;
+    private final UserOrgAccessRepository userOrgAccessRepository;
 
-    public OrgService(OrgRepository orgRepository, ClientRepository clientRepository) {
+    public OrgService(OrgRepository orgRepository, ClientRepository clientRepository,
+                      AppUserRepository appUserRepository, UserOrgAccessRepository userOrgAccessRepository) {
         this.orgRepository = orgRepository;
         this.clientRepository = clientRepository;
+        this.appUserRepository = appUserRepository;
+        this.userOrgAccessRepository = userOrgAccessRepository;
     }
 
     @Transactional(readOnly = true)
@@ -70,6 +75,23 @@ public class OrgService {
         if (req.currency() != null) org.setCurrency(req.currency());
         if (req.isActive() != null) org.setActive(req.isActive());
         return toDto(orgRepository.save(org));
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrgDto> listMyOrgs(String email, boolean isSuperAdmin) {
+        if (isSuperAdmin) {
+            return listOrgs(null);
+        }
+        return appUserRepository.findByEmail(email)
+            .map(user -> userOrgAccessRepository.findAllByIdUserId(user.getUserId())
+                .stream()
+                .map(access -> orgRepository.findById(access.getId().getOrgId()))
+                .filter(java.util.Optional::isPresent)
+                .map(java.util.Optional::get)
+                .filter(o -> o.getDeletedAt() == null)
+                .map(this::toDto)
+                .toList())
+            .orElse(List.of());
     }
 
     private OrgDto toDto(OrgEntity o) {

@@ -25,6 +25,16 @@ public class OrgController {
         return orgService.listOrgs(clientId);
     }
 
+    @GetMapping("/my-access")
+    public List<OrgDto> myAccessOrgs() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof DemoDataService.AuthenticatedUser u)) {
+            return List.of();
+        }
+        boolean isSuperAdmin = "SUPERADMIN".equals(u.roleName());
+        return orgService.listMyOrgs(u.email(), isSuperAdmin);
+    }
+
     @GetMapping("/{orgId}")
     public OrgDto getOrg(@PathVariable Long orgId) {
         return orgService.getOrg(orgId);

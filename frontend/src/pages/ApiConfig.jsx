@@ -105,7 +105,12 @@ export default function ApiConfig() {
     if (!connForm.orgId) { setConnFormError('Organization is required'); return }
     try {
       setConnSaving(true)
-      const payload = { ...connForm, orgId: Number(connForm.orgId) }
+      const payload = {
+        ...connForm,
+        orgId: Number(connForm.orgId),
+        apikey: connForm.apikey.trim() || null,
+        apisecret: connForm.apisecret.trim() || null,
+      }
       if (connMode === 'add') {
         await apiConnApi.create(payload)
         setSuccessMsg('Connection created')

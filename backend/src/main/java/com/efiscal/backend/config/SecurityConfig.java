@@ -18,7 +18,7 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/v1/auth/login").permitAll()
+                .requestMatchers("/api/v1/auth/login", "/error").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(bearerTokenFilter, UsernamePasswordAuthenticationFilter.class)
             .build();
