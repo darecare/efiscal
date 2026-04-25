@@ -2,6 +2,8 @@ package com.efiscal.backend.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -16,6 +18,8 @@ public class DemoDataService {
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final Map<String, UserAccount> usersByEmail = new ConcurrentHashMap<>();
     private final Map<String, AuthenticatedUser> sessionsByToken = new ConcurrentHashMap<>();
+    private final Map<String, FiscalBillView> fiscalBillsById = new ConcurrentHashMap<>();
+    private final Map<String, String> fiscalBillIdByIdempotencyKey = new ConcurrentHashMap<>();
     private final List<ClientOrgView> clientOrgs;
     private final List<ApiConnectionView> apiConnections;
     private final List<ApiTemplateView> apiTemplates;
@@ -67,6 +71,9 @@ public class DemoDataService {
         if (account == null || !passwordEncoder.matches(password, account.passwordHash())) {
             return null;
         }
+        if (!isAccessAllowed(account.roleName(), account.subscriptionStatus(), account.subscriptionExpiresAt())) {
+            return LoginResult.subscriptionExpired();
+        }
         AuthenticatedUser authenticatedUser = new AuthenticatedUser(
             account.id(),
             account.email(),
@@ -81,7 +88,15 @@ public class DemoDataService {
     }
 
     public AuthenticatedUser findByToken(String token) {
-        return sessionsByToken.get(token);
+        AuthenticatedUser user = sessionsByToken.get(token);
+        if (user == null) {
+            return null;
+        }
+        if (isAccessAllowed(user.roleName(), user.subscriptionStatus(), user.subscriptionExpiresAt())) {
+            return user;
+        }
+        sessionsByToken.remove(token);
+        return null;
     }
 
     public List<AuthenticatedUser> listUsers() {
@@ -115,7 +130,91 @@ public class DemoDataService {
             .toList();
     }
 
+    public FiscalBillCreateResult createFiscalBill(String idempotencyKey, FiscalBillCreateRequest request) {
+        String existingId = fiscalBillIdByIdempotencyKey.get(idempotencyKey);
+        if (existingId != null) {
+            return FiscalBillCreateResult.ofAlreadyExists(fiscalBillsById.get(existingId));
+        }
+
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        FiscalBillStatus nextStatus = resolveInitialFiscalStatus(request.orderId());
+        String documentId = UUID.randomUUID().toString();
+        String providerReference = nextStatus == FiscalBillStatus.SUCCESS ? "SUF-" + request.orderId() + "-" + now.toEpochSecond() : null;
+        String lastError = nextStatus == FiscalBillStatus.FAILED ? "Provider timeout. Retry is allowed." : null;
+
+        FiscalBillView view = new FiscalBillView(
+            documentId,
+            request.orderId(),
+            nextStatus.name(),
+            providerReference,
+            lastError,
+            1,
+            now.toString(),
+            now.toString());
+
+        fiscalBillsById.put(documentId, view);
+        fiscalBillIdByIdempotencyKey.put(idempotencyKey, documentId);
+        return FiscalBillCreateResult.ofCreated(view);
+    }
+
+    public FiscalBillView findFiscalBillById(String fiscalBillId) {
+        return fiscalBillsById.get(fiscalBillId);
+    }
+
+    public FiscalBillRetryResult retryFiscalBill(String fiscalBillId, String idempotencyKey) {
+        String existingRetryId = fiscalBillIdByIdempotencyKey.get(idempotencyKey);
+        if (existingRetryId != null && !existingRetryId.equals(fiscalBillId)) {
+            return FiscalBillRetryResult.ofIdempotencyConflict();
+        }
+
+        FiscalBillView current = fiscalBillsById.get(fiscalBillId);
+        if (current == null) {
+            return FiscalBillRetryResult.ofNotFound();
+        }
+        if (!"FAILED".equals(current.status())) {
+            return FiscalBillRetryResult.ofNotRetryable(current);
+        }
+
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        FiscalBillView retried = new FiscalBillView(
+            current.fiscalDocumentId(),
+            current.orderId(),
+            FiscalBillStatus.RETRYING.name(),
+            current.providerReference(),
+            null,
+            current.attemptCount() + 1,
+            current.createdAt(),
+            now.toString());
+        fiscalBillsById.put(fiscalBillId, retried);
+        fiscalBillIdByIdempotencyKey.put(idempotencyKey, fiscalBillId);
+        return FiscalBillRetryResult.ofRetried(retried);
+    }
+
+    private FiscalBillStatus resolveInitialFiscalStatus(String orderId) {
+        return "2".equals(orderId) ? FiscalBillStatus.FAILED : FiscalBillStatus.SUCCESS;
+    }
+
+    private boolean isAccessAllowed(String roleName, String subscriptionStatus, String subscriptionExpiresAt) {
+        if ("SUPERADMIN".equals(roleName)) {
+            return true;
+        }
+        if (!"ACTIVE".equalsIgnoreCase(subscriptionStatus)) {
+            return false;
+        }
+        if (subscriptionExpiresAt == null || subscriptionExpiresAt.isBlank()) {
+            return false;
+        }
+        return !LocalDate.parse(subscriptionExpiresAt).isBefore(LocalDate.now());
+    }
+
     public record LoginResult(String accessToken, AuthenticatedUser user) {
+        public static LoginResult subscriptionExpired() {
+            return new LoginResult(null, null);
+        }
+
+        public boolean isSubscriptionExpired() {
+            return accessToken == null && user == null;
+        }
     }
 
     private record UserAccount(
@@ -181,5 +280,69 @@ public class DemoDataService {
         String startDate,
         String endDate,
         String shippingStatus) {
+    }
+
+    public record FiscalBillCreateRequest(
+        String orderId,
+        CustomerPayload customer,
+        List<FiscalItemPayload> items,
+        String currency,
+        String paymentMethod) {
+    }
+
+    public record CustomerPayload(String name) {
+    }
+
+    public record FiscalItemPayload(
+        String sku,
+        String name,
+        BigDecimal quantity,
+        BigDecimal unitPrice,
+        BigDecimal taxRate) {
+    }
+
+    public record FiscalBillCreateResult(FiscalBillView fiscalBill, boolean created, boolean idempotencyConflict) {
+        public static FiscalBillCreateResult ofCreated(FiscalBillView fiscalBill) {
+            return new FiscalBillCreateResult(fiscalBill, true, false);
+        }
+
+        public static FiscalBillCreateResult ofAlreadyExists(FiscalBillView fiscalBill) {
+            return new FiscalBillCreateResult(fiscalBill, false, false);
+        }
+    }
+
+    public record FiscalBillRetryResult(FiscalBillView fiscalBill, boolean retried, boolean notFound, boolean notRetryable, boolean idempotencyConflict) {
+        public static FiscalBillRetryResult ofRetried(FiscalBillView fiscalBill) {
+            return new FiscalBillRetryResult(fiscalBill, true, false, false, false);
+        }
+
+        public static FiscalBillRetryResult ofNotFound() {
+            return new FiscalBillRetryResult(null, false, true, false, false);
+        }
+
+        public static FiscalBillRetryResult ofNotRetryable(FiscalBillView fiscalBill) {
+            return new FiscalBillRetryResult(fiscalBill, false, false, true, false);
+        }
+
+        public static FiscalBillRetryResult ofIdempotencyConflict() {
+            return new FiscalBillRetryResult(null, false, false, false, true);
+        }
+    }
+
+    public record FiscalBillView(
+        String fiscalDocumentId,
+        String orderId,
+        String status,
+        String providerReference,
+        String lastError,
+        int attemptCount,
+        String createdAt,
+        String updatedAt) {
+    }
+
+    public enum FiscalBillStatus {
+        SUCCESS,
+        FAILED,
+        RETRYING
     }
 }

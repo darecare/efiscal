@@ -6,7 +6,8 @@ const navItems = [
   { path: '/orders', label: 'Orders' },
   { path: '/account', label: 'Account' },
   { path: '/users', label: 'Users' },
-  { path: '/clients-orgs', label: 'Clients & Orgs' },
+  { path: '/clients', label: 'Clients' },
+  { path: '/organizations', label: 'Organizations' },
   { path: '/api-config', label: 'API Config' },
 ]
 

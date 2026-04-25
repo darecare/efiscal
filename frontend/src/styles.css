@@ -1,8 +1,12 @@
 :root {
   color-scheme: light;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: 'Roboto', sans-serif;
   background: #f3efe7;
   color: #1d2430;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Sora', sans-serif;
 }
 
 * {
@@ -190,8 +194,118 @@ select {
   color: #9f2d24;
 }
 
+.fiscal-error {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+}
+
 .muted {
   color: #6b7280;
+}
+
+/* ─── Status chips ─────────────────────────────────── */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.status-chip.active {
+  background: #d4f0d8;
+  color: #1a5922;
+}
+
+.status-chip.inactive {
+  background: #fde8e8;
+  color: #7f1d1d;
+}
+
+.status-chip.setup,
+.status-chip.suspended {
+  background: #fef3c7;
+  color: #78350f;
+}
+
+.status-chip.expired {
+  background: #fde8e8;
+  color: #7f1d1d;
+}
+
+/* ─── Modal ────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 34, 47, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 200;
+  padding: 24px;
+}
+
+.modal {
+  background: #fffcf5;
+  border-radius: 16px;
+  padding: 28px 32px;
+  width: min(560px, 100%);
+  box-shadow: 0 24px 64px rgba(36, 47, 61, 0.25);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-header h3 {
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.modal-close:hover {
+  background: #e7d8c8;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+/* ─── Banners ──────────────────────────────────────── */
+.success-banner {
+  background: #d4f0d8;
+  color: #1a5922;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid #a8d5ae;
+}
+
+.error-banner {
+  background: #fde8e8;
+  color: #7f1d1d;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid #f5b8b8;
 }
 
 @media (max-width: 860px) {

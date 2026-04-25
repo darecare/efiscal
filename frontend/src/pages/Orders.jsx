@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import AppShell from '../components/AppShell'
-import { ordersApi } from '../services/api'
+import { fiscalBillApi, ordersApi } from '../services/api'
 
 const initialFilters = {
   startDate: '2026-04-01',
@@ -11,6 +11,8 @@ const initialFilters = {
 export default function Orders() {
   const [filters, setFilters] = useState(initialFilters)
   const [orders, setOrders] = useState([])
+  const [fiscalByOrderId, setFiscalByOrderId] = useState({})
+  const [busyOrderIds, setBusyOrderIds] = useState({})
 
   useEffect(() => {
     ordersApi.fetch(initialFilters).then(setOrders)
@@ -20,6 +22,91 @@ export default function Orders() {
     event.preventDefault()
     const nextOrders = await ordersApi.fetch(filters)
     setOrders(nextOrders)
+  }
+
+  function createIdempotencyKey() {
+    if (window.crypto && window.crypto.randomUUID) {
+      return window.crypto.randomUUID()
+    }
+    return `idem-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  }
+
+  async function issueFiscalBill(order) {
+    setBusyOrderIds((current) => ({ ...current, [order.id]: true }))
+    try {
+      const created = await fiscalBillApi.create(
+        {
+          OrderId: order.id,
+          customer: {
+            name: order.customerName,
+          },
+          items: [
+            {
+              sku: `SKU-${order.id}`,
+              name: `Order ${order.externalOrderNo}`,
+              quantity: 1,
+              unitPrice: Number(order.totalAmount),
+              taxRate: 20,
+            },
+          ],
+          currency: 'RSD',
+          paymentMethod: 'CARD',
+        },
+        createIdempotencyKey(),
+      )
+
+      const latestStatus = await fiscalBillApi.status(created.fiscalDocumentId)
+      setFiscalByOrderId((current) => ({
+        ...current,
+        [order.id]: {
+          fiscalDocumentId: created.fiscalDocumentId,
+          status: latestStatus.status,
+          lastError: latestStatus.lastError,
+          attemptCount: latestStatus.attemptCount,
+        },
+      }))
+    } catch (error) {
+      setFiscalByOrderId((current) => ({
+        ...current,
+        [order.id]: {
+          status: 'ERROR',
+          lastError: error.response?.data?.message || 'Failed to issue fiscal bill',
+        },
+      }))
+    } finally {
+      setBusyOrderIds((current) => ({ ...current, [order.id]: false }))
+    }
+  }
+
+  async function retryFiscalBill(order) {
+    const fiscal = fiscalByOrderId[order.id]
+    if (!fiscal?.fiscalDocumentId) {
+      return
+    }
+    setBusyOrderIds((current) => ({ ...current, [order.id]: true }))
+    try {
+      const retryResponse = await fiscalBillApi.retry(fiscal.fiscalDocumentId, createIdempotencyKey())
+      setFiscalByOrderId((current) => ({
+        ...current,
+        [order.id]: {
+          ...current[order.id],
+          status: retryResponse.status,
+          lastError: null,
+          attemptCount: (current[order.id]?.attemptCount || 1) + 1,
+        },
+      }))
+    } catch (error) {
+      setFiscalByOrderId((current) => ({
+        ...current,
+        [order.id]: {
+          ...current[order.id],
+          status: 'ERROR',
+          lastError: error.response?.data?.message || 'Retry failed',
+        },
+      }))
+    } finally {
+      setBusyOrderIds((current) => ({ ...current, [order.id]: false }))
+    }
   }
 
   return (
@@ -61,6 +148,8 @@ export default function Orders() {
               <th>Status</th>
               <th>Total</th>
               <th>Created At</th>
+              <th>Fiscal Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -71,6 +160,25 @@ export default function Orders() {
                 <td>{order.shippingStatus}</td>
                 <td>{order.totalAmount} RSD</td>
                 <td>{order.createdAt}</td>
+                <td>
+                  <span className="badge">{fiscalByOrderId[order.id]?.status || 'NOT_SUBMITTED'}</span>
+                  {fiscalByOrderId[order.id]?.lastError ? <p className="error-text fiscal-error">{fiscalByOrderId[order.id].lastError}</p> : null}
+                </td>
+                <td>
+                  <div className="inline-actions">
+                    <button type="button" className="primary-button" onClick={() => issueFiscalBill(order)} disabled={busyOrderIds[order.id]}>
+                      {busyOrderIds[order.id] ? 'Processing...' : 'Issue Fiscal Bill'}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => retryFiscalBill(order)}
+                      disabled={busyOrderIds[order.id] || fiscalByOrderId[order.id]?.status !== 'FAILED'}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

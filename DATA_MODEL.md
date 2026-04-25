@@ -5,7 +5,7 @@
 - Schema strategy: single schema per environment (`public`)
 - Migration tool: [e.g., Flyway / Liquibase — choose one]
 - Naming convention: `snake_case` for all table and column names
-- All tables include: `id` (UUID PK), `created_at`, `updated_at`
+- All tables include: `id` (BIGINT PK, auto-generated identity starting at 1000, up to 10 digits), `created_at`, `updated_at`
 - Soft delete pattern: `deleted_at` nullable timestamp (NULL = active)
 
 ---
@@ -17,11 +17,11 @@ Represents authenticated users of the eFiscal application.
 
 | Column         | Type         | Constraints              | Notes                         |
 |----------------|--------------|--------------------------|-------------------------------|
-| user_id             | UUID         | PK, NOT NULL             | Generated UUID                |
-| client_id       | UUID         | FK → client.client_id, NOT NULL | User belongs to exactly one client |
+| user_id             | BIGINT       | PK, NOT NULL, IDENTITY(1000,1) | Auto-generated integer        |
+| client_id       | BIGINT       | FK → client.client_id, NOT NULL | User belongs to exactly one client |
 | email          | VARCHAR(255) | UNIQUE, NOT NULL         |                               |
 | password_hash  | VARCHAR(255) | NOT NULL                 | bcrypt hash, never plaintext  |
-| role_id           | UUID         | FK → role.role_id, NOT NULL | Assigned role definition      |
+| role_id           | BIGINT       | FK → role.role_id, NOT NULL | Assigned role definition      |
 | is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
 | subscription_start_at | TIMESTAMPTZ | NULL                  | Required for normal users     |
 | subscription_expires_at | TIMESTAMPTZ | NULL                | Normal user access expires at this timestamp |
@@ -40,18 +40,17 @@ Rules:
 ---
 ### 2.2 Client
 Table name: client
-CREATE TABLE IF NOT EXISTS client
-(
-    client_id numeric(10,0) NOT NULL,
-    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
-    created timestamp without time zone NOT NULL DEFAULT now(),
-    createdby numeric(10,0) NOT NULL,
-    updated timestamp without time zone NOT NULL DEFAULT now(),
-    updatedby numeric(10,0) NOT NULL,
-    value character varying(40) COLLATE pg_catalog."default" NOT NULL,
-    name character varying(60) COLLATE pg_catalog."default" NOT NULL,
-    description character varying(255) COLLATE pg_catalog."default",
-)
+
+| Column     | Type    | Constraints                         | Notes                    |
+|------------|---------|-------------------------------------|--------------------------|
+| client_id  | BIGINT  | PK, NOT NULL, IDENTITY(1000,1)      | Auto-generated integer   |
+| name       | VARCHAR(255) | NOT NULL                       |                          |
+| status     | VARCHAR(50)  | NOT NULL, DEFAULT 'ACTIVE'     | ACTIVE, SETUP, SUSPENDED, INACTIVE |
+| currency   | VARCHAR(10)  | NOT NULL, DEFAULT 'RSD'        |                          |
+| is_active  | BOOLEAN | NOT NULL, DEFAULT TRUE              |                          |
+| created_at | TIMESTAMPTZ | NOT NULL                       |                          |
+| updated_at | TIMESTAMPTZ | NOT NULL                       |                          |
+| deleted_at | TIMESTAMPTZ | NULL                           | Soft delete              |
 
 
 ### 2.3 organizations
@@ -61,38 +60,30 @@ On Organization level is defined connection to mail server. From this mail addre
 
 | Column         | Type         | Constraints              | Notes                         |
 |----------------|--------------|--------------------------|-------------------------------|
-| org_id             | UUID         | PK, NOT NULL             |                               |
+| org_id             | BIGINT       | PK, NOT NULL, IDENTITY(1000,1) | Auto-generated integer        |
+| client_id      | BIGINT       | FK → client.client_id, NOT NULL |                               |
 | name           | VARCHAR(255) | NOT NULL                 |                               |
-| tax_id         | VARCHAR(50)  | UNIQUE, NOT NULL         | PIB (Serbia tax identifier)   |
-| isactive      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
-| created     | TIMESTAMPTZ  | NOT NULL                 |                               |
-| updated     | TIMESTAMPTZ  | NOT NULL                 |                               |
-| deleted     | TIMESTAMPTZ  | NULL                     | Soft delete                   |
+| tax_id         | VARCHAR(50)  | NULL                     | PIB (Serbia tax identifier)   |
+| status         | VARCHAR(50)  | NOT NULL, DEFAULT 'ACTIVE' | ACTIVE, SETUP, SUSPENDED, INACTIVE |
+| currency       | VARCHAR(10)  | NOT NULL, DEFAULT 'RSD'  |                               |
+| is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
+| created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
+| updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
+| deleted_at     | TIMESTAMPTZ  | NULL                     | Soft delete                   |
 
-CREATE TABLE IF NOT EXISTS org
+CREATE TABLE org
 (
-    org_id numeric(10,0) NOT NULL,
-    client_id numeric(10,0) NOT NULL,
-    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
-    created timestamp without time zone NOT NULL DEFAULT now(),
-    createdby numeric(10,0) NOT NULL,
-    updated timestamp without time zone NOT NULL DEFAULT now(),
-    updatedby numeric(10,0) NOT NULL,
-    value character varying(40) COLLATE pg_catalog."default" NOT NULL,
-    name character varying(60) COLLATE pg_catalog."default" NOT NULL,
-    description character varying(255) COLLATE pg_catalog."default",
-    tax_id,
-    registration_id  , //maticni broj firme
-    city ,
-    address ,
-    postal_code ,
-    smtp_out_server character varying(255),
-    smtp_username character varying(255),
-    smtp_port character varying(255),
-    smtp_password character varying(255)      
-    smtp_sender_address character varying(255)  //From address that will be visible by receiver
-    smtp_secure_conn character varying(255) //will have options none, TLS, SSL
-
+    org_id     BIGINT GENERATED ALWAYS AS IDENTITY (START WITH 1000) PRIMARY KEY,
+    client_id  BIGINT NOT NULL,
+    name       VARCHAR(255) NOT NULL,
+    tax_id     VARCHAR(50),
+    status     VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
+    currency   VARCHAR(10) NOT NULL DEFAULT 'RSD',
+    is_active  BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ,
+    CONSTRAINT fk_org_client FOREIGN KEY (client_id) REFERENCES client (client_id)
 )
 
 ### 2.4 role
@@ -102,29 +93,26 @@ Represents reusable access profile definitions per client.
 
 | Column         | Type         | Constraints              | Notes                         |
 |----------------|--------------|--------------------------|-------------------------------|
-| role_id        | UUID         | PK, NOT NULL             | Generated UUID                |
-| client_id      | UUID         | FK → client.client_id, NOT NULL | Role is client-scoped      |
-| role_code      | VARCHAR(100) | NOT NULL                 | Unique code per client        |
+| role_id        | BIGINT       | PK, NOT NULL, IDENTITY(1000,1)      | Auto-generated integer        |
+| role_code      | VARCHAR(100) | NOT NULL, UNIQUE         | Unique code                   |
 | name           | VARCHAR(120) | NOT NULL                 | Display label                 |
 | description    | VARCHAR(255) |                          |                               |
 | is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 
-UNIQUE constraint: `(client_id, role_code)`
+UNIQUE constraint: `(role_code)`
 
-CREATE TABLE IF NOT EXISTS role
+CREATE TABLE role
 (
-    role_id numeric(10,0) NOT NULL,
-    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
-    created timestamp without time zone NOT NULL DEFAULT now(),
-    createdby numeric(10,0) NOT NULL,
-    updated timestamp without time zone NOT NULL DEFAULT now(),
-    updatedby numeric(10,0) NOT NULL,
-    value character varying(40) COLLATE pg_catalog."default" NOT NULL,
-    name character varying(60) COLLATE pg_catalog."default" NOT NULL,
-    description character varying(255) COLLATE pg_catalog."default",
-
+    role_id     BIGINT GENERATED ALWAYS AS IDENTITY (START WITH 1000) PRIMARY KEY,
+    role_code   VARCHAR(100) NOT NULL,
+    name        VARCHAR(120) NOT NULL,
+    description VARCHAR(255),
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_role_code UNIQUE (role_code)
 )
 
 ### 2.5 User organization access
@@ -133,8 +121,8 @@ description: list of organizations where user has access
 
 | Column         | Type         | Constraints              | Notes                         |
 |----------------|--------------|--------------------------|-------------------------------|
-| user_id        | UUID         | FK → users.user_id, NOT NULL |                           |
-| org_id         | UUID         | FK → organizations.org_id, NOT NULL |                     |
+| user_id        | BIGINT       | FK → users.user_id, NOT NULL     |                           |
+| org_id         | BIGINT       | FK → org.org_id, NOT NULL        |                           |
 | is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
@@ -147,7 +135,7 @@ description: list of assignable module actions (permission catalog).
 
 | Column         | Type         | Constraints              | Notes                         |
 |----------------|--------------|--------------------------|-------------------------------|
-| action_id      | UUID         | PK, NOT NULL             |                               |
+| action_id      | BIGINT       | PK, NOT NULL, IDENTITY(1000,1)      | Auto-generated integer        |
 | module_code    | VARCHAR(80)  | NOT NULL                 | MERCHANTPRO, FISCAL, USERS    |
 | action_code    | VARCHAR(120) | NOT NULL                 | MERCHANTPRO_FETCH_ORDERS, FISCAL_CREATE_BILL |
 | name           | VARCHAR(120) | NOT NULL                 | Human-readable label          |
@@ -164,23 +152,23 @@ description: mapping between roles and allowed actions.
 
 | Column         | Type         | Constraints              | Notes                         |
 |----------------|--------------|--------------------------|-------------------------------|
-| role_id        | UUID         | FK → role.role_id, NOT NULL |                             |
-| action_id      | UUID         | FK → action_catalog.action_id, NOT NULL |                 |
+| role_id        | BIGINT       | FK → role.role_id, NOT NULL      |                             |
+| action_id      | BIGINT       | FK → action_catalog.action_id, NOT NULL |                 |
 | is_allowed     | BOOLEAN      | NOT NULL, DEFAULT TRUE   | Future-proofing for deny model |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 
 UNIQUE constraint: `(role_id, action_id)`
-CREATE TABLE IF NOT EXISTS user_orgaccess
+CREATE TABLE user_orgaccess
 (
-    user_id numeric(10,0) NOT NULL,
-    org_id numeric(10,0) NOT NULL,
-    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
-    created timestamp without time zone NOT NULL DEFAULT now(),
-    createdby numeric(10,0) NOT NULL,
-    updated timestamp without time zone NOT NULL DEFAULT now(),
-    updatedby numeric(10,0) NOT NULL,
-    value character varying(40) COLLATE pg_catalog."default" NOT NULL,
+    user_id    BIGINT NOT NULL,
+    org_id     BIGINT NOT NULL,
+    is_active  BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, org_id),
+    CONSTRAINT fk_uoa_user FOREIGN KEY (user_id) REFERENCES users (user_id),
+    CONSTRAINT fk_uoa_org  FOREIGN KEY (org_id)  REFERENCES org   (org_id)
 )
 
 
@@ -190,8 +178,8 @@ Stores connection config for each external shopping platform (MerchantPro, WooCo
 
 | Column           | Type         | Constraints              | Notes                                      |
 |------------------|--------------|--------------------------|--------------------------------------------|
-| apiconn_id               | UUID         | PK, NOT NULL             |                                            |
-| org_id  | UUID         | FK → organizations.id    |                                            |
+| apiconn_id     | BIGINT       | PK, NOT NULL, IDENTITY(1000,1)      | Auto-generated integer     |
+| org_id         | BIGINT       | FK → org.org_id              |                                            |
 | api_platform         | VARCHAR(50)  | NOT NULL                 | MERCHANTPRO, WOOCOMMERCE, SHOPIFY, etc.    |
 | display_name     | VARCHAR(255) |                          | User-facing label                          |
 | api_base_url     | VARCHAR(500) |                          | Platform-specific endpoint                 |

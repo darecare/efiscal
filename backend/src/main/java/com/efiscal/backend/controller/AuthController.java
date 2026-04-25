@@ -25,6 +25,9 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         DemoDataService.LoginResult result = demoDataService.login(request.email(), request.password());
+        if (result != null && result.isSubscriptionExpired()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse("SUBSCRIPTION_EXPIRED"));
+        }
         if (result == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("Invalid email or password"));
         }
