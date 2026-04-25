@@ -103,6 +103,20 @@ This matrix defines UI reference usage from the imported frontend project.
 | Orders page: Fetch Filters section | kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/pages/Orders.jsx | Recreate prefetch filter block and fetch action buttons as the first section on Orders page |
 | Orders page: Actions Bar section | kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/pages/Orders.jsx | Recreate selection scope controls and action-apply bar pattern |
 | Orders page: Summary view table | kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/pages/Orders.jsx | Recreate grouped-by-order summary table with expandable order item details |
+| MerchantPro fetch parameter baseline | kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/pages/Orders.jsx | Use date + shipping status + pagination behavior as reference for filter UX and request model |
+
+## 7B. Dynamic Parameterization Reference (Legacy + Frontend)
+
+| New app spec area | Reference source | How to use it |
+| --- | --- | --- |
+| Dynamic API template operation model | legacy/org.elef.model/src/org/elef/model/MELF_ApiTemplate.java | Use template-driven operation resolution as design reference for dynamic integration execution |
+| Dynamic field/parameter mapping concept | legacy/org.elef.model/src/org/elef/model/MELF_ApiField.java | Use field-mapping concept as reference for parameter definitions (key/name/type/required/default) |
+| MerchantPro fetch filter behavior | kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/pages/Orders.jsx | Recreate request filter shape (created_after, shipping_status, limit/start) in modern backend contract |
+
+Rules:
+- These sources are behavioral and design references only.
+- Do not copy implementation code.
+- Reimplement with current architecture and data model conventions.
 
 Supporting style hooks:
 - kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/styles/index.css

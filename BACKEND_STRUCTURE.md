@@ -153,14 +153,22 @@ Notes:
 - Source tables from DATA_MODEL:
   - apiconn: base URL, auth model, platform identity, active scope
   - apitemplate: operation endpoint, HTTP method, content type
+- Dynamic fetch parameter definitions: template-linked parameter metadata for query-string construction and validation.
 - Execution pipeline:
   1. Resolve active apiconn by organization and platform.
   2. Resolve apitemplate by operation key and connection.
-  3. Build request URL, method, headers, and payload.
-  4. Apply auth strategy selected by apiconn auth type.
-  5. Execute call with timeout/retry/circuit-breaker policies.
-  6. Map response to internal result and persist audit metadata.
+  3. Resolve and validate allowed fetch parameters (MVP: created_after, shipping_status).
+  4. Build request URL query string dynamically from provided filters and template parameter definitions.
+  5. Build method, headers, and payload (if applicable).
+  6. Apply auth strategy selected by apiconn auth type.
+  7. Execute call with timeout/retry/circuit-breaker policies.
+  8. Map response to internal result and persist audit metadata.
 - Security rule: credentials are referenced securely and never stored in plaintext in operational logs.
+
+Reference-only guidance:
+- Use Kliklak Orders fetch behavior as reference for practical filter usage (date/shipping status + pagination).
+- Use legacy template-driven field mapping approach as reference for dynamic parameter resolution.
+- Reimplement in current backend stack; do not copy source code.
 
 ### 6.5 Provider Onboarding Modes
 - Mode A: Config-only (preferred)
@@ -177,6 +185,11 @@ Notes:
 - Sensitive values stored in secure configuration (not hardcoded).
 - Mask secrets/PII in logs.
 
+Subscription enforcement:
+- Normal users are allowed only when subscription is active and current timestamp is before subscription expiration.
+- Subscription validation must run at login and for protected operations.
+- Bootstrap SuperAdmin is exempt from subscription expiration checks.
+
 ### 7.1 Authorization Model (Action-Based RBAC)
 - Role Definition is data-driven and managed by admin users.
 - Permissions are assigned as module actions (for example: MERCHANTPRO_FETCH_ORDERS, FISCAL_CREATE_BILL).
@@ -189,6 +202,7 @@ Notes:
   1. user role has required action
   2. user has access to active organization
   3. organization belongs to active client context
+  4. normal user subscription is active and not expired
 
 ### 7.3 Dynamic Action Catalog
 - New module functions register new action codes in database catalog.

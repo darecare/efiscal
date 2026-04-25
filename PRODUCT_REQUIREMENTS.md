@@ -38,6 +38,9 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - Access scope is limited by Client and Organization.
 - Each role has explicit action permissions (for example: Fetch Orders, Create Fiscal Bill, Retry Fiscal Bill, Manage Users).
 - When a new module function/action is added, it must be assignable to roles without code changes in permission data.
+- Normal users must have subscription validity period with expiration date.
+- Expired subscription blocks system usage for normal users until renewed.
+- Bootstrap SuperAdmin is not subscription-limited.
 
 ## 4. In Scope (MVP)
 - User authentication and authorization
@@ -57,15 +60,18 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 ### 6.1 Login
 1. User submits credentials
 2. Backend validates and issues JWT
-3. User accesses protected modules
+3. Backend validates subscription status for normal users.
+4. User accesses protected modules only if subscription is active and not expired.
 
 ### 6.2 Process Merchant Order
-1. App receives or fetches order from MerchantPro - data will be in json format, kept in memory. Only if fiscall bill is issued succesfully for order, then some of order data will be stored in database. Main source of data for orders and products is MerchantPro shop, not local tables.
-2. User/system validates required fiscal data
-3. User selects orders for fiscalization
-3. Backend sends request to Tax Authority API per each selected order
-4. App stores response and status - if response is 200, fiscal bill data will be stored in database tables
-5. User sees final status (success/failure/pending)
+1. App receives or fetches order from MerchantPro - data will be in json format, kept in memory. Only if fiscall bill is issued succesfully for order, then some of order data will be stored in database tables. Main source of data for orders and products is MerchantPro shop, not local tables.
+2. MerchantPro fetch must support URL query parameters (minimum for MVP: date and shipping status).
+3. Fetch parameter set must be extensible so additional filters can be added later without redesign.
+4. User/system validates required fiscal data.
+5. User selects orders for fiscalization.
+6. Backend sends request to Tax Authority API per each selected order.
+7. App stores response and status - if response is 200, fiscal bill data will be stored in database tables.
+8. User sees final status (success/failure/pending).
 
 ### 6.3 Retry Failed Fiscalization
 1. User opens failed transaction
@@ -89,6 +95,8 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 ## 7. Functional Requirements
 - FR-001: System must authenticate users and protect all non-public endpoints.
 - FR-002: System must integrate with MerchantPro API for order data.
+- FR-002A: MerchantPro order fetch must support parameterized URL filtering (minimum for MVP: created_after date and shipping_status).
+- FR-002B: MerchantPro fetch filter model must be dynamic/extensible so new parameters can be introduced without endpoint redesign.
 - FR-003: System must integrate with Serbian Tax Authority API for fiscalization.
 - FR-004: System must persist all request/response references required for audit.
 - FR-005: System must provide transaction status visibility to users.
@@ -101,6 +109,9 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - FR-012: System must allow new module actions to be assigned to roles through configuration/data, without code-level permission rewrites.
 - FR-013: System must enforce user access by both role action permissions and client/organization scope.
 - FR-014: System must provision one initial SuperAdmin account during first setup, with unrestricted permissions across all clients and organizations.
+- FR-021: System must enforce subscription expiration for normal users using subscription start/end dates.
+- FR-022: System must deny login and protected operations for normal users with expired subscription.
+- FR-023: System must allow authorized admin users to set and update subscription validity for normal users.
 - FR-015 - system must have scheduler, with Cron job definition, to run tasks in background. Same tasks that can run manually by user, can be done using scheduler. Task list with predefined parameters/filters for API calls and run order can be defined.
  - FR-016 system must provide issuing of Fiscal bills from Order list page.
  - FR-017 system must provide issuing of all types of fiscal bills
@@ -119,6 +130,8 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 ## 9. Acceptance Criteria (MVP)
 - [ ] User can log in and access protected pages.
 - [ ] MerchantPro order can be processed end-to-end to Tax Authority submission.
+- [ ] MerchantPro fetch supports at least date and shipping status parameters.
+- [ ] Additional MerchantPro fetch parameters can be added through configuration/model extension with no API contract breaking change.
 - [ ] Failed external API calls are visible and can be retried safely.
 - [ ] Every fiscal bill issuing has auditable status history.
 - [ ] Basic KPI and error visibility available for operations.
@@ -129,6 +142,8 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - [ ] User can execute only actions granted by role and only within assigned client/organization scope.
 - [ ] New module actions can be added to permission catalog and assigned to roles without backend authorization code redesign.
 - [ ] Initial deployment creates exactly one bootstrap SuperAdmin account with global client/organization access and full permission scope.
+- [ ] Normal user with active subscription can log in and use authorized features.
+- [ ] Normal user with expired subscription is denied access with clear error message.
 
 ## 10. Open Questions
 - OQ-001: [question] — Owner: [name] — Due: [date]

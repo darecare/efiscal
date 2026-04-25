@@ -31,10 +31,24 @@ Modules: MerchantPro, Shopify, Woo, ERP, Courier service
 Functions: Fetch Orders, Post Fiscal Bill, Post shipment request, Save Log data etc.
 - Backend must use modern design patterns.
 
+MERCHANTPRO FETCH PARAMETERIZATION:
+- MerchantPro order fetch is parameterized and translated to provider URL query parameters.
+- MVP required parameters: created_after (date) and shipping_status.
+- Additional parameters must be added through metadata/config extension (template + parameter definitions), not hardcoded endpoint redesign.
+- Fetch pipeline should support pagination parameters (limit/start) and future provider-specific filters.
+
 INTEGRATION NOTE:
 - Java backend calls MerchantPro API directly.
 - Java backend calls Serbian Tax Authority API directly.
 - MerchantPro does not call Tax Authority API for this application.
+
+EXTERNAL API SPEC REFERENCES:
+- MerchantPro API (official docs): https://docs.merchantpro.com/api/
+- MerchantPro Orders endpoint docs: https://docs.merchantpro.com/api/endpoints/orders
+- Serbian Tax Authority eInvoice Create endpoint docs: https://tap.sandbox.suf.purs.gov.rs/Help/view/1522287161/Create-Invoice/en-US
+- Serbian Tax Authority fiscal bill example (Normal Sale): https://tap.sandbox.suf.purs.gov.rs/Help/view/535663692/Normal-Sale/en-US
+- Serbian Tax Authority tax model/example docs: https://tap.sandbox.suf.purs.gov.rs/Help/view/417621922/Model-and-Example/en-US
+- Serbian Tax Authority tax amounts docs: https://tap.sandbox.suf.purs.gov.rs/Help/view/1034863356/Tax-Amounts/en-US
 
 TECHNOLOGY STACK:
 • Frontend: React 19, Vite, React Router, Axios, Sass
@@ -71,6 +85,7 @@ Governance:
 ACCESS CONTROL ARCHITECTURE (RBAC + SCOPE):
 • Authorization model is action-based RBAC with data scope constraints.
 • Access decision = Role Permission (module action) + User Scope (client + organization).
+• For normal users, access decision also includes subscription validity (current date within subscription period).
 • Roles are managed from dedicated Role Definition UI and persisted in data model tables.
 • Action catalog supports extensibility: new module actions can be registered and assigned to roles without redesign of authorization flow.
 
@@ -78,4 +93,5 @@ Backend enforcement rules:
 • Every protected endpoint is mapped to required action code (example: MERCHANTPRO_FETCH_ORDERS, FISCAL_CREATE_BILL).
 • Request context must include active client and organization.
 • System validates user has organization access and role permission for requested action.
+• System validates subscription is active and not expired for normal users.
 • Denied permissions return authorization error with standard API error model.

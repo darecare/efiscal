@@ -23,9 +23,16 @@ Represents authenticated users of the eFiscal application.
 | password_hash  | VARCHAR(255) | NOT NULL                 | bcrypt hash, never plaintext  |
 | role_id           | UUID         | FK → role.role_id, NOT NULL | Assigned role definition      |
 | is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
+| subscription_start_at | TIMESTAMPTZ | NULL                  | Required for normal users     |
+| subscription_expires_at | TIMESTAMPTZ | NULL                | Normal user access expires at this timestamp |
+| subscription_status | VARCHAR(30) | NOT NULL, DEFAULT 'ACTIVE' | ACTIVE, EXPIRED, SUSPENDED |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | deleted_at     | TIMESTAMPTZ  | NULL                     | Soft delete                   |
+
+Rules:
+- Bootstrap SuperAdmin may have NULL subscription dates and is not blocked by expiration checks.
+- Normal users must have valid subscription range and ACTIVE status to access the system.
 
 
 
@@ -219,6 +226,46 @@ CREATE TABLE IF NOT EXISTS apiconn
 table name: apitemplate
 description: define template for api calls such as POST, GET, PATCH ...
 
+Normalized target model (for new implementation):
+
+| Column           | Type         | Constraints              | Notes                                      |
+|------------------|--------------|--------------------------|--------------------------------------------|
+| apitemplate_id   | UUID         | PK, NOT NULL             |                                            |
+| apiconn_id       | UUID         | FK → platform_connections.apiconn_id, NOT NULL |                                 |
+| operation_key    | VARCHAR(120) | NOT NULL                 | FETCH_ORDERS, CREATE_FISCAL_BILL, etc.     |
+| http_method      | VARCHAR(16)  | NOT NULL                 | GET, POST, PATCH                            |
+| content_type     | VARCHAR(100) | NOT NULL                 | application/json, etc.                      |
+| endpoint_path    | VARCHAR(500) | NOT NULL                 | Relative endpoint path                       |
+| is_active        | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                                            |
+| created_at       | TIMESTAMPTZ  | NOT NULL                 |                                            |
+| updated_at       | TIMESTAMPTZ  | NOT NULL                 |                                            |
+
+UNIQUE constraint: `(apiconn_id, operation_key)`
+
+### 2.7A API Template Parameters
+table name: apitemplate_param
+description: defines dynamic query/path/body parameter mapping for each template operation.
+
+| Column             | Type         | Constraints              | Notes                                      |
+|--------------------|--------------|--------------------------|--------------------------------------------|
+| apitemplate_param_id | UUID       | PK, NOT NULL             |                                            |
+| apitemplate_id     | UUID         | FK → apitemplate.apitemplate_id, NOT NULL |                                  |
+| param_key          | VARCHAR(120) | NOT NULL                 | Internal key (created_after, shipping_status) |
+| provider_param_name| VARCHAR(120) | NOT NULL                 | External query key name                     |
+| location           | VARCHAR(20)  | NOT NULL                 | QUERY, PATH, BODY                           |
+| data_type          | VARCHAR(20)  | NOT NULL                 | STRING, DATE, NUMBER, BOOLEAN               |
+| is_required        | BOOLEAN      | NOT NULL, DEFAULT FALSE  |                                            |
+| default_value      | VARCHAR(255) |                          | Optional default                            |
+| is_active          | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                                            |
+| created_at         | TIMESTAMPTZ  | NOT NULL                 |                                            |
+| updated_at         | TIMESTAMPTZ  | NOT NULL                 |                                            |
+
+UNIQUE constraint: `(apitemplate_id, param_key)`
+
+MVP required parameters for MerchantPro order fetch template:
+- created_after (DATE, QUERY, required)
+- shipping_status (STRING, QUERY, required)
+
 CREATE TABLE IF NOT EXISTS adempiere.elf_apitemplate
 (
     client_id numeric(10,0) NOT NULL,
@@ -409,6 +456,7 @@ action_catalog → role_action_access (1:N)
 |----------------------------|------------------------------------------------|---------------------------------|
 | users                      | email                                          | Login lookup                    |
 | users                      | (client_id, role_id)                           | Scoped access and role joins    |
+| users                      | (subscription_status, subscription_expires_at) | Subscription validity checks    |
 | user_orgaccess             | (user_id, org_id)                              | User organization scope lookup  |
 | role                       | (client_id, role_code)                         | Role uniqueness per client      |
 | action_catalog             | (module_code, action_code)                     | Permission catalog lookup       |
