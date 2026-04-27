@@ -3,7 +3,9 @@ package com.efiscal.backend.model;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "apiconn")
@@ -21,7 +23,7 @@ public class ApiConnEntity {
     @Column(name = "display_name", nullable = false, length = 255)
     private String displayName;
 
-    @Column(name = "api_platform", nullable = false, length = 50)
+    @Column(name = "api_platform", nullable = false, length = 10)
     private String apiPlatform;
 
     @Column(name = "api_base_url", length = 500)
@@ -35,6 +37,16 @@ public class ApiConnEntity {
 
     @Column(name = "apisecret", length = 255)
     private String apisecret;
+
+    @JdbcTypeCode(SqlTypes.BINARY)
+    @Column(name = "cert_data")
+    private byte[] certData;
+
+    @Column(name = "cert_password", length = 255)
+    private String certPassword;
+
+    @Column(name = "pac", length = 10)
+    private String pac;
 
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
@@ -65,6 +77,12 @@ public class ApiConnEntity {
     public void setApikey(String apikey) { this.apikey = apikey; }
     public String getApisecret() { return apisecret; }
     public void setApisecret(String apisecret) { this.apisecret = apisecret; }
+    public byte[] getCertData() { return certData; }
+    public void setCertData(byte[] certData) { this.certData = certData; }
+    public String getCertPassword() { return certPassword; }
+    public void setCertPassword(String certPassword) { this.certPassword = certPassword; }
+    public String getPac() { return pac; }
+    public void setPac(String pac) { this.pac = pac; }
     public boolean isActive() { return isActive; }
     public void setActive(boolean active) { isActive = active; }
     public OffsetDateTime getCreatedAt() { return createdAt; }

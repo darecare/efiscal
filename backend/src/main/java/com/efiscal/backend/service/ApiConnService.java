@@ -54,6 +54,9 @@ public class ApiConnService {
         e.setApiauthtype(req.apiauthtype());
         e.setApikey(req.apikey());
         e.setApisecret(req.apisecret());
+        e.setCertData(req.certData());
+        e.setCertPassword(req.certPassword());
+        e.setPac(req.pac());
         e.setActive(req.isActive() != null ? req.isActive() : true);
         return toConnDto(apiConnRepository.save(e));
     }
@@ -73,6 +76,9 @@ public class ApiConnService {
         if (req.apiauthtype() != null) e.setApiauthtype(req.apiauthtype());
         if (req.apikey() != null) e.setApikey(req.apikey());
         if (req.apisecret() != null) e.setApisecret(req.apisecret());
+        if (req.certData() != null) e.setCertData(req.certData());
+        if (req.certPassword() != null) e.setCertPassword(req.certPassword());
+        if (req.pac() != null) e.setPac(req.pac());
         if (req.isActive() != null) e.setActive(req.isActive());
         return toConnDto(apiConnRepository.save(e));
     }
@@ -106,7 +112,7 @@ public class ApiConnService {
     private ApiConnDto toConnDto(ApiConnEntity e) {
         return new ApiConnDto(e.getApiconnId(), e.getOrg().getOrgId(), e.getOrg().getName(),
             e.getDisplayName(), e.getApiPlatform(), e.getApiBaseUrl(),
-            e.getApiauthtype(), e.isActive(), e.getCreatedAt());
+            e.getApiauthtype(), e.getPac(), e.isActive(), e.getCreatedAt());
     }
 
     private ApiTemplateDto toTemplateDto(ApiTemplateEntity t) {
@@ -117,14 +123,15 @@ public class ApiConnService {
 
     public record ApiConnDto(Long apiconnId, Long orgId, String orgName, String displayName,
         String apiPlatform, String apiBaseUrl, String apiauthtype,
-        boolean isActive, OffsetDateTime createdAt) {}
+        String pac, boolean isActive, OffsetDateTime createdAt) {}
 
     public record ApiTemplateDto(Long apitemplateId, Long apiconnId, String operationKey,
         String httpMethod, String contentType, String endpointPath,
         boolean isActive, OffsetDateTime createdAt) {}
 
     public record ApiConnRequest(Long orgId, String displayName, String apiPlatform,
-        String apiBaseUrl, String apiauthtype, String apikey, String apisecret, Boolean isActive) {}
+        String apiBaseUrl, String apiauthtype, String apikey, String apisecret,
+        byte[] certData, String certPassword, String pac, Boolean isActive) {}
 
     public record ApiTemplateRequest(Long apiconnId, String operationKey, String httpMethod,
         String contentType, String endpointPath, Boolean isActive) {}

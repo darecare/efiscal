@@ -5,27 +5,53 @@ import com.efiscal.backend.model.FiscalBillIdempotencyKeyEntity;
 import com.efiscal.backend.model.FiscalBillStatus;
 import com.efiscal.backend.repository.FiscalBillIdempotencyKeyRepository;
 import com.efiscal.backend.repository.FiscalBillRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class FiscalBillService {
 
     private final FiscalBillRepository fiscalBillRepository;
     private final FiscalBillIdempotencyKeyRepository idempotencyKeyRepository;
+    private final TaxAuthorityService taxAuthorityService;
+    private final ObjectMapper objectMapper;
 
     public FiscalBillService(
         FiscalBillRepository fiscalBillRepository,
-        FiscalBillIdempotencyKeyRepository idempotencyKeyRepository
+        FiscalBillIdempotencyKeyRepository idempotencyKeyRepository,
+        TaxAuthorityService taxAuthorityService,
+        ObjectMapper objectMapper
     ) {
         this.fiscalBillRepository = fiscalBillRepository;
         this.idempotencyKeyRepository = idempotencyKeyRepository;
+        this.taxAuthorityService = taxAuthorityService;
+        this.objectMapper = objectMapper;
+    }
+
+    /**
+     * Calls the Tax Authority Get Status endpoint (V-SDC /api/v3/status) for the given org.
+     * Requires an active apiconn with api_platform = 'FS' and an active apitemplate
+     * with operation_key = 'GET_STATUS'.
+     */
+    public Map<String, Object> getStatus(Long orgId) {
+        String responseBody = taxAuthorityService.call(orgId, "GET_STATUS", null);
+        try {
+            return objectMapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Failed to parse Tax Authority response: " + ex.getMessage());
+        }
     }
 
     @Transactional

@@ -3,13 +3,19 @@ import AppShell from '../components/AppShell'
 import { apiConnApi, apiTemplateApi, orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
-const PLATFORM_OPTIONS = ['MERCHANTPRO', 'WOOCOMMERCE', 'SHOPIFY', 'OTHER']
+const PLATFORM_OPTIONS = [
+  { value: 'MP', label: 'MerchantPro' },
+  { value: 'WO', label: 'WooCommerce' },
+  { value: 'SH', label: 'Shopify' },
+  { value: 'FS', label: 'Fiscal System' },
+]
 const AUTH_OPTIONS = ['BASIC_AUTH', 'OAUTH', 'MTLS', 'NONE']
 const METHOD_OPTIONS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 
 const emptyConnForm = {
-  orgId: '', displayName: '', apiPlatform: 'MERCHANTPRO',
-  apiBaseUrl: '', apiauthtype: 'BASIC_AUTH', apikey: '', apisecret: '', isActive: true,
+  orgId: '', displayName: '', apiPlatform: 'MP',
+  apiBaseUrl: '', apiauthtype: 'BASIC_AUTH', apikey: '', apisecret: '',
+  certData: null, certPassword: '', pac: '', isActive: true,
 }
 const emptyTplForm = {
   operationKey: '', httpMethod: 'GET', contentType: 'application/json', endpointPath: '', isActive: true,
@@ -90,7 +96,7 @@ export default function ApiConfig() {
     setConnForm({
       orgId: c.orgId || '', displayName: c.displayName, apiPlatform: c.apiPlatform,
       apiBaseUrl: c.apiBaseUrl || '', apiauthtype: c.apiauthtype || 'NONE',
-      apikey: '', apisecret: '', isActive: c.isActive,
+      apikey: '', apisecret: '', certData: null, certPassword: '', pac: c.pac || '', isActive: c.isActive,
     })
     setConnFormError(null)
     setConnMode('edit')
@@ -110,6 +116,9 @@ export default function ApiConfig() {
         orgId: Number(connForm.orgId),
         apikey: connForm.apikey.trim() || null,
         apisecret: connForm.apisecret.trim() || null,
+        certData: connForm.certData || null,
+        certPassword: connForm.certPassword.trim() || null,
+        pac: connForm.pac.trim() || null,
       }
       if (connMode === 'add') {
         await apiConnApi.create(payload)
@@ -217,7 +226,7 @@ export default function ApiConfig() {
                     {selectedConn?.apiconnId === c.apiconnId ? '▶' : ''}
                   </td>
                   <td>{c.displayName}</td>
-                  <td>{c.apiPlatform}</td>
+                  <td>{PLATFORM_OPTIONS.find(p => p.value === c.apiPlatform)?.label ?? c.apiPlatform}</td>
                   <td>{c.orgName}</td>
                   <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{c.apiBaseUrl}</td>
                   <td>{c.apiauthtype}</td>
@@ -314,7 +323,7 @@ export default function ApiConfig() {
       {/* ── Connection Modal ── */}
       {connModal && (
         <div className="modal-overlay" onClick={() => setConnModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: 750, width: '100%' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{connMode === 'add' ? 'Add Connection' : 'Edit Connection'}</h3>
               <button className="modal-close" onClick={() => setConnModal(false)}>✕</button>
@@ -335,7 +344,7 @@ export default function ApiConfig() {
                 <div className="field">
                   <label>Platform *</label>
                   <select value={connForm.apiPlatform} onChange={e => setConnForm(p => ({ ...p, apiPlatform: e.target.value }))}>
-                    {PLATFORM_OPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
+                    {PLATFORM_OPTIONS.map(x => <option key={x.value} value={x.value}>{x.label}</option>)}
                   </select>
                 </div>
                 <div className="field">
@@ -348,14 +357,57 @@ export default function ApiConfig() {
                     {AUTH_OPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
                   </select>
                 </div>
+                {connForm.apiauthtype !== 'MTLS' && (
+                  <>
+                    <div className="field">
+                      <label>API Key</label>
+                      <input value={connForm.apikey} onChange={e => setConnForm(p => ({ ...p, apikey: e.target.value }))} />
+                    </div>
+                    <div className="field">
+                      <label>API Secret</label>
+                      <input type="password" value={connForm.apisecret} onChange={e => setConnForm(p => ({ ...p, apisecret: e.target.value }))} />
+                    </div>
+                  </>
+                )}
                 <div className="field">
-                  <label>API Key</label>
-                  <input value={connForm.apikey} onChange={e => setConnForm(p => ({ ...p, apikey: e.target.value }))} />
+                  <label>PAC</label>
+                  <input
+                    value={connForm.pac}
+                    maxLength={10}
+                    onChange={e => setConnForm(p => ({ ...p, pac: e.target.value }))}
+                    placeholder="Platform access code"
+                  />
                 </div>
-                <div className="field">
-                  <label>API Secret</label>
-                  <input type="password" value={connForm.apisecret} onChange={e => setConnForm(p => ({ ...p, apisecret: e.target.value }))} />
-                </div>
+                {connForm.apiauthtype === 'MTLS' && (
+                  <>
+                    <div className="field" style={{ gridColumn: '1 / -1' }}>
+                      <label>Certificate File (PEM / PKCS12)</label>
+                      <input
+                        type="file"
+                        accept=".pem,.p12,.pfx,.crt,.cer"
+                        onChange={e => {
+                          const file = e.target.files[0]
+                          if (!file) { setConnForm(p => ({ ...p, certData: null })); return }
+                          const reader = new FileReader()
+                          reader.onload = ev => setConnForm(p => ({ ...p, certData: ev.target.result.split(',')[1] }))
+                          reader.readAsDataURL(file)
+                        }}
+                      />
+                      {connMode === 'edit' && !connForm.certData && (
+                        <span style={{ fontSize: 12, opacity: 0.55 }}>Leave empty to keep existing certificate</span>
+                      )}
+                    </div>
+                    <div className="field">
+                      <label>Certificate Password</label>
+                      <input
+                        type="password"
+                        value={connForm.certPassword}
+                        onChange={e => setConnForm(p => ({ ...p, certPassword: e.target.value }))}
+                        placeholder={connMode === 'edit' ? 'Leave blank to keep existing' : ''}
+                      />
+                    </div>
+                  </>
+                )}
                 {connMode === 'edit' && (
                   <div className="field">
                     <label>Status</label>

@@ -43,10 +43,10 @@ public class MerchantProOrderService {
         ApiConnEntity conn = apiConnRepository
             .findAllByOrgOrgIdAndDeletedAtIsNull(orgId)
             .stream()
-            .filter(c -> "MERCHANTPRO".equals(c.getApiPlatform()) && c.isActive())
+            .filter(c -> "MP".equals(c.getApiPlatform()) && c.isActive())
             .findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                "No active MERCHANTPRO connection configured for this organization"));
+                "No active MerchantPro connection configured for this organization"));
 
         // 2. Resolve FETCH_ORDERS apitemplate
         ApiTemplateEntity template = apiTemplateRepository

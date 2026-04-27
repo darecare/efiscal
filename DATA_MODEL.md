@@ -180,10 +180,16 @@ Stores connection config for each external shopping platform (MerchantPro, WooCo
 |------------------|--------------|--------------------------|--------------------------------------------|
 | apiconn_id     | BIGINT       | PK, NOT NULL, IDENTITY(1000,1)      | Auto-generated integer     |
 | org_id         | BIGINT       | FK → org.org_id              |                                            |
-| api_platform         | VARCHAR(50)  | NOT NULL                 | MERCHANTPRO, WOOCOMMERCE, SHOPIFY, etc.    |
+| api_platform         | VARCHAR(10)  | NOT NULL                 | 2-letter code: MP=MerchantPro, WO=WooCommerce, SH=Shopify, FS=Fiscal System |
 | display_name     | VARCHAR(255) |                          | User-facing label                          |
 | api_base_url     | VARCHAR(500) |                          | Platform-specific endpoint                 |
-| isactive        | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                                            |
+| apiauthtype      | VARCHAR(50)  | NULL                     | BASIC_AUTH, OAUTH, MTLS, NONE              |
+| apikey           | VARCHAR(255) | NULL                     | Basic auth / OAuth key                     |
+| apisecret        | VARCHAR(255) | NULL                     | Basic auth / OAuth secret — never plaintext |
+| cert_data        | BYTEA        | NULL                     | PEM/PKCS12 certificate bytes (mTLS)        |
+| cert_password    | VARCHAR(255) | NULL                     | Encrypted keystore/cert password (mTLS)    |
+| pac              | VARCHAR(10)  | NULL                     | Platform access code                       |
+| isactive         | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                                            |
 | created_at       | TIMESTAMPTZ  | NOT NULL                 |                                            |
 | updated_at       | TIMESTAMPTZ  | NOT NULL                 |                                            |
 | deleted_at       | TIMESTAMPTZ  | NULL                     | Soft delete                                |
@@ -203,8 +209,11 @@ CREATE TABLE IF NOT EXISTS apiconn
     apiconn_uu character varying(36) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
     apikey character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying, //in case of basic auth will hold api key
     apisecret character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying, // in case of basic auth will hold api secret
-    api_platform character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying, // will be dropdown list on frontend MP - MerchantPro, EF - EFiscal, WO - Woocommerce ...
+    api_platform character varying(10) COLLATE pg_catalog."default" DEFAULT NULL::character varying, // 2-letter code stored: MP=MerchantPro, WO=WooCommerce, SH=Shopify, FS=Fiscal System
     api_base_url character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    cert_data bytea DEFAULT NULL,
+    cert_password character varying(255) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    pac character varying(10) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
     isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
     updated timestamp without time zone NOT NULL,
     updatedby numeric(10,0) NOT NULL,

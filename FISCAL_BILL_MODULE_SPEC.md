@@ -32,6 +32,7 @@ Provider documentation references:
 - Serbian Tax Authority fiscal bill example (Normal Sale): https://tap.sandbox.suf.purs.gov.rs/Help/view/535663692/Normal-Sale/en-US
 - Serbian Tax Authority tax model/example docs: https://tap.sandbox.suf.purs.gov.rs/Help/view/417621922/Model-and-Example/en-US
 - Serbian Tax Authority tax amounts docs: https://tap.sandbox.suf.purs.gov.rs/Help/view/1034863356/Tax-Amounts/en-US
+- Get Status API request docs: https://tap.sandbox.suf.purs.gov.rs/Help/view/1522287161/Get-Status/en-US
 
 Reference-only implementation sources:
 - Legacy process/service flow for fiscalization logic (no direct copy):

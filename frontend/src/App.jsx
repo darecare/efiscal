@@ -9,6 +9,7 @@ import Clients from './pages/Clients'
 import Organizations from './pages/Organizations'
 import ApiConfig from './pages/ApiConfig'
 import Orders from './pages/Orders'
+import GetStatus from './pages/GetStatus'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/organizations" element={<ProtectedRoute><Organizations /></ProtectedRoute>} />
         <Route path="/api-config" element={<ProtectedRoute><ApiConfig /></ProtectedRoute>} />
         <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+        <Route path="/fiscal-bills/get-status" element={<ProtectedRoute><GetStatus /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/orders" replace />} />
       </Routes>
     </AuthProvider>
