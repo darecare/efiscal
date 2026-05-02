@@ -1,0 +1,25 @@
+# Maven / Spring Boot build output
+backend/target/
+
+# Frontend build output
+frontend/dist/
+
+# Node modules
+frontend/node_modules/
+
+# npm lock file (optional — remove this line if you want to track it)
+frontend/package-lock.json
+
+# IDE / OS artifacts
+.idea/
+*.iml
+.DS_Store
+*.swp
+*.swo
+
+# Docker volumes
+.docker/
+
+# Local environment overrides
+.env.local
+*.env.local

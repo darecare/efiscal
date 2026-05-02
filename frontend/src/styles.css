@@ -86,10 +86,35 @@ select {
 .nav-link {
   color: #ecf0f1;
   text-decoration: none;
+  display: block;
+  width: 100%;
   padding: 12px 14px;
   border-radius: 8px;
   font-weight: 500;
   transition: background 0.15s;
+}
+
+.nav-group-toggle {
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.nav-submenu {
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  margin-top: .3rem;
+  /* gap: 4px; */
+}
+
+.nav-sublink {
+  font-weight: 400;
+  border-radius: 6px;
 }
 
 .nav-link.active,
@@ -161,7 +186,8 @@ select {
 }
 
 .field input,
-.field select {
+.field select,
+select.form-input {
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--color-border);
@@ -245,6 +271,131 @@ select {
 .table-card table {
   width: 100%;
   border-collapse: collapse;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.data-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fiscal-bills-table {
+  table-layout: fixed;
+}
+
+.cell-right {
+  text-align: right;
+}
+
+.fiscalbills-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 16px;
+}
+
+.fiscalbills-modal {
+  width: min(1024px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+  padding: 20px;
+}
+
+.fiscalbills-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.fiscalbills-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px 14px;
+  margin-bottom: 14px;
+}
+
+.fiscalbills-link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--color-primary-dark);
+  text-decoration: none;
+}
+
+.external-link-icon {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+}
+
+.external-link-icon::before {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 1px;
+  right: -1px;
+  top: 1px;
+  background: currentColor;
+  transform: rotate(-45deg);
+  transform-origin: right center;
+}
+
+.external-link-icon::after {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  right: -1px;
+  top: -1px;
+  border-right: 1px solid currentColor;
+  border-top: 1px solid currentColor;
+}
+
+.fiscalbills-qr-wrap {
+  margin-bottom: 14px;
+}
+
+.fiscalbills-qr-image {
+  width: 180px;
+  height: 180px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  padding: 6px;
 }
 
 .table-card th,

@@ -7,14 +7,28 @@ const navItems = [
   {
     label: 'Fiscal Bills',
     children: [
+      { path: '/fiscal-bills', label: 'Fiscal Bills' },
+      { path: '/fiscal-bills/create', label: 'Create Fiscal Bill' },
       { path: '/fiscal-bills/get-status', label: 'Get Status' },
+      { path: '/taxes', label: 'Taxes' },
     ],
   },
-  { path: '/account', label: 'Account' },
-  { path: '/users', label: 'Users' },
-  { path: '/clients', label: 'Clients' },
-  { path: '/organizations', label: 'Organizations' },
-  { path: '/api-config', label: 'API Config' },
+  {
+    label: 'Administration',
+    children: [
+      { path: '/account', label: 'Account' },
+      { path: '/users', label: 'User' },
+      { path: '/organizations', label: 'Organization' },
+      { path: '/clients', label: 'Client' },
+    ],
+  },
+  {
+    label: 'Configuration',
+    children: [
+      { path: '/api-config', label: 'API Configuration' },
+      { path: '/fiscal-bills/paytype-map', label: 'Payment Type Mapping' },
+    ],
+  },
 ]
 
 export default function AppShell({ title, subtitle, actions, children }) {
@@ -66,18 +80,17 @@ export default function AppShell({ title, subtitle, actions, children }) {
                     <button
                       className={`nav-link nav-group-toggle${isGroupActive ? ' active' : ''}`}
                       onClick={() => toggleGroup(item.label)}
-                      style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                     >
                       <span>{item.label}</span>
                       <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>{isOpen ? '▾' : '▸'}</span>
                     </button>
                     {isOpen && (
-                      <div className="nav-submenu" style={{ paddingLeft: '1rem' }}>
+                      <div className="nav-submenu">
                         {item.children.map((child) => (
                           <Link
                             key={child.path}
                             to={child.path}
-                            className={location.pathname === child.path ? 'nav-link active' : 'nav-link'}
+                            className={location.pathname === child.path ? 'nav-link nav-sublink active' : 'nav-link nav-sublink'}
                           >
                             {child.label}
                           </Link>

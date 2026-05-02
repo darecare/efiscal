@@ -9,7 +9,11 @@ import Clients from './pages/Clients'
 import Organizations from './pages/Organizations'
 import ApiConfig from './pages/ApiConfig'
 import Orders from './pages/Orders'
+import FiscalBills from './pages/FiscalBills'
 import GetStatus from './pages/GetStatus'
+import Taxes from './pages/Taxes'
+import CreateFiscalBill from './pages/CreateFiscalBill'
+import PayTypeMap from './pages/PayTypeMap'
 
 export default function App() {
   return (
@@ -22,7 +26,11 @@ export default function App() {
         <Route path="/organizations" element={<ProtectedRoute><Organizations /></ProtectedRoute>} />
         <Route path="/api-config" element={<ProtectedRoute><ApiConfig /></ProtectedRoute>} />
         <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+        <Route path="/fiscal-bills" element={<ProtectedRoute><FiscalBills /></ProtectedRoute>} />
+        <Route path="/fiscal-bills/create" element={<ProtectedRoute><CreateFiscalBill /></ProtectedRoute>} />
         <Route path="/fiscal-bills/get-status" element={<ProtectedRoute><GetStatus /></ProtectedRoute>} />
+        <Route path="/fiscal-bills/paytype-map" element={<ProtectedRoute><PayTypeMap /></ProtectedRoute>} />
+        <Route path="/taxes" element={<ProtectedRoute><Taxes /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/orders" replace />} />
       </Routes>
     </AuthProvider>

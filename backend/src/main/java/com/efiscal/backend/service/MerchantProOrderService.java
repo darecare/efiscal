@@ -146,6 +146,7 @@ public class MerchantProOrderService {
         if (customer.isEmpty()) {
             customer = str(raw.getOrDefault("customer_name", raw.getOrDefault("customer", "")));
         }
+        String paymentMethodCode = str(raw.getOrDefault("payment_method_code", raw.getOrDefault("paymentMethodCode", "")));
 
         // Extract order lines — MerchantPro returns them under 'line_items' when include=line_items
         List<DemoDataService.OrderLineView> orderLines = new java.util.ArrayList<>();
@@ -160,12 +161,15 @@ public class MerchantProOrderService {
                     String sku         = str(l.getOrDefault("product_sku", l.getOrDefault("sku", "")));
                     String qty         = str(l.getOrDefault("quantity", l.getOrDefault("qty", "")));
                     String unitPrice   = str(l.getOrDefault("unit_price_gross", l.getOrDefault("unit_price_net", l.getOrDefault("price", ""))));
-                    orderLines.add(new DemoDataService.OrderLineView(productId, productName, sku, qty, unitPrice));
+                    String taxValue    = str(l.getOrDefault("product_tax_percent",
+                            l.getOrDefault("tax_value", l.getOrDefault("tax_rate", ""))));
+                    String taxCategoryName = str(l.getOrDefault("product_tax_name", l.getOrDefault("tax_name", "")));
+                    orderLines.add(new DemoDataService.OrderLineView(productId, productName, sku, qty, unitPrice, taxValue, taxCategoryName));
                 }
             }
         }
 
-        return new DemoDataService.OrderView(id, orderNo, customer, shippingStatus, total, createdAt, orderLines);
+        return new DemoDataService.OrderView(id, orderNo, customer, shippingStatus, total, createdAt, paymentMethodCode, orderLines);
     }
 
     private static String str(Object o) {

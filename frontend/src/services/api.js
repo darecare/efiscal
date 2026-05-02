@@ -133,28 +133,88 @@ export const ordersApi = {
 }
 
 export const fiscalBillApi = {
-  async create(payload, idempotencyKey) {
-    const response = await api.post('/fiscalbill', payload, {
-      headers: {
-        'Idempotency-Key': idempotencyKey,
-      },
+  async list(orgId) {
+    const response = await api.get('/fiscalbill', { params: { orgId } })
+    return response.data
+  },
+  async details(fiscalbillId) {
+    const response = await api.get(`/fiscalbill/${fiscalbillId}/details`)
+    return response.data
+  },
+  async createFromOrder(payload, idempotencyKey, orgId, clientId) {
+    const response = await api.post('/fiscalbill/from-order', payload, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+      params: { orgId, clientId },
     })
     return response.data
   },
-  async status(fiscalDocumentId) {
-    const response = await api.get(`/fiscalbill/${fiscalDocumentId}`)
+  async createManual(payload, idempotencyKey, orgId, clientId) {
+    const response = await api.post('/fiscalbill/manual', payload, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+      params: { orgId, clientId },
+    })
     return response.data
   },
-  async retry(fiscalDocumentId, idempotencyKey) {
-    const response = await api.post(`/fiscalbill/${fiscalDocumentId}/retry`, null, {
-      headers: {
-        'Idempotency-Key': idempotencyKey,
-      },
+  async get(fiscalbillId) {
+    const response = await api.get(`/fiscalbill/${fiscalbillId}`)
+    return response.data
+  },
+  async retry(fiscalbillId, idempotencyKey) {
+    const response = await api.post(`/fiscalbill/${fiscalbillId}/retry`, null, {
+      headers: { 'Idempotency-Key': idempotencyKey },
     })
     return response.data
   },
   async getStatus(orgId) {
     const response = await api.get('/fiscalbill/status', { params: { orgId } })
+    return response.data
+  },
+}
+
+export const paytypeMapApi = {
+  async list(clientId) {
+    const response = await api.get('/paytype-map', { params: { clientId } })
+    return response.data
+  },
+  async create(payload) {
+    const response = await api.post('/paytype-map', payload)
+    return response.data
+  },
+  async update(id, payload) {
+    const response = await api.put(`/paytype-map/${id}`, payload)
+    return response.data
+  },
+  async remove(id) {
+    await api.delete(`/paytype-map/${id}`)
+  },
+}
+
+export const taxCategoryApi = {
+  async list() {
+    const response = await api.get('/tax-categories')
+    return response.data
+  },
+  async create(payload) {
+    const response = await api.post('/tax-categories', payload)
+    return response.data
+  },
+  async update(id, payload) {
+    const response = await api.put(`/tax-categories/${id}`, payload)
+    return response.data
+  },
+}
+
+export const taxApi = {
+  async list() {
+    const response = await api.get('/taxes')
+    return response.data
+  },
+  async create(payload) {
+    const response = await api.post('/taxes', payload)
+    return response.data
+  },
+  async update(id, payload) {
+    const response = await api.put(`/taxes/${id}`, payload)
     return response.data
   },
 }

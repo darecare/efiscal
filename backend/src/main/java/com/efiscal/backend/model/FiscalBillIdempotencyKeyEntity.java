@@ -10,7 +10,7 @@ import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "fiscal_bill_idempotency_keys")
+@Table(name = "fiscalbill_idempotency_keys")
 public class FiscalBillIdempotencyKeyEntity {
 
     @Id
@@ -18,7 +18,7 @@ public class FiscalBillIdempotencyKeyEntity {
     private String idempotencyKey;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "fiscal_document_id", nullable = false)
+    @JoinColumn(name = "fiscalbill_id", nullable = false)
     private FiscalBillEntity fiscalBill;
 
     @Column(name = "created_at", nullable = false)

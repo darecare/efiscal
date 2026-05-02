@@ -310,27 +310,66 @@ A fiscalization request submitted to Serbian Tax Authority API, linked to a sale
 
 | Column              | Type         | Constraints              | Notes                                    |
 |---------------------|--------------|--------------------------|------------------------------------------|
-| id                  | UUID         | PK, NOT NULL             |                                          |
-| organization_id     | UUID         | FK → organizations.id    |                                          |
-| sales_order_id      | UUID         | FK → sales_orders.id     |                                          |
-| idempotency_key     | UUID         | UNIQUE, NOT NULL         | Prevents duplicate submissions           |
+| fiscalbill_id       | VARCHAR(64)  | PK, NOT NULL             | Internal fiscal bill identifier          |
+| order_id            | VARCHAR(64)  | NOT NULL                 | Source order identifier                  |
 | status              | VARCHAR(50)  | NOT NULL                 | PENDING, SUCCESS, FAILED, RETRYING       |
-| provider_reference  | VARCHAR(255) |                          | Tax authority document ID on success     |
-| request_payload     | JSONB        |                          | Payload sent to Tax Authority            |
-| response_payload    | JSONB        |                          | Raw response from Tax Authority          |
-| last_error          | TEXT         |                          | Last failure message                     |
+| provider_reference  | VARCHAR(128) | NULL                     | Provider response reference              |
+| last_error          | VARCHAR(512) | NULL                     | Last error                               |
 | attempt_count       | INTEGER      | NOT NULL, DEFAULT 0      |                                          |
-| fiscalized_at       | TIMESTAMPTZ  |                          | Timestamp of successful fiscalization    |
 | created_at          | TIMESTAMPTZ  | NOT NULL                 |                                          |
 | updated_at          | TIMESTAMPTZ  | NOT NULL                 |                                          |
+| client_id           | NUMERIC(10,0)| NOT NULL                 | Legacy compatibility field               |
+| org_id              | NUMERIC(10,0)| NOT NULL                 | Legacy compatibility field               |
+| created             | TIMESTAMP    | NOT NULL                 | Legacy compatibility field               |
+| createdby           | NUMERIC(10,0)| NOT NULL                 | Legacy compatibility field               |
+| efiscal_address     | VARCHAR(50)  | NULL                     |                                          |
+| efiscal_businessname| VARCHAR(100) | NULL                     |                                          |
+| efiscal_code        | VARCHAR(1)   | NULL                     |                                          |
+| efiscal_encryptedinternaldata | TEXT | NULL                  |                                          |
+| efiscal_invoicecounter | VARCHAR(22) | NULL                   |                                          |
+| efiscal_invoicecounterext | VARCHAR(22) | NULL                |                                          |
+| efiscal_link        | VARCHAR(2000)| NULL                     |                                          |
+| efiscal_messages    | VARCHAR(22)  | NULL                     |                                          |
+| efiscal_mrc         | VARCHAR(22)  | NULL                     |                                          |
+| efiscal_name        | VARCHAR(50)  | NULL                     |                                          |
+| efiscal_qr          | TEXT         | NULL                     |                                          |
+| efiscal_requestedby | VARCHAR(50)  | NULL                     |                                          |
+| efiscal_sdcdatetime | VARCHAR(50)  | NULL                     |                                          |
+| efiscal_sdc_invoiceno | VARCHAR(30)| NULL                     |                                          |
+| efiscal_signature   | TEXT         | NULL                     |                                          |
+| efiscal_signedby    | VARCHAR(22)  | NULL                     |                                          |
+| efiscal_taxgrouprevision | NUMERIC(10,0) | NULL              |                                          |
+| efiscal_tin         | VARCHAR(22)  | NULL                     |                                          |
+| efiscal_totalamount | NUMERIC      | NULL                     |                                          |
+| efiscal_totalcounter| NUMERIC      | NULL                     |                                          |
+| efiscal_transactiontypecounter | NUMERIC(10,0) | NULL        |                                          |
+| efiscal_type        | VARCHAR(2)   | NULL                     |                                          |
+| fiscalbill_uu       | VARCHAR(36)  | NULL                     |                                          |
+| isactive            | CHAR(1)      | NOT NULL, DEFAULT 'Y'    |                                          |
+| processed           | CHAR(1)      | NOT NULL, DEFAULT 'N'    |                                          |
+| processedon         | NUMERIC      | NULL                     |                                          |
+| updated             | TIMESTAMP    | NOT NULL                 | Legacy compatibility field               |
+| updatedby           | NUMERIC(10,0)| NOT NULL                 | Legacy compatibility field               |
+| value               | VARCHAR(40)  | NULL                     |                                          |
+| efiscal_invoicetype | NUMERIC(10,0)| NULL                     |                                          |
+| efiscal_transactiontype | NUMERIC(10,0) | NULL                |                                          |
+| efiscal_customername| VARCHAR(100) | NULL                     |                                          |
+| efiscal_orderid     | VARCHAR(22)  | NULL                     |                                          |
 
 ---
 
 CREATE TABLE IF NOT EXISTS fiscalbill
 (
+    fiscalbill_id character varying(64) PRIMARY KEY,
+    order_id character varying(64) NOT NULL,
+    status character varying(32) NOT NULL,
+    provider_reference character varying(128),
+    last_error character varying(512),
+    attempt_count integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
     client_id numeric(10,0) NOT NULL,
     org_id numeric(10,0) NOT NULL,
-    order_id numeric(10,0) DEFAULT NULL::numeric,
     created timestamp without time zone NOT NULL,
     createdby numeric(10,0) NOT NULL,
     efiscal_address character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
@@ -355,7 +394,6 @@ CREATE TABLE IF NOT EXISTS fiscalbill
     efiscal_totalcounter numeric,
     efiscal_transactiontypecounter numeric(10,0) DEFAULT NULL::numeric,
     efiscal_type character varying(2) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
-    fiscalbill_id numeric(10,0) NOT NULL,
     fiscalbill_uu character varying(36) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
     isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
     processed character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'N'::bpchar,
@@ -366,36 +404,35 @@ CREATE TABLE IF NOT EXISTS fiscalbill
     efiscal_invoicetype numeric(10,0) DEFAULT NULL::numeric,
     efiscal_transactiontype numeric(10,0) DEFAULT NULL::numeric,
     efiscal_customername character varying(100) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
-    efiscal_orderno character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
-   
 )
 
-### 2.10 fiscal_tax
-Immutable audit trail for every status change on a fiscal document.
+### 2.9A fiscalbill_idempotency_keys
+Maps request idempotency keys to fiscal bills for deduplication.
 
-| Column              | Type         | Constraints              | Notes                              |
-|---------------------|--------------|--------------------------|------------------------------------|
-| id                  | UUID         | PK, NOT NULL             |                                    |
-| fiscal_document_id  | UUID         | FK → fiscal_documents.id |                                    |
-| previous_status     | VARCHAR(50)  |                          |                                    |
-| new_status          | VARCHAR(50)  | NOT NULL                 |                                    |
-| triggered_by        | VARCHAR(100) |                          | USER, SYSTEM, RETRY_JOB            |
-| user_id             | UUID         | FK → users.id, NULL      | NULL if system-triggered           |
-| note                | TEXT         |                          |                                    |
-| created_at          | TIMESTAMPTZ  | NOT NULL                 | Immutable — no updated_at          |
-
-CREATE TABLE IF NOT EXISTS fiscaltax
+CREATE TABLE IF NOT EXISTS fiscalbill_idempotency_keys
 (
-    ad_client_id numeric(10,0) NOT NULL,
-    ad_org_id numeric(10,0) NOT NULL,
+    idempotency_key character varying(128) PRIMARY KEY,
+    fiscalbill_id character varying(64) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT fk_fiscalbill_idempotency_bill
+        FOREIGN KEY (fiscalbill_id)
+        REFERENCES fiscalbill (fiscalbill_id)
+)
+
+### 2.10 fiscalbilltax
+
+CREATE TABLE IF NOT EXISTS fiscalbilltax
+(
+    fiscalbilltax_id BIGINT GENERATED ALWAYS AS IDENTITY (START WITH 1000) PRIMARY KEY,
+    client_id numeric(10,0) NOT NULL,
+    org_id numeric(10,0) NOT NULL,
     amount numeric,
     efiscal_categoryname character varying(60) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
     created timestamp without time zone NOT NULL,
     createdby numeric(10,0) NOT NULL,
     efiscal_taxlabel character varying(1) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
-    elf_fiscalbill_id numeric(10,0) DEFAULT NULL::numeric,
-    elf_fiscaltax_id numeric(10,0) NOT NULL,
-    elf_fiscaltax_uu character varying(36) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    fiscalbill_id character varying(64) DEFAULT NULL::character varying,
+    fiscalbilltax_uu character varying(36) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
     isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
     processed character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'N'::bpchar,
     processedon numeric,
@@ -404,6 +441,8 @@ CREATE TABLE IF NOT EXISTS fiscaltax
     updatedby numeric(10,0) NOT NULL,
     value character varying(40) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
     efiscal_categorytype numeric(10,0) DEFAULT NULL::numeric,
+    CONSTRAINT fk_fiscalbilltax_bill FOREIGN KEY (fiscalbill_id) REFERENCES fiscalbill (fiscalbill_id)
+)
 
 ---
 
@@ -418,6 +457,7 @@ CREATE TABLE IF NOT EXISTS fiscalbillconfig
     fiscalbillconfig_id numeric(10,0) NOT NULL DEFAULT NULL::numeric,
     fiscalbillconfig_uu character varying(36) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
     isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
+    esirno character varying(22),
     mailtemplate_id numeric(10,0) DEFAULT NULL::numeric,
     updated timestamp without time zone DEFAULT getdate(),
     updatedby numeric(10,0) DEFAULT NULL::numeric,
@@ -425,21 +465,151 @@ CREATE TABLE IF NOT EXISTS fiscalbillconfig
     email_bcc character varying(60) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
     email_test character varying(60) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
     istest character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'N'::bpchar,
+)
+
+### 2.12 Tax
+Table name: tax
+List of tax code and applied rates for each tax
+CREATE TABLE IF NOT EXISTS tax
+(
+    tax_id numeric(10,0) NOT NULL,
+    client_id numeric(10,0) NOT NULL,
+    ad_org_id numeric(10,0) NOT NULL,
+    isactive character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Y'::bpchar,
+    created timestamp without time zone NOT NULL DEFAULT now(),
+    createdby numeric(10,0) NOT NULL,
+    updated timestamp without time zone NOT NULL DEFAULT now(),
+    name character varying(60) COLLATE pg_catalog."default" NOT NULL,
+    updatedby numeric(10,0) NOT NULL,
+    description character varying(255) COLLATE pg_catalog."default",
+    validfrom timestamp without time zone NOT NULL,
+    rate numeric NOT NULL,
+    taxcategory_id numeric(10,0) NOT NULL,
+    isdefault character(1) COLLATE pg_catalog."default" NOT NULL DEFAULT 'N'::bpchar,
+    efiscal_taxlabel character varying(1) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_taxname character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    efiscal_taxprefix character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+)
+
+### 2.13 Tax Category
+Table name: taxcategory
+List of tax categories
+taxcategory_id numeric(10,0) NOT NULL,
+Taxcategory_code character(2)
+name character varying(60) COLLATE pg_catalog."default" NOT NULL,
+efiscal_categorytype numeric(10,0)
+
+### 2.14 fiscalbillpay
+Table to store payment rows per fiscal bill.
+
+CREATE TABLE IF NOT EXISTS fiscalbillpay
+(
+    fiscalbillpay_id BIGINT GENERATED ALWAYS AS IDENTITY (START WITH 1000) PRIMARY KEY,
+    fiscalbill_id    VARCHAR(64)    NOT NULL,
+    client_id        NUMERIC(10, 0) NOT NULL DEFAULT 0,
+    org_id           NUMERIC(10, 0) NOT NULL DEFAULT 0,
+    payment_type     NUMERIC(10, 0) NOT NULL,
+    amount           NUMERIC        NOT NULL,
+    isactive         VARCHAR(1)     NOT NULL DEFAULT 'Y',
+    created          TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    createdby        NUMERIC(10, 0) NOT NULL DEFAULT 0,
+    updated          TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updatedby        NUMERIC(10, 0) NOT NULL DEFAULT 0,
+    CONSTRAINT fk_fiscalbillpay_bill FOREIGN KEY (fiscalbill_id)
+        REFERENCES fiscalbill (fiscalbill_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fiscalbillpay_bill ON fiscalbillpay (fiscalbill_id);
+
+### 2.15 paytype_map
+Payment type mapping table. Maps external payment_method_code values to Tax Authority payment type integers per client.
+
+CREATE TABLE IF NOT EXISTS paytype_map
+(
+    paytype_map_id      BIGINT GENERATED ALWAYS AS IDENTITY (START WITH 1000) PRIMARY KEY,
+    client_id           NUMERIC(10, 0) NOT NULL DEFAULT 0,
+    payment_method_code VARCHAR(50)    NOT NULL,
+    payment_type        NUMERIC(10, 0) NOT NULL,
+    description         VARCHAR(100),
+    isactive            VARCHAR(1)     NOT NULL DEFAULT 'Y',
+    created             TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    createdby           NUMERIC(10, 0) NOT NULL DEFAULT 0,
+    updated             TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updatedby           NUMERIC(10, 0) NOT NULL DEFAULT 0,
+    CONSTRAINT uq_paytype_map_client_code UNIQUE (client_id, payment_method_code)
+);
+
+### 2.16 fiscalbillline
+Table to store line items for fiscal bill when creating manual fiscal bill.
+When fiscal bill is created based on sales order, then this table will be store line items after fiscal bill is issued from Tax authority based on json api request sent to tax authority.
+
+CREATE TABLE IF NOT EXISTS fiscalbillline
+(
+    fiscalbillline_id BIGINT GENERATED ALWAYS AS IDENTITY (START WITH 1000) PRIMARY KEY,
+    fiscalbill_id     VARCHAR(64)     NOT NULL,
+    client_id         NUMERIC(10, 0)  NOT NULL DEFAULT 0,
+    org_id            NUMERIC(10, 0)  NOT NULL DEFAULT 0,
+    name              VARCHAR(2048)   NOT NULL,
+    quantity          NUMERIC(14, 3)  NOT NULL,
+    unit_price        NUMERIC(14, 2)  NOT NULL,
+    total_amount      NUMERIC(14, 2)  NOT NULL,
+    tax_label         VARCHAR(10),
+    gtin              VARCHAR(14),
+    product_id        VARCHAR(50),
+    sku               VARCHAR(100),
+    isactive          VARCHAR(1)      NOT NULL DEFAULT 'Y',
+    created           TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    createdby         NUMERIC(10, 0)  NOT NULL DEFAULT 0,
+    updated           TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updatedby         NUMERIC(10, 0)  NOT NULL DEFAULT 0,
+    CONSTRAINT fk_fiscalbillline_bill FOREIGN KEY (fiscalbill_id)
+        REFERENCES fiscalbill (fiscalbill_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fiscalbillline_bill ON fiscalbillline (fiscalbill_id);
+
+### 2.17 fiscalbillconfig
+Organization-level fiscal configuration used during fiscal bill creation.
+
+CREATE TABLE IF NOT EXISTS fiscalbillconfig
+(
+    fiscalbillconfig_id BIGINT GENERATED ALWAYS AS IDENTITY (START WITH 1000) PRIMARY KEY,
+    client_id           NUMERIC(10, 0) DEFAULT 0,
+    org_id              NUMERIC(10, 0) DEFAULT 0,
+    esirno              VARCHAR(22),
+    istest              VARCHAR(1)     NOT NULL DEFAULT 'N',
+    email_from          VARCHAR(60),
+    email_bcc           VARCHAR(60),
+    email_test          VARCHAR(60),
+    fiscalbillconfig_uu VARCHAR(36),
+    isactive            VARCHAR(1)     NOT NULL DEFAULT 'Y',
+    created             TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    createdby           NUMERIC(10, 0) NOT NULL DEFAULT 0,
+    updated             TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updatedby           NUMERIC(10, 0) NOT NULL DEFAULT 0
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fiscalbillconfig_org ON fiscalbillconfig (org_id) WHERE isactive = 'Y';
+
 
 ## 3. Entity Relationships
 
 ```
 organizations
     ├── user_orgaccess (1:N)
-  ├── platform_connections (1:N)
-  └── sales_orders (1:N)
-        └── fiscal_documents (1:1)
-              └── fiscal_document_audit_log (1:N)
+    ├── platform_connections (1:N)
+    ├── sales_orders (1:N)
+    │     └── fiscalbill (1:N)
+    │           ├── fiscalbilltax (1:N)
+    │           ├── fiscalbillpay (1:N)
+    │           └── fiscalbillline (1:N)
+    └── fiscalbillconfig (1:N, active filtered by isactive='Y')
 
 platform_connections → sales_orders (1:N)
 users → fiscal_document_audit_log (0:N, optional)
 client → users (1:N)
 client → roles (1:N)
+client → paytype_map (1:N)
 users → user_orgaccess (1:N)
 roles → role_action_access (1:N)
 action_catalog → role_action_access (1:N)

@@ -61,14 +61,14 @@ public class DemoDataService {
             new ApiTemplateView("tmpl-auth", "MerchantPro Auth", "AUTH_LOGIN", "POST", List.of("username", "apiKey")));
 
         orders = List.of(
-            new OrderView("1", "MP-100045", "Milica Jovanovic", "ready_to_ship", new BigDecimal("14990.00"), "2026-04-24T10:30:00",
-                List.of(new OrderLineView("P1", "Laptop Stand Aluminium", "SKU-LS-01", "1", "14990.00"))),
-            new OrderView("2", "MP-100046", "Petar Markovic", "processing", new BigDecimal("8990.00"), "2026-04-24T11:10:00",
-                List.of(new OrderLineView("P2", "Wireless Mouse", "SKU-WM-02", "1", "4990.00"),
-                        new OrderLineView("P3", "USB-C Hub 7-in-1", "SKU-HUB-03", "1", "4000.00"))),
-            new OrderView("3", "MP-100047", "Ana Ilic", "completed", new BigDecimal("23990.00"), "2026-04-23T15:45:00",
-                List.of(new OrderLineView("P4", "Mechanical Keyboard TKL", "SKU-KB-04", "1", "15990.00"),
-                        new OrderLineView("P5", "Mouse Pad XL", "SKU-MP-05", "2", "4000.00"))));
+            new OrderView("1", "MP-100045", "Milica Jovanovic", "ready_to_ship", new BigDecimal("14990.00"), "2026-04-24T10:30:00", "cash_delivery",
+                List.of(new OrderLineView("P1", "Laptop Stand Aluminium", "SKU-LS-01", "1", "14990.00", "20", "VAT"))),
+            new OrderView("2", "MP-100046", "Petar Markovic", "processing", new BigDecimal("8990.00"), "2026-04-24T11:10:00", "card",
+                List.of(new OrderLineView("P2", "Wireless Mouse", "SKU-WM-02", "1", "4990.00", "20", "VAT"),
+                        new OrderLineView("P3", "USB-C Hub 7-in-1", "SKU-HUB-03", "1", "4000.00", "20", "VAT"))),
+            new OrderView("3", "MP-100047", "Ana Ilic", "completed", new BigDecimal("23990.00"), "2026-04-23T15:45:00", "wire",
+                List.of(new OrderLineView("P4", "Mechanical Keyboard TKL", "SKU-KB-04", "1", "15990.00", "20", "VAT"),
+                        new OrderLineView("P5", "Mouse Pad XL", "SKU-MP-05", "2", "4000.00", "20", "VAT"))));
     }
 
     public LoginResult login(String email, String password) {
@@ -277,7 +277,9 @@ public class DemoDataService {
         String productName,
         String sku,
         String quantity,
-        String unitPrice) {
+        String unitPrice,
+        String taxValue,
+        String taxCategoryName) {
     }
 
     public record OrderView(
@@ -287,6 +289,7 @@ public class DemoDataService {
         String shippingStatus,
         BigDecimal totalAmount,
         String createdAt,
+        String paymentMethodCode,
         List<OrderLineView> orderLines) {
     }
 

@@ -3,14 +3,24 @@ import AppShell from '../components/AppShell'
 import { fiscalBillApi, ordersApi, orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
+const INVOICE_TYPES = [
+  { value: 0, label: '0 – Normal' },
+  { value: 4, label: '4 – Advance' },
+]
 
+const TRANSACTION_TYPES = [
+  { value: 0, label: '0 – Sale' },
+  { value: 1, label: '1 – Refund' },
+]
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100]
 
+const DEFAULT_TAX_LABEL = 'A'
+const DEFAULT_TAX_PREFIX = '20'
 const SHIPPING_STATUSES = [
   { value: 'awaiting', label: 'Awaiting' },
   { value: 'in_process', label: 'Processing' },
-  { value: 'shipped', label: 'Shipped' },  
+  { value: 'shipped', label: 'Shipped' },
   { value: 'delivered', label: 'Delivered' },
   { value: 'cancelled', label: 'Cancelled' },
 ]
@@ -34,11 +44,20 @@ export default function Orders() {
 
   // Expandable order lines state
   const [expandedOrderIds, setExpandedOrderIds] = useState(new Set())
+  const [selectedOrderIds, setSelectedOrderIds] = useState(new Set())
 
   const totalPages = Math.ceil(totalRecords / limit) || 1
 
   const [fiscalByOrderId, setFiscalByOrderId] = useState({})
   const [busyOrderIds, setBusyOrderIds] = useState({})
+
+  // Fiscalize modal state
+  const [fiscalModal, setFiscalModal] = useState(null) // { orders } or null
+  const [fiscalInvoiceType, setFiscalInvoiceType] = useState(0)
+  const [fiscalTransactionType, setFiscalTransactionType] = useState(0)
+  const [fiscalTaxLabel, setFiscalTaxLabel] = useState(DEFAULT_TAX_LABEL)
+  const [fiscalError, setFiscalError] = useState(null)
+  const [fiscalSubmitting, setFiscalSubmitting] = useState(false)
 
   // Load accessible orgs on mount
   useEffect(() => {
@@ -59,12 +78,36 @@ export default function Orders() {
     })
   }
 
+  function toggleOrderSelection(orderId) {
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(orderId)) next.delete(orderId)
+      else next.add(orderId)
+      return next
+    })
+  }
+
+  function toggleSelectAllVisible() {
+    const visibleIds = orders.map((o) => o.id)
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedOrderIds.has(id))
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev)
+      if (allSelected) {
+        visibleIds.forEach((id) => next.delete(id))
+      } else {
+        visibleIds.forEach((id) => next.add(id))
+      }
+      return next
+    })
+  }
+
   async function fetchPage(page) {
     if (!selectedOrgId) { setError('Please select an organization first'); return }
     setError(null)
     setLoading(true)
     setHasFetched(true)
     setExpandedOrderIds(new Set())
+    setSelectedOrderIds(new Set())
     const start = (page - 1) * limit
     try {
       const result = await ordersApi.fetch({
@@ -104,78 +147,134 @@ export default function Orders() {
     return `idem-${Date.now()}-${Math.random().toString(16).slice(2)}`
   }
 
-  async function issueFiscalBill(order) {
-    setBusyOrderIds((current) => ({ ...current, [order.id]: true }))
-    try {
-      const created = await fiscalBillApi.create(
-        {
-          OrderId: order.id,
-          customer: {
-            name: order.customerName,
-          },
-          items: [
-            {
-              sku: `SKU-${order.id}`,
-              name: `Order ${order.externalOrderNo}`,
-              quantity: 1,
-              unitPrice: Number(order.totalAmount),
-              taxRate: 20,
-            },
-          ],
-          currency: 'RSD',
-          paymentMethod: 'CARD',
-        },
-        createIdempotencyKey(),
-      )
+  function openFiscalModalForOrders(ordersToSubmit) {
+    if (!ordersToSubmit || ordersToSubmit.length === 0) return
+    setFiscalModal({ orders: ordersToSubmit })
+    setFiscalInvoiceType(0)
+    setFiscalTransactionType(0)
+    setFiscalTaxLabel(DEFAULT_TAX_LABEL)
+    setFiscalError(null)
+  }
 
-      const latestStatus = await fiscalBillApi.status(created.fiscalDocumentId)
-      setFiscalByOrderId((current) => ({
-        ...current,
-        [order.id]: {
-          fiscalDocumentId: created.fiscalDocumentId,
-          status: latestStatus.status,
-          lastError: latestStatus.lastError,
-          attemptCount: latestStatus.attemptCount,
-        },
-      }))
-    } catch (error) {
-      setFiscalByOrderId((current) => ({
-        ...current,
-        [order.id]: {
-          status: 'ERROR',
-          lastError: error.response?.data?.message || 'Failed to issue fiscal bill',
-        },
-      }))
-    } finally {
-      setBusyOrderIds((current) => ({ ...current, [order.id]: false }))
+  function openFiscalModal(order) {
+    openFiscalModalForOrders([order])
+  }
+
+  function closeFiscalModal() {
+    setFiscalModal(null)
+    setFiscalError(null)
+  }
+
+  async function submitFiscalBill() {
+    const ordersToSubmit = fiscalModal?.orders || []
+    const selectedOrg = orgs.find(o => String(o.orgId) === String(selectedOrgId))
+    if (!selectedOrg || !selectedOrg.clientId) {
+      setFiscalError('Selected organization has no associated client.')
+      return
     }
+    const clientId = selectedOrg.clientId
+
+    setFiscalSubmitting(true)
+    setFiscalError(null)
+
+    const nextFiscalState = { ...fiscalByOrderId }
+    const failures = []
+
+    for (const order of ordersToSubmit) {
+      const lines = order.orderLines || []
+      const items = lines.length > 0 ? lines.map(line => {
+        const parsedTaxValue = parseFloat(line.taxValue)
+        const hasTaxValue = line.taxValue !== undefined
+          && line.taxValue !== null
+          && String(line.taxValue).trim() !== ''
+          && Number.isFinite(parsedTaxValue)
+        return {
+          name: line.productName || `Product ${line.productId}`,
+          quantity: parseFloat(line.quantity) || 1,
+          unitPrice: parseFloat(line.unitPrice) || 0,
+          totalAmount: (parseFloat(line.quantity) || 1) * (parseFloat(line.unitPrice) || 0),
+          taxLabel: fiscalTaxLabel,
+          labels: [fiscalTaxLabel],
+          taxValue: hasTaxValue ? parsedTaxValue : null,
+          taxCategoryName: line.taxCategoryName || null,
+          taxPrefix: DEFAULT_TAX_PREFIX,
+          gtin: line.ean || null,
+          productId: line.productId ? String(line.productId) : null,
+          sku: line.sku || null,
+        }
+      }) : [{
+        name: `Order ${order.externalOrderNo}`,
+        quantity: 1,
+        unitPrice: parseFloat(order.totalAmount) || 0,
+        totalAmount: parseFloat(order.totalAmount) || 0,
+        taxLabel: fiscalTaxLabel,
+        labels: [fiscalTaxLabel],
+        taxValue: null,
+        taxCategoryName: null,
+        taxPrefix: DEFAULT_TAX_PREFIX,
+        gtin: null,
+        productId: null,
+        sku: null,
+      }]
+
+      const payload = {
+        orderId: String(order.id),
+        customerName: order.customerName || null,
+        invoiceType: parseInt(fiscalInvoiceType),
+        transactionType: parseInt(fiscalTransactionType),
+        billingType: order.billingType || null,
+        billingCompanyVat: order.billingCompanyVat || null,
+        paymentMethodCode: order.paymentMethodCode || null,
+        items,
+      }
+
+      try {
+        const created = await fiscalBillApi.createFromOrder(
+          payload, createIdempotencyKey(),
+          Number(selectedOrgId), Number(clientId)
+        )
+        nextFiscalState[order.id] = {
+          fiscalbillId: created.fiscalbillId,
+          status: created.status,
+          sdcInvoiceNumber: created.sdcInvoiceNumber,
+          lastError: created.lastError,
+        }
+      } catch (err) {
+        const msg = err?.response?.data?.message || err?.response?.data || err?.message || 'Fiscalization failed.'
+        nextFiscalState[order.id] = {
+          status: 'ERROR',
+          lastError: typeof msg === 'string' ? msg : JSON.stringify(msg),
+        }
+        failures.push(order.externalOrderNo || order.id)
+      }
+    }
+
+    setFiscalByOrderId(nextFiscalState)
+    setFiscalSubmitting(false)
+
+    if (failures.length > 0) {
+      setFiscalError(`Failed for ${failures.length} order(s): ${failures.join(', ')}`)
+      return
+    }
+
+    setSelectedOrderIds(new Set())
+    closeFiscalModal()
   }
 
   async function retryFiscalBill(order) {
     const fiscal = fiscalByOrderId[order.id]
-    if (!fiscal?.fiscalDocumentId) {
-      return
-    }
+    if (!fiscal?.fiscalbillId) return
     setBusyOrderIds((current) => ({ ...current, [order.id]: true }))
     try {
-      const retryResponse = await fiscalBillApi.retry(fiscal.fiscalDocumentId, createIdempotencyKey())
+      const retryResponse = await fiscalBillApi.retry(fiscal.fiscalbillId, createIdempotencyKey())
       setFiscalByOrderId((current) => ({
         ...current,
-        [order.id]: {
-          ...current[order.id],
-          status: retryResponse.status,
-          lastError: null,
-          attemptCount: (current[order.id]?.attemptCount || 1) + 1,
-        },
+        [order.id]: { ...current[order.id], status: retryResponse.status, lastError: null },
       }))
-    } catch (error) {
+    } catch (err) {
       setFiscalByOrderId((current) => ({
         ...current,
-        [order.id]: {
-          ...current[order.id],
-          status: 'ERROR',
-          lastError: error.response?.data?.message || 'Retry failed',
-        },
+        [order.id]: { ...current[order.id], status: 'ERROR', lastError: err.response?.data?.message || 'Retry failed' },
       }))
     } finally {
       setBusyOrderIds((current) => ({ ...current, [order.id]: false }))
@@ -238,6 +337,15 @@ export default function Orders() {
           <button className="primary-button" type="submit" disabled={loading}>
             {loading ? 'Fetching…' : 'Fetch Orders'}
           </button>
+          {selectedOrderIds.size > 0 && (
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => openFiscalModalForOrders(orders.filter((o) => selectedOrderIds.has(o.id)))}
+            >
+              Fiscalize Selected ({selectedOrderIds.size})
+            </button>
+          )}
           {hasFetched && <span className="badge">{totalRecords} records</span>}
         </div>
       </form>
@@ -249,6 +357,14 @@ export default function Orders() {
           <table>
             <thead>
               <tr>
+                <th style={{ width: 32 }}>
+                  <input
+                    type="checkbox"
+                    checked={orders.length > 0 && orders.every((o) => selectedOrderIds.has(o.id))}
+                    onChange={toggleSelectAllVisible}
+                    aria-label="Select all orders on page"
+                  />
+                </th>
                 <th className="col-expand"></th>
                 <th>Order No</th>
                 <th>Customer</th>
@@ -263,7 +379,7 @@ export default function Orders() {
             <tbody>
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', opacity: 0.45, padding: '24px 0' }}>
+                  <td colSpan={10} style={{ textAlign: 'center', opacity: 0.45, padding: '24px 0' }}>
                     No orders found for the selected filters
                   </td>
                 </tr>
@@ -277,6 +393,14 @@ export default function Orders() {
                       onClick={() => lines.length > 0 && toggleExpand(order.id)}
                       style={{ cursor: lines.length > 0 ? 'pointer' : 'default' }}
                     >
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedOrderIds.has(order.id)}
+                          onChange={() => toggleOrderSelection(order.id)}
+                          aria-label={`Select order ${order.externalOrderNo}`}
+                        />
+                      </td>
                       <td className="col-expand">
                         {lines.length > 0 && (
                           <button
@@ -311,7 +435,7 @@ export default function Orders() {
                           <button
                             type="button"
                             className="primary-button"
-                            onClick={() => issueFiscalBill(order)}
+                            onClick={() => openFiscalModal(order)}
                             disabled={busyOrderIds[order.id]}
                           >
                             {busyOrderIds[order.id] ? 'Processing...' : 'Issue Fiscal Bill'}
@@ -329,7 +453,7 @@ export default function Orders() {
                     </tr>
                     {isExpanded && lines.length > 0 && (
                       <tr className="order-lines-row">
-                        <td colSpan={9} className="order-lines-cell">
+                        <td colSpan={10} className="order-lines-cell">
                           <table className="order-lines-table">
                             <colgroup>
                               <col className="col-product" />
@@ -387,6 +511,53 @@ export default function Orders() {
           )}
         </section>
       )}
+
+      {fiscalModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.4)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{ background: '#fff', borderRadius: 8, padding: '2rem', minWidth: 360, maxWidth: 480, width: '100%' }}>
+            <h3 style={{ marginTop: 0 }}>Issue Fiscal Bill</h3>
+            <p style={{ color: '#64748b', marginTop: 0 }}>
+              Orders selected: <strong>{fiscalModal.orders.length}</strong>
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div className="form-group">
+                <label className="form-label">Invoice Type</label>
+                <select className="form-input" value={fiscalInvoiceType} onChange={(e) => setFiscalInvoiceType(e.target.value)}>
+                  {INVOICE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Transaction Type</label>
+                <select className="form-input" value={fiscalTransactionType} onChange={(e) => setFiscalTransactionType(e.target.value)}>
+                  {TRANSACTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Default Tax Label (for items without tax)</label>
+                <select className="form-input" value={fiscalTaxLabel} onChange={(e) => setFiscalTaxLabel(e.target.value)}>
+                  {['A', 'E', 'G', 'Đ', 'N'].map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </div>
+            </div>
+            {fiscalError && <p style={{ color: 'red', marginTop: '0.75rem' }}>{fiscalError}</p>}
+            <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem' }}>
+              <button className="primary-button" onClick={submitFiscalBill} disabled={fiscalSubmitting}>
+                {fiscalSubmitting ? 'Submitting…' : 'Submit'}
+              </button>
+              <button className="secondary-button" onClick={closeFiscalModal} disabled={fiscalSubmitting}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </AppShell>
   )
 }
