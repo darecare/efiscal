@@ -28,7 +28,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -153,15 +152,14 @@ public class FiscalBillService {
         }
 
         // Build and send request
-        String fiscalbillId = UUID.randomUUID().toString();
         FiscalBillConfigEntity config = resolveConfig(orgId);
         List<FiscalBillItemRequest> resolvedItems = resolveVatLabelsForOrderItems(orderData.items());
         String requestBody = buildRequestBody(orgId, clientId, orderId, invoiceType, transactionType,
             resolvedItems, orderData.paymentMethodCode(), orderData.billingType(),
                 orderData.billingCompanyVat(), config);
 
-        FiscalBillEntity entity = createPendingEntity(fiscalbillId, orgId, clientId, orderId,
-                invoiceType, transactionType, orderData.customerName());
+        FiscalBillEntity entity = createPendingEntity(orgId, clientId, orderId,
+            invoiceType, transactionType, orderData.customerName(), requestBody);
         fiscalBillRepository.save(entity);
         registerIdempotencyKey(idempotencyKey, entity);
 
@@ -246,9 +244,8 @@ public class FiscalBillService {
                 request.items(), request.payments(),
                 request.buyerType(), request.buyerVat(), config);
 
-        String fiscalbillId = UUID.randomUUID().toString();
-        FiscalBillEntity entity = createPendingEntity(fiscalbillId, orgId, clientId, orderId,
-                request.invoiceType(), request.transactionType(), request.customerName());
+        FiscalBillEntity entity = createPendingEntity(orgId, clientId, orderId,
+            request.invoiceType(), request.transactionType(), request.customerName(), requestBody);
         fiscalBillRepository.save(entity);
         registerIdempotencyKey(idempotencyKey, entity);
 
@@ -297,10 +294,10 @@ public class FiscalBillService {
     // -----------------------------------------------------------------------
 
     @Transactional
-    public FiscalBillRetryResult retryFiscalBill(String fiscalBillId, String idempotencyKey) {
+    public FiscalBillRetryResult retryFiscalBill(Long fiscalBillId, String idempotencyKey) {
         Optional<FiscalBillIdempotencyKeyEntity> existingRetryKey = idempotencyKeyRepository.findById(idempotencyKey);
         if (existingRetryKey.isPresent()) {
-            String existingBillId = existingRetryKey.get().getFiscalBill().getFiscalbillId();
+            Long existingBillId = existingRetryKey.get().getFiscalBill().getFiscalbillId();
             if (!existingBillId.equals(fiscalBillId)) {
                 return FiscalBillRetryResult.ofIdempotencyConflict();
             }
@@ -323,7 +320,7 @@ public class FiscalBillService {
     }
 
     @Transactional(readOnly = true)
-    public FiscalBillView findFiscalBillById(String fiscalBillId) {
+    public FiscalBillView findFiscalBillById(Long fiscalBillId) {
         return fiscalBillRepository.findById(fiscalBillId).map(this::toView).orElse(null);
     }
 
@@ -335,7 +332,7 @@ public class FiscalBillService {
         }
 
         @Transactional(readOnly = true)
-        public FiscalBillDetailsView findFiscalBillDetails(String fiscalBillId) {
+        public FiscalBillDetailsView findFiscalBillDetails(Long fiscalBillId) {
         FiscalBillEntity entity = fiscalBillRepository.findById(fiscalBillId).orElse(null);
         if (entity == null) {
             return null;
@@ -646,13 +643,14 @@ public class FiscalBillService {
                 orderData.paymentMethodCode(), totalAdvanceAmount));
         body.put("items", buildAdvanceLineItems(refundItems));
 
-        String advanceRefundId = UUID.randomUUID().toString();
-        FiscalBillEntity refundEntity = createPendingEntity(advanceRefundId, orgId, clientId, orderId,
-                INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_REFUND, orderData.customerName());
+        String advanceRefundRequestBody = toJson(body);
+
+        FiscalBillEntity refundEntity = createPendingEntity(orgId, clientId, orderId,
+            INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_REFUND, orderData.customerName(), advanceRefundRequestBody);
         fiscalBillRepository.save(refundEntity);
 
         try {
-            String response = taxAuthorityService.call(orgId, "CREATE_INVOICE", toJson(body));
+            String response = taxAuthorityService.call(orgId, "CREATE_INVOICE", advanceRefundRequestBody);
             processTaxAuthorityResponse(refundEntity, response, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_REFUND,
                     refundItems, clientId, orgId);
             fiscalBillRepository.save(refundEntity);
@@ -745,7 +743,7 @@ public class FiscalBillService {
         }
     }
 
-    private void savePaymentRecords(String fiscalbillId, Long clientId, Long orgId,
+    private void savePaymentRecords(Long fiscalbillId, Long clientId, Long orgId,
             String paymentMethodCode, BigDecimal totalAmount) {
         if (totalAmount == null) return;
         int paymentType = resolvePaymentType(clientId, paymentMethodCode);
@@ -760,7 +758,7 @@ public class FiscalBillService {
         fiscalBillPayRepository.save(pay);
     }
 
-    private void saveManualPaymentRecords(String fiscalbillId, Long clientId, Long orgId,
+    private void saveManualPaymentRecords(Long fiscalbillId, Long clientId, Long orgId,
             List<PaymentRequest> payments) {
         if (payments == null) return;
         for (PaymentRequest p : payments) {
@@ -776,7 +774,7 @@ public class FiscalBillService {
         }
     }
 
-    private void saveLineItems(String fiscalbillId, Long clientId, Long orgId,
+    private void saveLineItems(Long fiscalbillId, Long clientId, Long orgId,
             List<FiscalBillItemRequest> items) {
         if (items == null) return;
         for (FiscalBillItemRequest item : items) {
@@ -802,13 +800,13 @@ public class FiscalBillService {
     // Shared helpers
     // -----------------------------------------------------------------------
 
-    private FiscalBillEntity createPendingEntity(String fiscalbillId, Long orgId, Long clientId,
-            String orderId, int invoiceType, int transactionType, String customerName) {
+    private FiscalBillEntity createPendingEntity(Long orgId, Long clientId,
+            String orderId, int invoiceType, int transactionType, String customerName, String requestBody) {
         FiscalBillEntity e = new FiscalBillEntity();
-        e.setFiscalbillId(fiscalbillId);
         e.setOrgId(orgId);
         e.setClientId(clientId);
         e.setOrderId(orderId);
+        e.setRequestBody(requestBody);
         e.setStatus(STATUS_PENDING);
         e.setAttemptCount(1);
         e.setEfiscalInvoicetype(invoiceType);
@@ -1006,7 +1004,7 @@ public class FiscalBillService {
     ) {}
 
     public record FiscalBillView(
-            String fiscalbillId,
+            Long fiscalbillId,
             String orderId,
             String status,
             String providerReference,
@@ -1020,7 +1018,7 @@ public class FiscalBillService {
     ) {}
 
             public record FiscalBillListView(
-                String fiscalbillId,
+                Long fiscalbillId,
                 String orderId,
                 String status,
                 String customerName,

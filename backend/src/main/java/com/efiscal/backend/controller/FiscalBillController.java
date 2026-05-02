@@ -50,7 +50,7 @@ public class FiscalBillController {
 
     /** GET /api/v1/fiscalbill/{id} — Retrieve fiscal bill */
     @GetMapping("/{id}")
-    public ResponseEntity<?> getFiscalBill(@PathVariable String id) {
+    public ResponseEntity<?> getFiscalBill(@PathVariable Long id) {
         FiscalBillService.FiscalBillView fiscalBill = fiscalBillService.findFiscalBillById(id);
         if (fiscalBill == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse("Fiscal bill not found"));
@@ -60,7 +60,7 @@ public class FiscalBillController {
 
     /** GET /api/v1/fiscalbill/{id}/details — Retrieve fiscal bill related tax/payment rows */
     @GetMapping("/{id}/details")
-    public ResponseEntity<?> getFiscalBillDetails(@PathVariable String id) {
+    public ResponseEntity<?> getFiscalBillDetails(@PathVariable Long id) {
         FiscalBillService.FiscalBillDetailsView details = fiscalBillService.findFiscalBillDetails(id);
         if (details == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse("Fiscal bill not found"));
@@ -158,7 +158,7 @@ public class FiscalBillController {
     /** POST /api/v1/fiscalbill/{id}/retry — Retry failed fiscal bill */
     @PostMapping("/{id}/retry")
     public ResponseEntity<?> retryFiscalBill(
-            @PathVariable String id,
+            @PathVariable Long id,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));

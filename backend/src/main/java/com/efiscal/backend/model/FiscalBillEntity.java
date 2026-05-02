@@ -2,6 +2,8 @@ package com.efiscal.backend.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
@@ -16,8 +18,9 @@ import java.time.LocalDateTime;
 public class FiscalBillEntity {
 
     @Id
-    @Column(name = "fiscalbill_id", nullable = false, length = 64)
-    private String fiscalbillId;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "fiscalbill_id", nullable = false)
+    private Long fiscalbillId;
 
     @Column(name = "client_id", columnDefinition = "NUMERIC(10,0)")
     private Long clientId;
@@ -37,6 +40,9 @@ public class FiscalBillEntity {
 
     @Column(name = "provider_reference", length = 128)
     private String providerReference;
+
+    @Column(name = "request_body", columnDefinition = "TEXT")
+    private String requestBody;
 
     // --- Tax Authority response fields ---
     @Column(name = "efiscal_sdc_invoiceno", length = 30)
@@ -151,8 +157,8 @@ public class FiscalBillEntity {
 
     // Getters and setters
 
-    public String getFiscalbillId() { return fiscalbillId; }
-    public void setFiscalbillId(String fiscalbillId) { this.fiscalbillId = fiscalbillId; }
+    public Long getFiscalbillId() { return fiscalbillId; }
+    public void setFiscalbillId(Long fiscalbillId) { this.fiscalbillId = fiscalbillId; }
 
     public Long getClientId() { return clientId; }
     public void setClientId(Long clientId) { this.clientId = clientId; }
@@ -171,6 +177,9 @@ public class FiscalBillEntity {
 
     public String getProviderReference() { return providerReference; }
     public void setProviderReference(String providerReference) { this.providerReference = providerReference; }
+
+    public String getRequestBody() { return requestBody; }
+    public void setRequestBody(String requestBody) { this.requestBody = requestBody; }
 
     public String getEfiscalSdcInvoiceno() { return efiscalSdcInvoiceno; }
     public void setEfiscalSdcInvoiceno(String v) { this.efiscalSdcInvoiceno = v; }

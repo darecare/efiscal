@@ -5,5 +5,5 @@ import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface FiscalBillLineRepository extends JpaRepository<FiscalBillLineEntity, Long> {
-    List<FiscalBillLineEntity> findByFiscalbillId(String fiscalbillId);
+    List<FiscalBillLineEntity> findByFiscalbillId(Long fiscalbillId);
 }

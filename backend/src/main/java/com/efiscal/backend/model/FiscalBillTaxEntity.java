@@ -21,8 +21,8 @@ public class FiscalBillTaxEntity {
     @Column(name = "fiscalbilltax_id", nullable = false)
     private Long fiscalbilltaxId;
 
-    @Column(name = "fiscalbill_id", length = 64)
-    private String fiscalbillId;
+    @Column(name = "fiscalbill_id")
+    private Long fiscalbillId;
 
     @Column(name = "client_id", nullable = false, columnDefinition = "NUMERIC(10,0)")
     private Long clientId = 0L;
@@ -75,8 +75,8 @@ public class FiscalBillTaxEntity {
 
     public Long getFiscalbilltaxId() { return fiscalbilltaxId; }
 
-    public String getFiscalbillId() { return fiscalbillId; }
-    public void setFiscalbillId(String fiscalbillId) { this.fiscalbillId = fiscalbillId; }
+    public Long getFiscalbillId() { return fiscalbillId; }
+    public void setFiscalbillId(Long fiscalbillId) { this.fiscalbillId = fiscalbillId; }
 
     public Long getClientId() { return clientId; }
     public void setClientId(Long clientId) { this.clientId = clientId; }
