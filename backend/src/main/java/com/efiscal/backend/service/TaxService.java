@@ -41,6 +41,8 @@ public class TaxService {
         entity.setRate(req.rate());
         entity.setActive(req.isActive() != null ? req.isActive() : true);
         entity.setEfiscalTaxname(req.efiscalTaxname());
+        entity.setEfiscalAdvanceprefix(req.efiscalAdvanceprefix());
+        entity.setEfiscalAdvancename(req.efiscalAdvancename());
 
         return toDto(taxRepository.save(entity));
     }
@@ -61,6 +63,8 @@ public class TaxService {
         if (req.rate() != null) entity.setRate(req.rate());
         if (req.isActive() != null) entity.setActive(req.isActive());
         if (req.efiscalTaxname() != null) entity.setEfiscalTaxname(req.efiscalTaxname());
+        if (req.efiscalAdvanceprefix() != null) entity.setEfiscalAdvanceprefix(req.efiscalAdvanceprefix());
+        if (req.efiscalAdvancename() != null) entity.setEfiscalAdvancename(req.efiscalAdvancename());
 
         return toDto(taxRepository.save(entity));
     }
@@ -92,6 +96,8 @@ public class TaxService {
             entity.getRate(),
             entity.isActive(),
             entity.getEfiscalTaxname(),
+            entity.getEfiscalAdvanceprefix(),
+            entity.getEfiscalAdvancename(),
             entity.getCreatedAt()
         );
     }
@@ -104,6 +110,8 @@ public class TaxService {
         BigDecimal rate,
         boolean isActive,
         String efiscalTaxname,
+        String efiscalAdvanceprefix,
+        String efiscalAdvancename,
         OffsetDateTime createdAt
     ) {}
 
@@ -112,6 +120,8 @@ public class TaxService {
         String label,
         BigDecimal rate,
         Boolean isActive,
-        String efiscalTaxname
+        String efiscalTaxname,
+        String efiscalAdvanceprefix,
+        String efiscalAdvancename
     ) {}
 }

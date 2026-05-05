@@ -489,7 +489,14 @@ CREATE TABLE IF NOT EXISTS tax
     efiscal_taxlabel character varying(1) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
     efiscal_taxname character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
     efiscal_taxprefix character varying(22) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+        efiscal_advanceprefix character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+        efiscal_advancename character varying(50) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
 )
+
+Notes:
+- Advance fiscal bill line name is resolved from tax table fields:
+    efiscal_advanceprefix + efiscal_advancename
+- Values should be configured on active tax rows used in fiscal mapping.
 
 ### 2.13 Tax Category
 Table name: taxcategory

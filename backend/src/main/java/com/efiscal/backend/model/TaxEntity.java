@@ -47,6 +47,12 @@ public class TaxEntity {
     @Column(name = "efiscal_taxname", length = 22)
     private String efiscalTaxname;
 
+    @Column(name = "efiscal_advanceprefix", length = 50)
+    private String efiscalAdvanceprefix;
+
+    @Column(name = "efiscal_advancename", length = 50)
+    private String efiscalAdvancename;
+
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
 
@@ -66,4 +72,8 @@ public class TaxEntity {
     public void setDeletedAt(OffsetDateTime deletedAt) { this.deletedAt = deletedAt; }
     public String getEfiscalTaxname() { return efiscalTaxname; }
     public void setEfiscalTaxname(String efiscalTaxname) { this.efiscalTaxname = efiscalTaxname; }
+    public String getEfiscalAdvanceprefix() { return efiscalAdvanceprefix; }
+    public void setEfiscalAdvanceprefix(String efiscalAdvanceprefix) { this.efiscalAdvanceprefix = efiscalAdvanceprefix; }
+    public String getEfiscalAdvancename() { return efiscalAdvancename; }
+    public void setEfiscalAdvancename(String efiscalAdvancename) { this.efiscalAdvancename = efiscalAdvancename; }
 }

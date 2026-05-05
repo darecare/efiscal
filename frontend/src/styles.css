@@ -203,6 +203,73 @@ select.form-input {
   box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
 
+.fiscal-date-range-field {
+  position: relative;
+}
+
+.fiscal-date-range-trigger {
+  width: 100%;
+  text-align: left;
+}
+
+.fiscal-date-range-popover {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 8px);
+  left: 0;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.fiscal-date-range-popover .rdrCalendarWrapper {
+  font-size: 13px;
+}
+
+.fiscal-date-range-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.action-dropdown {
+  position: relative;
+}
+
+.action-dropdown > summary {
+  list-style: none;
+  display: inline-block;
+}
+
+.action-dropdown > summary::-webkit-details-marker {
+  display: none;
+}
+
+.action-dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.action-dropdown-menu .secondary-button {
+  width: 100%;
+  text-align: left;
+}
+
 /* ─── Buttons ──────────────────────────────────────── */
 .primary-button,
 .secondary-button {

@@ -28,6 +28,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -57,6 +59,7 @@ public class FiscalBillService {
 
     /** Invoice type constants */
     public static final int INVOICE_TYPE_NORMAL = 0;
+    public static final int INVOICE_TYPE_COPY = 2;
     public static final int INVOICE_TYPE_ADVANCE = 4;
 
     /** Transaction type constants */
@@ -140,6 +143,9 @@ public class FiscalBillService {
                     " with invoiceType=" + invoiceType + " transactionType=" + transactionType);
         }
 
+        // Resolve order item tax labels before any dependent flow (including advance-refund chain).
+        List<FiscalBillItemRequest> resolvedItems = resolveVatLabelsForOrderItems(orderData.items());
+
         // --- 4.1.5  Advance closing chain ---
         // If creating Normal Sale and Advance Sale exists → first create Advance Refund
         if (invoiceType == INVOICE_TYPE_NORMAL && transactionType == TRANSACTION_TYPE_SALE) {
@@ -147,13 +153,12 @@ public class FiscalBillService {
                     .findByOrderIdAndInvoiceTypeAndTransactionType(orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE);
             if (!advanceBills.isEmpty()) {
                 // Create Advance Refund to close the chain
-                createAdvanceRefund(orgId, clientId, orderId, advanceBills, orderData);
+            createAdvanceRefund(orgId, clientId, orderId, advanceBills, orderData, resolvedItems);
             }
         }
 
         // Build and send request
         FiscalBillConfigEntity config = resolveConfig(orgId);
-        List<FiscalBillItemRequest> resolvedItems = resolveVatLabelsForOrderItems(orderData.items());
         String requestBody = buildRequestBody(orgId, clientId, orderId, invoiceType, transactionType,
             resolvedItems, orderData.paymentMethodCode(), orderData.billingType(),
                 orderData.billingCompanyVat(), config);
@@ -231,7 +236,8 @@ public class FiscalBillService {
                         .findByOrderIdAndInvoiceTypeAndTransactionType(orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE);
                 if (!advanceBills.isEmpty()) {
                     OrderFiscalizeRequest syntheticOrder = buildSyntheticOrderFromManual(request);
-                    createAdvanceRefund(orgId, clientId, orderId, advanceBills, syntheticOrder);
+                    createAdvanceRefund(orgId, clientId, orderId, advanceBills, syntheticOrder,
+                            resolveVatLabelsForOrderItems(request.items()));
                 }
             }
         }
@@ -317,6 +323,88 @@ public class FiscalBillService {
             registerIdempotencyKey(idempotencyKey, entity);
         }
         return FiscalBillRetryResult.ofRetried(toView(entity));
+    }
+
+    @Transactional
+    public FiscalBillCreateResult createCopyFiscalBill(Long sourceFiscalBillId, String idempotencyKey) {
+        Optional<FiscalBillIdempotencyKeyEntity> existingKey = idempotencyKeyRepository.findById(idempotencyKey);
+        if (existingKey.isPresent()) {
+            return FiscalBillCreateResult.ofAlreadyExists(toView(existingKey.get().getFiscalBill()));
+        }
+
+        FiscalBillEntity source = fiscalBillRepository.findById(sourceFiscalBillId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Source fiscal bill not found"));
+
+        if (!STATUS_SUCCESS.equals(source.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only SUCCESS fiscal bills can be used to create Copy");
+        }
+        if (source.getEfiscalSdcInvoiceno() == null || source.getEfiscalSdcInvoiceno().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Source fiscal bill is missing Tax Authority invoice number");
+        }
+
+        List<FiscalBillLineEntity> sourceLines = fiscalBillLineRepository.findByFiscalbillId(sourceFiscalBillId);
+        if (sourceLines.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Source fiscal bill has no line items to copy");
+        }
+
+        List<FiscalBillItemRequest> copyItems = sourceLines.stream()
+                .map(this::toCopyItemRequest)
+                .toList();
+
+        List<PaymentRequest> copyPayments = fiscalBillPayRepository.findByFiscalbillId(sourceFiscalBillId).stream()
+                .map(p -> new PaymentRequest(p.getPaymentType(), p.getAmount()))
+                .toList();
+        if (copyPayments.isEmpty()) {
+            if (source.getEfiscalTotalamount() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Source fiscal bill has no payment rows and no total amount for fallback payment");
+            }
+            copyPayments = List.of(new PaymentRequest(0, source.getEfiscalTotalamount()));
+        }
+
+        FiscalBillConfigEntity config = resolveConfig(source.getOrgId());
+        String requestBody = buildCopyRequestBody(source, copyItems, copyPayments, config);
+
+        int copyTransactionType = source.getEfiscalTransactiontype() == null
+                ? TRANSACTION_TYPE_SALE
+                : source.getEfiscalTransactiontype();
+
+        FiscalBillEntity entity = createPendingEntity(
+                source.getOrgId(),
+                source.getClientId(),
+                source.getOrderId(),
+                INVOICE_TYPE_COPY,
+                copyTransactionType,
+                source.getEfiscalCustomername(),
+                requestBody);
+        fiscalBillRepository.save(entity);
+        registerIdempotencyKey(idempotencyKey, entity);
+
+        try {
+            String response = taxAuthorityService.call(source.getOrgId(), "CREATE_INVOICE", requestBody);
+            processTaxAuthorityResponse(entity, response, INVOICE_TYPE_COPY, copyTransactionType,
+                    copyItems, source.getClientId(), source.getOrgId());
+            fiscalBillRepository.save(entity);
+            saveManualPaymentRecords(entity.getFiscalbillId(), source.getClientId(), source.getOrgId(), copyPayments);
+            saveLineItems(entity.getFiscalbillId(), source.getClientId(), source.getOrgId(), copyItems);
+        } catch (ResponseStatusException rse) {
+            entity.setStatus(STATUS_FAILED);
+            entity.setLastError(rse.getReason());
+            entity.setUpdated(LocalDateTime.now());
+            fiscalBillRepository.save(entity);
+            return FiscalBillCreateResult.ofFailed(toView(entity));
+        } catch (Exception ex) {
+            entity.setStatus(STATUS_FAILED);
+            entity.setLastError(ex.getMessage());
+            entity.setUpdated(LocalDateTime.now());
+            fiscalBillRepository.save(entity);
+            return FiscalBillCreateResult.ofFailed(toView(entity));
+        }
+
+        return FiscalBillCreateResult.ofCreated(toView(entity));
     }
 
     @Transactional(readOnly = true)
@@ -454,6 +542,34 @@ public class FiscalBillService {
         return toJson(body);
     }
 
+    private String buildCopyRequestBody(
+            FiscalBillEntity source,
+            List<FiscalBillItemRequest> items,
+            List<PaymentRequest> payments,
+            FiscalBillConfigEntity config) {
+
+        Map<String, Object> body = new HashMap<>();
+        int sourceTransactionType = source.getEfiscalTransactiontype() == null
+                ? TRANSACTION_TYPE_SALE
+                : source.getEfiscalTransactiontype();
+
+        body.put("invoiceType", INVOICE_TYPE_COPY);
+        body.put("transactionType", sourceTransactionType);
+        body.put("dateAndTimeOfIssue", belgradeNow());
+        if (config != null && config.getEsirno() != null) {
+            body.put("invoiceNumber", config.getEsirno());
+        }
+
+        body.put("referentDocumentNumber", source.getEfiscalSdcInvoiceno());
+        if (source.getEfiscalSdcdatetime() != null && !source.getEfiscalSdcdatetime().isBlank()) {
+            body.put("referentDocumentDT", source.getEfiscalSdcdatetime());
+        }
+
+        body.put("payment", buildPaymentArrayFromRows(payments));
+        body.put("items", buildLineItems(items));
+        return toJson(body);
+    }
+
     /**
      * Normal line items array — one entry per product item (4.1.3 rule 1).
      */
@@ -479,38 +595,69 @@ public class FiscalBillService {
 
     /**
      * Advance line items — summarized per tax rate (4.1.3 rule 2).
-     * Name template: {taxPrefix}:Avans{taxLabel}
+     * Name is resolved from tax table: efiscal_advanceprefix + efiscal_advancename.
      */
     private List<Map<String, Object>> buildAdvanceLineItems(List<FiscalBillItemRequest> items) {
-        // Group items by taxLabel and sum totalAmount
+        // Group items by tax label and sum totalAmount.
         Map<String, BigDecimal> groupedByLabel = new HashMap<>();
-        Map<String, String> labelToPrefix = new HashMap<>();
         for (FiscalBillItemRequest item : items) {
             String label = resolvePrimaryLabel(item);
             groupedByLabel.merge(label, item.totalAmount(), BigDecimal::add);
-            if (item.taxPrefix() != null) {
-                labelToPrefix.put(label, item.taxPrefix());
-            }
         }
+        if (groupedByLabel.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No line items for advance invoice");
+        }
+
+        Map<String, String> advanceNameByLabel = resolveAdvanceNameByLabel(groupedByLabel.keySet());
 
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map.Entry<String, BigDecimal> entry : groupedByLabel.entrySet()) {
             String label = entry.getKey();
             BigDecimal total = entry.getValue();
-            String prefix = labelToPrefix.getOrDefault(label, "00");
             Map<String, Object> line = new HashMap<>();
-            // Name format: "XX:Avans A" where XX is 2-digit tax prefix, A is taxlabel (4.1.3 rule 2.1)
-            line.put("name", prefix + ":Avans" + label);
+            line.put("name", advanceNameByLabel.get(label));
             line.put("quantity", BigDecimal.ONE);
             line.put("unitPrice", total);
             line.put("totalAmount", total);
             line.put("labels", List.of(label));
             result.add(line);
         }
-        if (result.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No line items for advance invoice");
-        }
         return result;
+    }
+
+    private Map<String, String> resolveAdvanceNameByLabel(Set<String> labels) {
+        Map<String, List<TaxEntity>> activeTaxesByLabel = taxRepository.findAllByDeletedAtIsNull().stream()
+                .filter(TaxEntity::isActive)
+                .filter(t -> t.getLabel() != null && !t.getLabel().isBlank())
+                .collect(Collectors.groupingBy(t -> t.getLabel().trim().toUpperCase()));
+
+        Map<String, String> resolved = new HashMap<>();
+        for (String label : labels) {
+            String normalizedLabel = label == null ? null : label.trim().toUpperCase();
+            List<TaxEntity> matches = normalizedLabel == null ? List.of() : activeTaxesByLabel.get(normalizedLabel);
+            if (matches == null || matches.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "No active tax configuration found for advance line label '" + label + "'");
+            }
+            if (matches.size() > 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Multiple active tax rows found for advance line label '" + label
+                                + "'. Configure a unique active label.");
+            }
+
+            TaxEntity tax = matches.get(0);
+            if (tax.getEfiscalAdvanceprefix() == null || tax.getEfiscalAdvanceprefix().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Tax label '" + label + "' is missing efiscal_advanceprefix");
+            }
+            if (tax.getEfiscalAdvancename() == null || tax.getEfiscalAdvancename().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Tax label '" + label + "' is missing efiscal_advancename");
+            }
+
+            resolved.put(label, tax.getEfiscalAdvanceprefix().trim() + tax.getEfiscalAdvancename().trim());
+        }
+        return resolved;
     }
 
     /**
@@ -521,17 +668,17 @@ public class FiscalBillService {
         FiscalBillEntity ref = null;
 
         if (invoiceType == INVOICE_TYPE_NORMAL && transactionType == TRANSACTION_TYPE_SALE) {
-            // Check for existing Advance Sale fiscal bill for this order
+            // Normal Sale references to last issued Advance Refund (closes advance chain)
             ref = fiscalBillRepository
-                    .findLatestByOrderAndType(orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE)
+                    .findLatestByOrderAndType(orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_REFUND)
                     .orElse(null);
         } else if (invoiceType == INVOICE_TYPE_NORMAL && transactionType == TRANSACTION_TYPE_REFUND) {
-            // Must reference Normal Sale
+            // Normal Refund references to Normal Sale
             ref = fiscalBillRepository
                     .findLatestByOrderAndType(orderId, INVOICE_TYPE_NORMAL, TRANSACTION_TYPE_SALE)
                     .orElse(null);
         } else if (invoiceType == INVOICE_TYPE_ADVANCE && transactionType == TRANSACTION_TYPE_SALE) {
-            // Reference last Advance Sale if exists (subsequent advance)
+            // Advance Sale can reference to last Advance Sale (for chained advances)
             ref = fiscalBillRepository
                     .findLatestByOrderAndType(orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE)
                     .orElse(null);
@@ -607,8 +754,9 @@ public class FiscalBillService {
     // 4.1.5  Advance closing chain
     // -----------------------------------------------------------------------
 
-    private void createAdvanceRefund(Long orgId, Long clientId, String orderId,
-            List<FiscalBillEntity> advanceBills, OrderFiscalizeRequest orderData) {
+        private void createAdvanceRefund(Long orgId, Long clientId, String orderId,
+            List<FiscalBillEntity> advanceBills, OrderFiscalizeRequest orderData,
+            List<FiscalBillItemRequest> resolvedItems) {
         // Summarize all previous Advance Normal amounts
         BigDecimal totalAdvanceAmount = advanceBills.stream()
                 .filter(b -> STATUS_SUCCESS.equals(b.getStatus()))
@@ -623,7 +771,7 @@ public class FiscalBillService {
         FiscalBillConfigEntity config = resolveConfig(orgId);
 
         // Build refund items that mirror the advance items but as refund
-        List<FiscalBillItemRequest> refundItems = buildAdvanceRefundItems(orderId, totalAdvanceAmount, orderData);
+        List<FiscalBillItemRequest> refundItems = buildAdvanceRefundItems(orderId, totalAdvanceAmount, resolvedItems);
 
         Map<String, Object> body = new HashMap<>();
         body.put("invoiceType", INVOICE_TYPE_ADVANCE);
@@ -667,16 +815,33 @@ public class FiscalBillService {
     }
 
     private List<FiscalBillItemRequest> buildAdvanceRefundItems(String orderId,
-            BigDecimal totalAmount, OrderFiscalizeRequest orderData) {
-        // Use the same items from order data for the refund (negated amounts handled by TA)
-        return orderData.items();
+            BigDecimal totalAmount, List<FiscalBillItemRequest> resolvedItems) {
+        // Use resolved order items so labels are always available for advance summarization.
+        return resolvedItems;
+    }
+
+    private FiscalBillItemRequest toCopyItemRequest(FiscalBillLineEntity line) {
+        String taxLabel = line.getTaxLabel() == null ? null : line.getTaxLabel().trim();
+        List<String> labels = (taxLabel == null || taxLabel.isBlank()) ? null : List.of(taxLabel);
+        return new FiscalBillItemRequest(
+                line.getName(),
+                line.getQuantity(),
+                line.getUnitPrice(),
+                line.getTotalAmount(),
+                taxLabel,
+                null,
+                line.getGtin(),
+                line.getProductId(),
+                line.getSku(),
+                null,
+                null,
+                labels);
     }
 
     // -----------------------------------------------------------------------
     // Response processing & persistence
     // -----------------------------------------------------------------------
 
-    @SuppressWarnings("unchecked")
     private void processTaxAuthorityResponse(FiscalBillEntity entity, String responseBody,
             int invoiceType, int transactionType,
             List<FiscalBillItemRequest> items,
@@ -859,47 +1024,71 @@ public class FiscalBillService {
         if (item.labels() != null && !item.labels().isEmpty()) {
             return item.labels();
         }
-        String fallback = item.taxLabel() == null || item.taxLabel().isBlank() ? "A" : item.taxLabel();
-        return List.of(fallback);
+        if (item.taxLabel() != null && !item.taxLabel().isBlank()) {
+            return List.of(item.taxLabel());
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Missing tax label for line item: " + safeItemName(item, -1));
     }
 
     private List<FiscalBillItemRequest> resolveVatLabelsForOrderItems(List<FiscalBillItemRequest> items) {
         if (items == null || items.isEmpty()) {
-            return List.of();
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Order has no line items to fiscalize");
         }
-        return items.stream().map(item -> {
+        List<FiscalBillItemRequest> resolved = new ArrayList<>();
+        for (int i = 0; i < items.size(); i++) {
+            FiscalBillItemRequest item = items.get(i);
+            String itemName = safeItemName(item, i);
+
             if (item.taxValue() == null) {
-                return item;
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Order line item '" + itemName + "' is missing product_tax_percent value");
             }
-            String taxCategoryName = item.taxCategoryName() == null || item.taxCategoryName().isBlank()
-                    ? "VAT"
-                    : item.taxCategoryName();
+
+            if (item.taxCategoryName() == null || item.taxCategoryName().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Order line item '" + itemName + "' is missing product_tax_name value");
+            }
+
+            String taxCategoryName = item.taxCategoryName().trim();
             List<TaxEntity> categoryTaxes = taxRepository.findActiveTaxesByCategoryName(taxCategoryName);
             TaxEntity matchedTax = categoryTaxes.stream()
                     .filter(t -> t.getRate() != null && t.getRate().compareTo(item.taxValue()) == 0)
                     .findFirst()
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "No tax mapping found for category " + taxCategoryName + " and rate " + item.taxValue()));
-                String taxLabel = matchedTax.getLabel();
+                            "No mapped tax found for order line item '" + itemName
+                                    + "' (product_tax_name='" + taxCategoryName
+                                    + "', product_tax_percent=" + item.taxValue() + ")"));
+            String taxLabel = matchedTax.getLabel();
             if (taxLabel == null || taxLabel.isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Tax mapping is missing label for category " + taxCategoryName + " and rate " + item.taxValue());
+                    "Tax mapping is missing label for order line item '" + itemName
+                            + "' (product_tax_name='" + taxCategoryName
+                            + "', product_tax_percent=" + item.taxValue() + ")");
             }
-            return new FiscalBillItemRequest(
+
+            String resolvedTaxPrefix = item.taxPrefix();
+            if (resolvedTaxPrefix == null || resolvedTaxPrefix.isBlank()) {
+                resolvedTaxPrefix = String.format("%02d", item.taxValue().intValue());
+            }
+
+            resolved.add(new FiscalBillItemRequest(
                     item.name(),
                     item.quantity(),
                     item.unitPrice(),
                     item.totalAmount(),
                     taxLabel,
-                    item.taxPrefix(),
+                    resolvedTaxPrefix,
                     item.gtin(),
                     item.productId(),
                     item.sku(),
                     item.taxValue(),
                     item.taxCategoryName(),
                     List.of(taxLabel)
-            );
-        }).toList();
+            ));
+        }
+        return resolved;
     }
 
     private String resolvePrimaryLabel(FiscalBillItemRequest item) {
@@ -909,7 +1098,15 @@ public class FiscalBillService {
         if (item.taxLabel() != null && !item.taxLabel().isBlank()) {
             return item.taxLabel();
         }
-        return "A";
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Missing tax label for line item: " + safeItemName(item, -1));
+    }
+
+    private String safeItemName(FiscalBillItemRequest item, int index) {
+        if (item != null && item.name() != null && !item.name().isBlank()) {
+            return item.name();
+        }
+        return index >= 0 ? "line #" + (index + 1) : "unnamed line";
     }
 
     private OrderFiscalizeRequest buildSyntheticOrderFromManual(ManualFiscalBillRequest request) {
@@ -948,6 +1145,7 @@ public class FiscalBillService {
                 e.getEfiscalInvoicetype(),
                 e.getEfiscalTransactiontype(),
                 e.getEfiscalSdcInvoiceno(),
+                e.getEfiscalSdcdatetime(),
                 e.getEfiscalTotalamount(),
                 e.getLastError(),
                 e.getCreated() != null ? e.getCreated().toString() : null,
@@ -1025,6 +1223,7 @@ public class FiscalBillService {
                 Integer invoiceType,
                 Integer transactionType,
                 String sdcInvoiceNumber,
+                String sdcDateTime,
                 BigDecimal totalAmount,
                 String lastError,
                 String createdAt,

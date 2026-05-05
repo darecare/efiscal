@@ -15,8 +15,6 @@ const TRANSACTION_TYPES = [
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100]
 
-const DEFAULT_TAX_LABEL = 'A'
-const DEFAULT_TAX_PREFIX = '20'
 const SHIPPING_STATUSES = [
   { value: 'awaiting', label: 'Awaiting' },
   { value: 'in_process', label: 'Processing' },
@@ -55,7 +53,6 @@ export default function Orders() {
   const [fiscalModal, setFiscalModal] = useState(null) // { orders } or null
   const [fiscalInvoiceType, setFiscalInvoiceType] = useState(0)
   const [fiscalTransactionType, setFiscalTransactionType] = useState(0)
-  const [fiscalTaxLabel, setFiscalTaxLabel] = useState(DEFAULT_TAX_LABEL)
   const [fiscalError, setFiscalError] = useState(null)
   const [fiscalSubmitting, setFiscalSubmitting] = useState(false)
 
@@ -152,7 +149,6 @@ export default function Orders() {
     setFiscalModal({ orders: ordersToSubmit })
     setFiscalInvoiceType(0)
     setFiscalTransactionType(0)
-    setFiscalTaxLabel(DEFAULT_TAX_LABEL)
     setFiscalError(null)
   }
 
@@ -188,16 +184,19 @@ export default function Orders() {
           && line.taxValue !== null
           && String(line.taxValue).trim() !== ''
           && Number.isFinite(parsedTaxValue)
+        const taxPrefix = hasTaxValue
+          ? String(Math.trunc(parsedTaxValue)).padStart(2, '0')
+          : null
         return {
           name: line.productName || `Product ${line.productId}`,
           quantity: parseFloat(line.quantity) || 1,
           unitPrice: parseFloat(line.unitPrice) || 0,
           totalAmount: (parseFloat(line.quantity) || 1) * (parseFloat(line.unitPrice) || 0),
-          taxLabel: fiscalTaxLabel,
-          labels: [fiscalTaxLabel],
+          taxLabel: null,
+          labels: null,
           taxValue: hasTaxValue ? parsedTaxValue : null,
           taxCategoryName: line.taxCategoryName || null,
-          taxPrefix: DEFAULT_TAX_PREFIX,
+          taxPrefix,
           gtin: line.ean || null,
           productId: line.productId ? String(line.productId) : null,
           sku: line.sku || null,
@@ -207,11 +206,11 @@ export default function Orders() {
         quantity: 1,
         unitPrice: parseFloat(order.totalAmount) || 0,
         totalAmount: parseFloat(order.totalAmount) || 0,
-        taxLabel: fiscalTaxLabel,
-        labels: [fiscalTaxLabel],
+        taxLabel: null,
+        labels: null,
         taxValue: null,
         taxCategoryName: null,
-        taxPrefix: DEFAULT_TAX_PREFIX,
+        taxPrefix: null,
         gtin: null,
         productId: null,
         sku: null,
@@ -538,12 +537,6 @@ export default function Orders() {
                 <label className="form-label">Transaction Type</label>
                 <select className="form-input" value={fiscalTransactionType} onChange={(e) => setFiscalTransactionType(e.target.value)}>
                   {TRANSACTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Default Tax Label (for items without tax)</label>
-                <select className="form-input" value={fiscalTaxLabel} onChange={(e) => setFiscalTaxLabel(e.target.value)}>
-                  {['A', 'E', 'G', 'Đ', 'N'].map((l) => <option key={l} value={l}>{l}</option>)}
                 </select>
               </div>
             </div>

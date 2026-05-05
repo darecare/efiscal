@@ -176,6 +176,24 @@ public class FiscalBillController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(result.fiscalBill());
     }
 
+    /** POST /api/v1/fiscalbill/{id}/copy — Create Copy fiscal bill (invoiceType=2) */
+    @PostMapping("/{id}/copy")
+    public ResponseEntity<?> createCopyFiscalBill(
+            @PathVariable Long id,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));
+        }
+        FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createCopyFiscalBill(id, idempotencyKey);
+        if (result.alreadyExists()) {
+            return ResponseEntity.ok(result.fiscalBill());
+        }
+        if (result.failed()) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(result.fiscalBill());
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(result.fiscalBill());
+    }
+
     // -----------------------------------------------------------------------
     // Request records
     // -----------------------------------------------------------------------

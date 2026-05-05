@@ -9,6 +9,8 @@ const emptyTaxForm = {
   rate: '',
   isActive: true,
   efiscalTaxname: '',
+  efiscalAdvanceprefix: '',
+  efiscalAdvancename: '',
 }
 
 const emptyCategoryForm = {
@@ -89,6 +91,8 @@ export default function Taxes() {
       rate: String(tax.rate),
       isActive: tax.isActive,
       efiscalTaxname: tax.efiscalTaxname ?? '',
+      efiscalAdvanceprefix: tax.efiscalAdvanceprefix ?? '',
+      efiscalAdvancename: tax.efiscalAdvancename ?? '',
     })
     setTaxFormError(null)
     setTaxModal(true)
@@ -119,6 +123,8 @@ export default function Taxes() {
         rate: Number(taxForm.rate),
         isActive: taxForm.isActive,
         efiscalTaxname: taxForm.efiscalTaxname.trim() || null,
+        efiscalAdvanceprefix: taxForm.efiscalAdvanceprefix.trim() || null,
+        efiscalAdvancename: taxForm.efiscalAdvancename.trim() || null,
       }
       if (taxMode === 'add') {
         await taxApi.create(payload)
@@ -239,6 +245,8 @@ export default function Taxes() {
                 <th>Rate (%)</th>
                 <th>Category</th>
                 <th>Tax Name</th>
+                <th>Advance Prefix</th>
+                <th>Advance Name</th>
                 <th>Status</th>
                 {isSuperAdmin ? <th>Actions</th> : null}
               </tr>
@@ -250,6 +258,8 @@ export default function Taxes() {
                   <td>{tax.rate}</td>
                   <td>{tax.taxCategoryName || categoryMap.get(tax.taxCategoryId)?.name || '-'}</td>
                   <td>{tax.efiscalTaxname || '-'}</td>
+                  <td>{tax.efiscalAdvanceprefix || '-'}</td>
+                  <td>{tax.efiscalAdvancename || '-'}</td>
                   <td>
                     <span className={`status-chip ${tax.isActive ? 'active' : 'inactive'}`}>
                       {tax.isActive ? 'Active' : 'Inactive'}
@@ -264,7 +274,7 @@ export default function Taxes() {
               ))}
               {taxes.length === 0 ? (
                 <tr>
-                  <td colSpan={isSuperAdmin ? 6 : 5} style={{ textAlign: 'center', opacity: 0.5, padding: '24px 0' }}>
+                  <td colSpan={isSuperAdmin ? 8 : 7} style={{ textAlign: 'center', opacity: 0.5, padding: '24px 0' }}>
                     No tax rates found
                   </td>
                 </tr>
@@ -347,6 +357,24 @@ export default function Taxes() {
                 <div className="field">
                   <label>Tax Name</label>
                   <input value={taxForm.efiscalTaxname} maxLength={22} onChange={(e) => setTaxForm((p) => ({ ...p, efiscalTaxname: e.target.value }))} placeholder="e.g. PDV" />
+                </div>
+                <div className="field">
+                  <label>Advance Prefix</label>
+                  <input
+                    value={taxForm.efiscalAdvanceprefix}
+                    maxLength={50}
+                    onChange={(e) => setTaxForm((p) => ({ ...p, efiscalAdvanceprefix: e.target.value }))}
+                    placeholder="e.g. 20:"
+                  />
+                </div>
+                <div className="field">
+                  <label>Advance Name</label>
+                  <input
+                    value={taxForm.efiscalAdvancename}
+                    maxLength={50}
+                    onChange={(e) => setTaxForm((p) => ({ ...p, efiscalAdvancename: e.target.value }))}
+                    placeholder="e.g. AvansA"
+                  />
                 </div>
                 {taxMode === 'edit' ? (
                   <div className="field">

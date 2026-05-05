@@ -71,19 +71,27 @@ field in request "invoiceNumber" to be populated from table fiscalbillconfig.esi
 It can be read here (on serbian language) in spec:
 https://tap.sandbox.suf.purs.gov.rs/Help/view/638196160/%D0%98%D0%B7%D0%B4%D0%B0%D0%B2%D0%B0%D1%9A%D0%B5-%D1%84%D0%B8%D1%81%D0%BA%D0%B0%D0%BB%D0%BD%D0%B8%D1%85-%D1%80%D0%B0%D1%87%D1%83%D0%BD%D0%B0-%D1%83-%D1%81%D0%BB%D1%83%D1%87%D0%B0%D1%98%D1%83-%D0%BD%D0%B0%D0%BF%D0%BB%D0%B0%D1%82%D0%B5-%D0%B0%D0%B2%D0%B0%D0%BD%D1%81%D0%B0-%D1%83-%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BC%D1%83-%D0%B5%D0%A4%D0%B8%D1%81%D0%BA%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%98%D0%B5/sr-Cyrl-RS
 
-Name of item template is:
-2_digit_code_tax_based + ':' + 'Avans' + {taxlabel}
+Name of advance item is read from tax table configuration, not hardcoded:
+- tax.efiscal_advanceprefix + tax.efiscal_advancename
+- mapping key is tax label used on the grouped advance line
+- each label used for advance invoice must have one active tax row with both fields populated
+- if any order line is missing product_tax_percent or product_tax_name, request must fail with validation error
 
 ### 4.1.4 Reference to already issued fiscal bills
 In fiscalbill api request body, 2 fields for reference document must be set, if any of these conditions is met:
-- If user selected invoicetype = 0 and transactionType = 0, check if exists in database for this sales order any fiscalbill with invoiceType = 4.
-If advance invoice type exist, api request must reference to the last issued fiscalbill with invoiceType = 4.
-- If user selected invoicetype = 0 and transactionType = 1, in database must exist fiscalbill with invoicetype = 0 and transactionType = 0. Reference fields must be set to that fiscal bill.
-- If user selected invoicetype = 4 and transactionType = 0, check if exists fiscalbill with invoiceType = 4, populate reference fields to the last one existing fiscalbill with invoiceType = 4
-Check reference function on /legacy setReferentFields function
+
+**Reference Logic by Invoice/Transaction Type:**
+- **Advance Sale (invoiceType=4, transactionType=0)**: Can reference to last existing Advance Sale for the same order (for chained advances; e.g., SO total=1000, first Advance=500, second Advance=500).
+- **Advance Refund (invoiceType=4, transactionType=1)**: Must reference to the last issued Advance Sale document for the advance closing chain.
+- **Normal Sale (invoiceType=0, transactionType=0)**: Must reference to the last issued Advance Refund document (if one exists for the order).
+- **Normal Refund (invoiceType=0, transactionType=1)**: Must reference to the Normal Sale document.
+- **Copy Sale (invoiceType=2, transactionType=0)**: References to Normal Sale or Advance Sale (depending which copy is for).
+
 Reference fields in api request body:
 1. referentDocumentNumber - field eFiscal_sdc_invoiceno from ficalbill table
-2. referentDocumentDT - fiedl eFiscal_sdcdatetime from ficalbill table
+2. referentDocumentDT - field eFiscal_sdcdatetime from ficalbill table
+
+Check reference function on /legacy setReferentFields function
 
 ### 4.1.5 Advance fiscalbill closing chain
 If api request is to create Normal Sale invoice and if in database exists previously issued Advance Sale fiscalbills for same sales order, system must first create Advance Refund document.
