@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import AppShell from '../components/AppShell'
-import { fiscalBillApi, orgsApi, clientsOrgsApi } from '../services/api'
+import { fiscalBillApi, orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const INVOICE_TYPES = [
@@ -71,16 +71,14 @@ export default function CreateFiscalBill() {
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
 
   const [orgs, setOrgs] = useState([])
-  const [clientOrgs, setClientOrgs] = useState([])
   const [selectedOrgId, setSelectedOrgId] = useState('')
-  const [selectedClientId, setSelectedClientId] = useState('')
 
   // Header fields
   const [invoiceType, setInvoiceType] = useState(0)
   const [transactionType, setTransactionType] = useState(0)
   const [orderId, setOrderId] = useState('')
   const [customerName, setCustomerName] = useState('')
-  const [buyerType, setBuyerType] = useState('10')
+  const [buyerType, setBuyerType] = useState('')
   const [buyerIdValue, setBuyerIdValue] = useState('')
 
   // Items
@@ -89,7 +87,7 @@ export default function CreateFiscalBill() {
   // Payments
   const [payments, setPayments] = useState([emptyPayment()])
 
-  const [activeTab, setActiveTab] = useState('header')
+  const [activeTab, setActiveTab] = useState('items')
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
@@ -97,13 +95,10 @@ export default function CreateFiscalBill() {
   useEffect(() => {
     const loadOrgs = isSuperAdmin ? orgsApi.list() : orgsApi.myAccess()
     loadOrgs.then(setOrgs).catch(() => setOrgs([]))
-    clientsOrgsApi.list().then(setClientOrgs).catch(() => setClientOrgs([]))
   }, [isSuperAdmin])
 
-  // Derive available clients for the selected org
-  const clientsForOrg = clientOrgs.filter(co =>
-    !selectedOrgId || String(co.orgId) === String(selectedOrgId)
-  )
+  const selectedOrg = orgs.find(org => String(org.orgId) === String(selectedOrgId))
+  const selectedClientId = selectedOrg?.clientId != null ? String(selectedOrg.clientId) : ''
 
   function setItemField(id, field, value) {
     setItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item))
@@ -141,8 +136,18 @@ export default function CreateFiscalBill() {
     setError(null)
     setResult(null)
 
-    if (!selectedOrgId || !selectedClientId) {
-      setError('Please select organization and client.')
+    if (!selectedOrgId) {
+      setError('Please select organization.')
+      return
+    }
+
+    if (!selectedClientId) {
+      setError('Selected organization is not mapped to a client.')
+      return
+    }
+
+    if (buyerIdValue && !buyerType) {
+      setError('Please select Buyer ID Type when Buyer ID Value is entered.')
       return
     }
 
@@ -169,7 +174,7 @@ export default function CreateFiscalBill() {
       customerName: customerName || null,
       invoiceType: parseInt(invoiceType),
       transactionType: parseInt(transactionType),
-      buyerType: buyerIdValue ? buyerType : null,
+      buyerType: buyerIdValue && buyerType ? buyerType : null,
       buyerVat: buyerIdValue || null,
       items: payloadItems,
       payments: payloadPayments,
@@ -191,190 +196,201 @@ export default function CreateFiscalBill() {
     }
   }
 
-  const tabs = ['header', 'items', 'payments']
+  const tabs = ['items', 'payments']
 
   return (
     <AppShell title="Create Fiscal Bill" subtitle="Manual fiscal bill creation (spec 4.2)">
-      {/* Org / Client selectors */}
-      <div className="card" style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        <div className="form-group" style={{ flex: 1, minWidth: '200px' }}>
-          <label className="form-label">Organization</label>
-          <select className="form-input" value={selectedOrgId} onChange={e => setSelectedOrgId(e.target.value)}>
-            <option value="">Select organization...</option>
-            {orgs.map(org => (
-              <option key={org.orgId} value={org.orgId}>{org.name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="form-group" style={{ flex: 1, minWidth: '200px' }}>
-          <label className="form-label">Client</label>
-          <select className="form-input" value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)}>
-            <option value="">Select client...</option>
-            {clientsForOrg.map(co => (
-              <option key={co.clientId} value={co.clientId}>{co.clientName || co.clientId}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <div className="card fiscal-bill-workspace">
+        <section className="fiscal-header-area">
+          <h3 className="fiscal-area-title">Header</h3>
+          <div className="fiscal-header-grid">
+            <div className="fiscal-field">
+              <label className="fiscal-field-label">Organization</label>
+              <select
+                className="fiscal-input fiscal-input--select"
+                value={selectedOrgId}
+                onChange={e => setSelectedOrgId(e.target.value)}
+              >
+                <option value="">Select organization...</option>
+                {orgs.map(org => (
+                  <option key={org.orgId} value={org.orgId}>{org.name}</option>
+                ))}
+              </select>
+            </div>
 
-      {/* Tab navigation */}
-      <div style={{ display: 'flex', gap: '0', borderBottom: '2px solid var(--color-border, #e2e8f0)', marginBottom: '1rem' }}>
-        {tabs.map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              padding: '0.5rem 1.25rem',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              fontWeight: activeTab === tab ? 700 : 400,
-              borderBottom: activeTab === tab ? '2px solid #3b82f6' : '2px solid transparent',
-              marginBottom: '-2px',
-              textTransform: 'capitalize',
-            }}
-          >
-            {tab === 'header' ? 'Header' : tab === 'items' ? `Items (${items.length})` : `Payments (${payments.length})`}
-          </button>
-        ))}
-      </div>
-
-      {/* Header tab */}
-      {activeTab === 'header' && (
-        <div className="card">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label">Invoice Type</label>
-              <select className="form-input" value={invoiceType} onChange={e => setInvoiceType(e.target.value)}>
+            <div className="fiscal-field">
+              <label className="fiscal-field-label">Invoice Type</label>
+              <select className="fiscal-input fiscal-input--select" value={invoiceType} onChange={e => setInvoiceType(e.target.value)}>
                 {INVOICE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
-            <div className="form-group">
-              <label className="form-label">Transaction Type</label>
-              <select className="form-input" value={transactionType} onChange={e => setTransactionType(e.target.value)}>
+
+            <div className="fiscal-field">
+              <label className="fiscal-field-label">Transaction Type</label>
+              <select className="fiscal-input fiscal-input--select" value={transactionType} onChange={e => setTransactionType(e.target.value)}>
                 {TRANSACTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
-            <div className="form-group">
-              <label className="form-label">Order ID (optional)</label>
-              <input className="form-input" value={orderId} onChange={e => setOrderId(e.target.value)} placeholder="e.g. 12345" />
+
+            <div className="fiscal-field">
+              <label className="fiscal-field-label">Order ID (optional)</label>
+              <input className="fiscal-input fiscal-input--text" value={orderId} onChange={e => setOrderId(e.target.value)} placeholder="e.g. 12345" />
             </div>
-            <div className="form-group">
-              <label className="form-label">Customer Name (optional)</label>
-              <input className="form-input" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Customer name" />
+
+            <div className="fiscal-field">
+              <label className="fiscal-field-label">Customer Name (optional)</label>
+              <input className="fiscal-input fiscal-input--text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Customer name" />
             </div>
-            <div className="form-group">
-              <label className="form-label">Buyer ID Type (optional)</label>
-              <select className="form-input" value={buyerType} onChange={e => setBuyerType(e.target.value)}>
+
+            <div className="fiscal-field">
+              <label className="fiscal-field-label">Buyer ID Type (optional)</label>
+              <select className="fiscal-input fiscal-input--select" value={buyerType} onChange={e => setBuyerType(e.target.value)}>
+                <option value="">Select Buyer ID Type</option>
                 {BUYER_ID_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
-            <div className="form-group">
-              <label className="form-label">Buyer ID Value (optional)</label>
-              <input className="form-input" value={buyerIdValue} onChange={e => setBuyerIdValue(e.target.value)} placeholder="Identifier part after code prefix" />
+
+            <div className="fiscal-field">
+              <label className="fiscal-field-label">Buyer ID Value (optional)</label>
+              <input className="fiscal-input fiscal-input--text" value={buyerIdValue} onChange={e => setBuyerIdValue(e.target.value)} placeholder="Identifier part after code prefix" />
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Items tab */}
-      {activeTab === 'items' && (
-        <div className="card">
-          <table className="data-table" style={{ fontSize: '0.85rem' }}>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Qty</th>
-                <th>Unit Price</th>
-                <th>Total</th>
-                <th>Tax Label</th>
-                <th>Tax Prefix</th>
-                <th>GTIN</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map(item => (
-                <tr key={item.id}>
-                  <td><input className="form-input" style={{ minWidth: '140px' }} value={item.name} onChange={e => setItemField(item.id, 'name', e.target.value)} placeholder="Product name" /></td>
-                  <td><input className="form-input" style={{ width: '70px' }} type="number" value={item.quantity} onChange={e => setItemField(item.id, 'quantity', e.target.value)} placeholder="1" /></td>
-                  <td><input className="form-input" style={{ width: '90px' }} type="number" value={item.unitPrice} onChange={e => setItemField(item.id, 'unitPrice', e.target.value)} placeholder="0.00" /></td>
-                  <td><input className="form-input" style={{ width: '90px' }} type="number" value={item.totalAmount} onChange={e => setItemField(item.id, 'totalAmount', e.target.value)} placeholder="0.00" /></td>
-                  <td>
-                    <select className="form-input" style={{ width: '70px' }} value={item.taxLabel} onChange={e => setItemField(item.id, 'taxLabel', e.target.value)}>
-                      {TAX_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
-                    </select>
-                  </td>
-                  <td><input className="form-input" style={{ width: '70px' }} value={item.taxPrefix} onChange={e => setItemField(item.id, 'taxPrefix', e.target.value)} placeholder="20" /></td>
-                  <td><input className="form-input" style={{ width: '110px' }} value={item.gtin} onChange={e => setItemField(item.id, 'gtin', e.target.value)} placeholder="optional" /></td>
-                  <td>
-                    <button className="secondary-button" style={{ padding: '0.25rem 0.5rem' }} onClick={() => removeItem(item.id)} disabled={items.length === 1}>✕</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <button className="secondary-button" onClick={addItem}>+ Add Item</button>
-            <span style={{ fontWeight: 600 }}>Items Total: {itemsTotal()}</span>
+          {selectedOrgId && selectedOrg && (
+            <p className="muted fiscal-client-hint">Client: {selectedOrg.clientName || selectedOrg.clientId}</p>
+          )}
+          {selectedOrgId && !selectedOrg?.clientId && (
+            <p className="error-text fiscal-error">No client mapping found for selected organization.</p>
+          )}
+        </section>
+
+        <section className="fiscal-detail-area">
+          <div className="fiscal-tabs" role="tablist" aria-label="Fiscal bill details tabs">
+            {tabs.map(tab => (
+              <button
+                key={tab}
+                type="button"
+                className={`fiscal-tab ${activeTab === tab ? 'active' : ''}`}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab === 'items' ? `Items (${items.length})` : `Payments (${payments.length})`}
+              </button>
+            ))}
           </div>
-        </div>
-      )}
 
-      {/* Payments tab */}
-      {activeTab === 'payments' && (
-        <div className="card">
-          <table className="data-table" style={{ fontSize: '0.85rem' }}>
-            <thead>
-              <tr>
-                <th>Payment Type</th>
-                <th>Amount</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {payments.map(p => (
-                <tr key={p.id}>
-                  <td>
-                    <select className="form-input" value={p.paymentType} onChange={e => setPaymentField(p.id, 'paymentType', e.target.value)}>
-                      {PAYMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select>
-                  </td>
-                  <td><input className="form-input" style={{ width: '120px' }} type="number" value={p.amount} onChange={e => setPaymentField(p.id, 'amount', e.target.value)} placeholder="0.00" /></td>
-                  <td>
-                    <button className="secondary-button" style={{ padding: '0.25rem 0.5rem' }} onClick={() => removePayment(p.id)} disabled={payments.length === 1}>✕</button>
-                  </td>
-                </tr>
+          {activeTab === 'items' && (
+            <div className="fiscal-row-list">
+              {items.map((item, idx) => (
+                <div key={item.id} className="fiscal-row-card">
+                  <div className="fiscal-row-card-head">
+                    <h4>Item {idx + 1}</h4>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => removeItem(item.id)}
+                      disabled={items.length === 1}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <div className="fiscal-item-grid">
+                    <div className="fiscal-field">
+                      <label className="fiscal-field-label">Name</label>
+                      <input className="fiscal-input fiscal-input--text" value={item.name} onChange={e => setItemField(item.id, 'name', e.target.value)} placeholder="Product name" />
+                    </div>
+                    <div className="fiscal-field">
+                      <label className="fiscal-field-label">Quantity</label>
+                      <input className="fiscal-input fiscal-input--number" type="number" value={item.quantity} onChange={e => setItemField(item.id, 'quantity', e.target.value)} placeholder="1" />
+                    </div>
+                    <div className="fiscal-field">
+                      <label className="fiscal-field-label">Unit Price</label>
+                      <input className="fiscal-input fiscal-input--number" type="number" value={item.unitPrice} onChange={e => setItemField(item.id, 'unitPrice', e.target.value)} placeholder="0.00" />
+                    </div>
+                    <div className="fiscal-field">
+                      <label className="fiscal-field-label">Total</label>
+                      <input className="fiscal-input fiscal-input--number" type="number" value={item.totalAmount} onChange={e => setItemField(item.id, 'totalAmount', e.target.value)} placeholder="0.00" />
+                    </div>
+                    <div className="fiscal-field">
+                      <label className="fiscal-field-label">Tax Label</label>
+                      <select className="fiscal-input fiscal-input--select" value={item.taxLabel} onChange={e => setItemField(item.id, 'taxLabel', e.target.value)}>
+                        {TAX_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div className="fiscal-field">
+                      <label className="fiscal-field-label">Tax Prefix</label>
+                      <input className="fiscal-input fiscal-input--text" value={item.taxPrefix} onChange={e => setItemField(item.id, 'taxPrefix', e.target.value)} placeholder="20" />
+                    </div>
+                    <div className="fiscal-field">
+                      <label className="fiscal-field-label">GTIN</label>
+                      <input className="fiscal-input fiscal-input--text" value={item.gtin} onChange={e => setItemField(item.id, 'gtin', e.target.value)} placeholder="optional" />
+                    </div>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
-          <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <button className="secondary-button" onClick={addPayment}>+ Add Payment</button>
-            <span style={{ fontWeight: 600 }}>
-              Payments Total: {paymentsTotal()}
-              {paymentsTotal() !== itemsTotal() && (
-                <span style={{ color: 'red', marginLeft: '0.5rem' }}>⚠ Mismatch with items total ({itemsTotal()})</span>
-              )}
-            </span>
-          </div>
-        </div>
-      )}
 
-      {/* Submit */}
-      <div style={{ marginTop: '1.25rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+              <div className="fiscal-tab-actions">
+                <button type="button" className="secondary-button" onClick={addItem}>+ Add Item</button>
+                <span className="fiscal-total">Items Total: {itemsTotal()}</span>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'payments' && (
+            <div className="fiscal-row-list">
+              {payments.map((payment, idx) => (
+                <div key={payment.id} className="fiscal-row-card">
+                  <div className="fiscal-row-card-head">
+                    <h4>Payment {idx + 1}</h4>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => removePayment(payment.id)}
+                      disabled={payments.length === 1}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <div className="fiscal-payment-grid">
+                    <div className="fiscal-field">
+                      <label className="fiscal-field-label">Payment Type</label>
+                      <select className="fiscal-input fiscal-input--select" value={payment.paymentType} onChange={e => setPaymentField(payment.id, 'paymentType', e.target.value)}>
+                        {PAYMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="fiscal-field">
+                      <label className="fiscal-field-label">Amount</label>
+                      <input className="fiscal-input fiscal-input--number" type="number" value={payment.amount} onChange={e => setPaymentField(payment.id, 'amount', e.target.value)} placeholder="0.00" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="fiscal-tab-actions">
+                <button type="button" className="secondary-button" onClick={addPayment}>+ Add Payment</button>
+                <span className="fiscal-total">
+                  Payments Total: {paymentsTotal()}
+                  {paymentsTotal() !== itemsTotal() && (
+                    <span className="fiscal-total-warning">Mismatch with items total ({itemsTotal()})</span>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="fiscal-submit-row">
         <button className="primary-button" onClick={handleSubmit} disabled={submitting}>
-          {submitting ? 'Submitting…' : 'Create Fiscal Bill'}
+          {submitting ? 'Submitting...' : 'Create Fiscal Bill'}
         </button>
       </div>
 
-      {/* Error */}
       {error && (
         <div className="card" style={{ marginTop: '1rem', borderLeft: '4px solid red', background: '#fff5f5' }}>
           <strong>Error:</strong> {error}
         </div>
       )}
 
-      {/* Result */}
       {result && (
         <div className="card" style={{ marginTop: '1rem', borderLeft: '4px solid green', background: '#f0fff4' }}>
           <p><strong>Status:</strong> {result.status}</p>

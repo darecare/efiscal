@@ -8,11 +8,6 @@ const INVOICE_TYPES = [
   { value: 4, label: '4 – Advance' },
 ]
 
-const TRANSACTION_TYPES = [
-  { value: 0, label: '0 – Sale' },
-  { value: 1, label: '1 – Refund' },
-]
-
 const PAGE_SIZE_OPTIONS = [20, 50, 100]
 
 const SHIPPING_STATUSES = [
@@ -52,7 +47,6 @@ export default function Orders() {
   // Fiscalize modal state
   const [fiscalModal, setFiscalModal] = useState(null) // { orders } or null
   const [fiscalInvoiceType, setFiscalInvoiceType] = useState(0)
-  const [fiscalTransactionType, setFiscalTransactionType] = useState(0)
   const [fiscalError, setFiscalError] = useState(null)
   const [fiscalSubmitting, setFiscalSubmitting] = useState(false)
 
@@ -148,7 +142,6 @@ export default function Orders() {
     if (!ordersToSubmit || ordersToSubmit.length === 0) return
     setFiscalModal({ orders: ordersToSubmit })
     setFiscalInvoiceType(0)
-    setFiscalTransactionType(0)
     setFiscalError(null)
   }
 
@@ -220,7 +213,7 @@ export default function Orders() {
         orderId: String(order.id),
         customerName: order.customerName || null,
         invoiceType: parseInt(fiscalInvoiceType),
-        transactionType: parseInt(fiscalTransactionType),
+        transactionType: 0,
         billingType: order.billingType || null,
         billingCompanyVat: order.billingCompanyVat || null,
         paymentMethodCode: order.paymentMethodCode || null,
@@ -535,9 +528,7 @@ export default function Orders() {
               </div>
               <div className="form-group">
                 <label className="form-label">Transaction Type</label>
-                <select className="form-input" value={fiscalTransactionType} onChange={(e) => setFiscalTransactionType(e.target.value)}>
-                  {TRANSACTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
+                <input className="form-input" value="0 – Sale" disabled readOnly />
               </div>
             </div>
             {fiscalError && <p style={{ color: 'red', marginTop: '0.75rem' }}>{fiscalError}</p>}

@@ -55,8 +55,14 @@ export default function FiscalBills() {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('tax')
   const [copyingBillIds, setCopyingBillIds] = useState({})
+  const [refundingBillIds, setRefundingBillIds] = useState({})
   const [copyConfirmBill, setCopyConfirmBill] = useState(null)
+  const [refundConfirmBill, setRefundConfirmBill] = useState(null)
+  const [refundAlreadyExistsBill, setRefundAlreadyExistsBill] = useState(null)
   const [successMsg, setSuccessMsg] = useState('')
+
+  const PAGE_SIZE = 50
+  const [tablePage, setTablePage] = useState(1)
 
   // Filter states
   const [dateRange, setDateRange] = useState([
@@ -68,6 +74,7 @@ export default function FiscalBills() {
   ])
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
   const [filterInvoiceNo, setFilterInvoiceNo] = useState('')
+  const [filterOrderId, setFilterOrderId] = useState('')
   const [filterInvoiceType, setFilterInvoiceType] = useState('')
   const [filterTransactionType, setFilterTransactionType] = useState('')
   const [filterCustomerName, setFilterCustomerName] = useState('')
@@ -153,6 +160,10 @@ export default function FiscalBills() {
       const q = filterInvoiceNo.trim().toLowerCase()
       result = result.filter((b) => b.sdcInvoiceNumber?.toLowerCase().includes(q))
     }
+    if (filterOrderId.trim()) {
+      const q = filterOrderId.trim().toLowerCase()
+      result = result.filter((b) => String(b.orderId || '').toLowerCase().includes(q))
+    }
     if (filterInvoiceType !== '') {
       const t = Number(filterInvoiceType)
       result = result.filter((b) => b.invoiceType === t)
@@ -166,7 +177,17 @@ export default function FiscalBills() {
       result = result.filter((b) => b.customerName?.toLowerCase().includes(q))
     }
     return result
-  }, [dateRange, fiscalBills, filterCustomerName, filterInvoiceNo, filterInvoiceType, filterTransactionType])
+  }, [dateRange, fiscalBills, filterCustomerName, filterInvoiceNo, filterInvoiceType, filterOrderId, filterTransactionType])
+
+  // Reset to first page whenever the filtered result set changes
+  const prevFilteredLengthRef = React.useRef(filteredBills.length)
+  if (prevFilteredLengthRef.current !== filteredBills.length) {
+    prevFilteredLengthRef.current = filteredBills.length
+    if (tablePage !== 1) setTablePage(1)
+  }
+
+  const tablePageCount = Math.max(1, Math.ceil(filteredBills.length / PAGE_SIZE))
+  const pagedBills = filteredBills.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE)
 
   const selectedDateRangeLabel = formatDateRangeLabel(dateRange[0].startDate, dateRange[0].endDate)
 
@@ -235,6 +256,24 @@ export default function FiscalBills() {
     }
   }
 
+  async function handleCreateRefund(fiscalBill) {
+    const fiscalBillId = fiscalBill.fiscalbillId
+    setRefundingBillIds((prev) => ({ ...prev, [fiscalBillId]: true }))
+    setSuccessMsg('')
+    setError(null)
+    try {
+      const idempotencyKey = createIdempotencyKey()
+      const created = await fiscalBillApi.createRefund(fiscalBillId, idempotencyKey)
+      setSuccessMsg(`Refund created successfully (ID: ${created.fiscalbillId})`)
+      await handleLoadFiscalBills()
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data?.lastError || err?.response?.data || err?.message || 'Failed to create refund fiscal bill.'
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setRefundingBillIds((prev) => ({ ...prev, [fiscalBillId]: false }))
+    }
+  }
+
   function openCopyConfirm(fiscalBill) {
     closeAllActionDropdowns()
     setCopyConfirmBill(fiscalBill)
@@ -244,11 +283,46 @@ export default function FiscalBills() {
     setCopyConfirmBill(null)
   }
 
+  function hasExistingRefund(bill) {
+    if (!bill.orderId) return false
+    return fiscalBills.some(
+      (b) =>
+        b.orderId === bill.orderId &&
+        b.invoiceType === bill.invoiceType &&
+        b.transactionType === 1 &&
+        b.status === 'SUCCESS'
+    )
+  }
+
+  function openRefundConfirm(fiscalBill) {
+    closeAllActionDropdowns()
+    if (hasExistingRefund(fiscalBill)) {
+      setRefundAlreadyExistsBill(fiscalBill)
+    } else {
+      setRefundConfirmBill(fiscalBill)
+    }
+  }
+
+  function closeRefundConfirm() {
+    setRefundConfirmBill(null)
+  }
+
   async function confirmCreateCopy() {
     if (!copyConfirmBill) return
     const bill = copyConfirmBill
     closeCopyConfirm()
     await handleCreateCopy(bill)
+  }
+
+  async function confirmCreateRefund() {
+    if (!refundConfirmBill) return
+    const bill = refundConfirmBill
+    closeRefundConfirm()
+    await handleCreateRefund(bill)
+  }
+
+  function canCreateRefund(bill) {
+    return bill.transactionType === 0 && bill.invoiceType !== 2
   }
 
   function closeAllActionDropdowns() {
@@ -313,6 +387,15 @@ export default function FiscalBills() {
             />
           </label>
           <label className="field">
+            <span>Order ID</span>
+            <input
+              type="text"
+              placeholder="Search by order ID..."
+              value={filterOrderId}
+              onChange={(e) => setFilterOrderId(e.target.value)}
+            />
+          </label>
+          <label className="field">
             <span>Invoice Type</span>
             <select
               value={filterInvoiceType}
@@ -369,6 +452,30 @@ export default function FiscalBills() {
             <p>{fiscalBills.length === 0 ? 'No fiscal bills found for the selected organization.' : 'No fiscal bills match the current filters.'}</p>
           </div>
         ) : (
+          <>
+          {tablePageCount > 1 && (
+            <div className="pagination" style={{ marginBottom: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+                disabled={tablePage === 1}
+              >
+                &lsaquo; Prev
+              </button>
+              <span className="pagination-info">
+                Page {tablePage} of {tablePageCount} &mdash; {filteredBills.length} records
+              </span>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setTablePage((p) => Math.min(tablePageCount, p + 1))}
+                disabled={tablePage >= tablePageCount}
+              >
+                Next &rsaquo;
+              </button>
+            </div>
+          )}
           <table className="data-table fiscal-bills-table">
             <thead>
               <tr>
@@ -384,7 +491,7 @@ export default function FiscalBills() {
               </tr>
             </thead>
             <tbody>
-              {filteredBills.map((bill) => (
+              {pagedBills.map((bill) => (
                 <tr key={bill.fiscalbillId}>
                   <td>{bill.orderId || '—'}</td>
                   <td>{bill.status}</td>
@@ -415,6 +522,16 @@ export default function FiscalBills() {
                             {copyingBillIds[bill.fiscalbillId] ? 'Creating Copy...' : 'Create Copy'}
                           </button>
                         )}
+                        {canCreateRefund(bill) && (
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => openRefundConfirm(bill)}
+                            disabled={Boolean(refundingBillIds[bill.fiscalbillId])}
+                          >
+                            {refundingBillIds[bill.fiscalbillId] ? 'Creating Refund...' : 'Create Refund'}
+                          </button>
+                        )}
                       </div>
                     </details>
                   </td>
@@ -422,6 +539,30 @@ export default function FiscalBills() {
               ))}
             </tbody>
           </table>
+          {tablePageCount > 1 && (
+            <div className="pagination" style={{ marginTop: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+                disabled={tablePage === 1}
+              >
+                &lsaquo; Prev
+              </button>
+              <span className="pagination-info">
+                Page {tablePage} of {tablePageCount} &mdash; {filteredBills.length} records
+              </span>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setTablePage((p) => Math.min(tablePageCount, p + 1))}
+                disabled={tablePage >= tablePageCount}
+              >
+                Next &rsaquo;
+              </button>
+            </div>
+          )}
+          </>
         )}
       </div>
 
@@ -607,6 +748,56 @@ export default function FiscalBills() {
                 disabled={Boolean(copyingBillIds[copyConfirmBill.fiscalbillId])}
               >
                 Confirm Create Copy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {refundAlreadyExistsBill && (
+        <div className="modal-overlay" onClick={() => setRefundAlreadyExistsBill(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Cannot Create Refund</h3>
+              <button type="button" className="modal-close" onClick={() => setRefundAlreadyExistsBill(null)}>×</button>
+            </div>
+            <p style={{ marginTop: 0 }}>Fiscal bill already has issued refund.</p>
+            <p>
+              <strong>Order ID:</strong> {refundAlreadyExistsBill.orderId || '—'}<br />
+              <strong>TA Invoice No:</strong> {refundAlreadyExistsBill.sdcInvoiceNumber || '—'}
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="primary-button" onClick={() => setRefundAlreadyExistsBill(null)}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {refundConfirmBill && (
+        <div className="modal-overlay" onClick={closeRefundConfirm}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Confirm Create Refund</h3>
+              <button type="button" className="modal-close" onClick={closeRefundConfirm}>×</button>
+            </div>
+            <p style={{ marginTop: 0 }}>
+              Create a Refund fiscal bill for this document?
+            </p>
+            <p>
+              <strong>Order ID:</strong> {refundConfirmBill.orderId || '—'}<br />
+              <strong>TA Invoice No:</strong> {refundConfirmBill.sdcInvoiceNumber || '—'}<br />
+              <strong>Invoice Type:</strong> {INVOICE_TYPE_LABELS[refundConfirmBill.invoiceType] || refundConfirmBill.invoiceType || '—'}<br />
+              <strong>Transaction Type:</strong> {TRANSACTION_TYPE_LABELS[refundConfirmBill.transactionType] || refundConfirmBill.transactionType || '—'}
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={closeRefundConfirm}>Cancel</button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={confirmCreateRefund}
+                disabled={Boolean(refundingBillIds[refundConfirmBill.fiscalbillId])}
+              >
+                Confirm Create Refund
               </button>
             </div>
           </div>

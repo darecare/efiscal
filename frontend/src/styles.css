@@ -203,6 +203,144 @@ select.form-input {
   box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
 
+/* ─── Create Fiscal Bill ──────────────────────────── */
+.fiscal-bill-workspace {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.fiscal-header-area,
+.fiscal-detail-area {
+  background: #f8f9fc;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.fiscal-area-title {
+  margin: 0 0 0.8rem;
+  font-size: 1rem;
+}
+
+.fiscal-header-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+}
+
+.fiscal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.fiscal-field-label {
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.fiscal-input {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--color-text);
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.fiscal-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.fiscal-input--text,
+.fiscal-input--select,
+.fiscal-input--number {
+  padding: 10px 12px;
+}
+
+.fiscal-client-hint {
+  margin: 0.7rem 0 0;
+}
+
+.fiscal-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--color-border);
+  margin-bottom: 1rem;
+}
+
+.fiscal-tab {
+  padding: 0.5rem 1.1rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.fiscal-tab.active {
+  color: var(--color-primary-dark);
+  border-bottom-color: var(--color-primary);
+}
+
+.fiscal-row-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.fiscal-row-card {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0.9rem;
+}
+
+.fiscal-row-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.8rem;
+}
+
+.fiscal-row-card-head h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.fiscal-item-grid,
+.fiscal-payment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.75rem;
+}
+
+.fiscal-tab-actions,
+.fiscal-submit-row {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.fiscal-total {
+  font-weight: 600;
+}
+
+.fiscal-total-warning {
+  color: #b91c1c;
+  margin-left: 0.5rem;
+}
+
 .fiscal-date-range-field {
   position: relative;
 }
@@ -720,6 +858,12 @@ select.form-input {
 
   .sidebar {
     padding-bottom: 0;
+  }
+
+  .fiscal-row-card-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
   }
 }
 

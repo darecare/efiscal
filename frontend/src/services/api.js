@@ -171,6 +171,12 @@ export const fiscalBillApi = {
     })
     return response.data
   },
+  async createRefund(fiscalbillId, idempotencyKey) {
+    const response = await api.post(`/fiscalbill/${fiscalbillId}/refund`, null, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    })
+    return response.data
+  },
   async getStatus(orgId) {
     const response = await api.get('/fiscalbill/status', { params: { orgId } })
     return response.data

@@ -407,6 +407,96 @@ public class FiscalBillService {
         return FiscalBillCreateResult.ofCreated(toView(entity));
     }
 
+    @Transactional
+    public FiscalBillCreateResult createRefundFiscalBill(Long sourceFiscalBillId, String idempotencyKey) {
+        Optional<FiscalBillIdempotencyKeyEntity> existingKey = idempotencyKeyRepository.findById(idempotencyKey);
+        if (existingKey.isPresent()) {
+            return FiscalBillCreateResult.ofAlreadyExists(toView(existingKey.get().getFiscalBill()));
+        }
+
+        FiscalBillEntity source = fiscalBillRepository.findById(sourceFiscalBillId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Source fiscal bill not found"));
+
+        if (!STATUS_SUCCESS.equals(source.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only SUCCESS fiscal bills can be used to create Refund");
+        }
+        if (source.getEfiscalTransactiontype() == null || source.getEfiscalTransactiontype() != TRANSACTION_TYPE_SALE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Create Refund is allowed only for Sale fiscal bills");
+        }
+        if (source.getEfiscalInvoicetype() != null && source.getEfiscalInvoicetype() == INVOICE_TYPE_COPY) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Create Refund is not allowed for Copy fiscal bills");
+        }
+        if (source.getEfiscalSdcInvoiceno() == null || source.getEfiscalSdcInvoiceno().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Source fiscal bill is missing Tax Authority invoice number");
+        }
+
+        List<FiscalBillLineEntity> sourceLines = fiscalBillLineRepository.findByFiscalbillId(sourceFiscalBillId);
+        if (sourceLines.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Source fiscal bill has no line items to refund");
+        }
+
+        List<FiscalBillItemRequest> refundItems = sourceLines.stream()
+                .map(this::toCopyItemRequest)
+                .toList();
+
+        List<PaymentRequest> refundPayments = fiscalBillPayRepository.findByFiscalbillId(sourceFiscalBillId).stream()
+                .map(p -> new PaymentRequest(p.getPaymentType(), p.getAmount()))
+                .toList();
+        if (refundPayments.isEmpty()) {
+            if (source.getEfiscalTotalamount() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Source fiscal bill has no payment rows and no total amount for fallback payment");
+            }
+            refundPayments = List.of(new PaymentRequest(0, source.getEfiscalTotalamount()));
+        }
+
+        FiscalBillConfigEntity config = resolveConfig(source.getOrgId());
+        String requestBody = buildRefundRequestBody(source, refundItems, refundPayments, config);
+
+        int refundInvoiceType = source.getEfiscalInvoicetype() == null
+                ? INVOICE_TYPE_NORMAL
+                : source.getEfiscalInvoicetype();
+
+        FiscalBillEntity entity = createPendingEntity(
+                source.getOrgId(),
+                source.getClientId(),
+                source.getOrderId(),
+                refundInvoiceType,
+                TRANSACTION_TYPE_REFUND,
+                source.getEfiscalCustomername(),
+                requestBody);
+        fiscalBillRepository.save(entity);
+        registerIdempotencyKey(idempotencyKey, entity);
+
+        try {
+            String response = taxAuthorityService.call(source.getOrgId(), "CREATE_INVOICE", requestBody);
+            processTaxAuthorityResponse(entity, response, refundInvoiceType, TRANSACTION_TYPE_REFUND,
+                    refundItems, source.getClientId(), source.getOrgId());
+            fiscalBillRepository.save(entity);
+            saveManualPaymentRecords(entity.getFiscalbillId(), source.getClientId(), source.getOrgId(), refundPayments);
+            saveLineItems(entity.getFiscalbillId(), source.getClientId(), source.getOrgId(), refundItems);
+        } catch (ResponseStatusException rse) {
+            entity.setStatus(STATUS_FAILED);
+            entity.setLastError(rse.getReason());
+            entity.setUpdated(LocalDateTime.now());
+            fiscalBillRepository.save(entity);
+            return FiscalBillCreateResult.ofFailed(toView(entity));
+        } catch (Exception ex) {
+            entity.setStatus(STATUS_FAILED);
+            entity.setLastError(ex.getMessage());
+            entity.setUpdated(LocalDateTime.now());
+            fiscalBillRepository.save(entity);
+            return FiscalBillCreateResult.ofFailed(toView(entity));
+        }
+
+        return FiscalBillCreateResult.ofCreated(toView(entity));
+    }
+
     @Transactional(readOnly = true)
     public FiscalBillView findFiscalBillById(Long fiscalBillId) {
         return fiscalBillRepository.findById(fiscalBillId).map(this::toView).orElse(null);
@@ -566,7 +656,43 @@ public class FiscalBillService {
         }
 
         body.put("payment", buildPaymentArrayFromRows(payments));
-        body.put("items", buildLineItems(items));
+        if (source.getEfiscalInvoicetype() != null && source.getEfiscalInvoicetype() == INVOICE_TYPE_ADVANCE) {
+            body.put("items", buildAdvanceLineItems(items));
+        } else {
+            body.put("items", buildLineItems(items));
+        }
+        return toJson(body);
+    }
+
+    private String buildRefundRequestBody(
+            FiscalBillEntity source,
+            List<FiscalBillItemRequest> items,
+            List<PaymentRequest> payments,
+            FiscalBillConfigEntity config) {
+
+        Map<String, Object> body = new HashMap<>();
+        int refundInvoiceType = source.getEfiscalInvoicetype() == null
+                ? INVOICE_TYPE_NORMAL
+                : source.getEfiscalInvoicetype();
+
+        body.put("invoiceType", refundInvoiceType);
+        body.put("transactionType", TRANSACTION_TYPE_REFUND);
+        body.put("dateAndTimeOfIssue", belgradeNow());
+        if (config != null && config.getEsirno() != null) {
+            body.put("invoiceNumber", config.getEsirno());
+        }
+
+        body.put("referentDocumentNumber", source.getEfiscalSdcInvoiceno());
+        if (source.getEfiscalSdcdatetime() != null && !source.getEfiscalSdcdatetime().isBlank()) {
+            body.put("referentDocumentDT", source.getEfiscalSdcdatetime());
+        }
+
+        body.put("payment", buildPaymentArrayFromRows(payments));
+        if (refundInvoiceType == INVOICE_TYPE_ADVANCE) {
+            body.put("items", buildAdvanceLineItems(items));
+        } else {
+            body.put("items", buildLineItems(items));
+        }
         return toJson(body);
     }
 
