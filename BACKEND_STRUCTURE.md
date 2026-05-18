@@ -53,7 +53,7 @@
 
 ## 4. Suggested Package Structure
 
-- com.efiscal.app
+- com.efiscal.backend
   - config
   - security
   - common

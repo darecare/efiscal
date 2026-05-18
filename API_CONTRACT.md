@@ -70,7 +70,7 @@ Subscription behavior:
 - Request:
 ```json
 {
-  "OrderId": "string",
+  "orderId": "string",
   "customer": {
     "name": "string"
   },
@@ -109,6 +109,21 @@ Subscription behavior:
   "updatedAt": "2026-03-24T10:05:00Z"
 }
 ```
+
+### GET /fiscalbill/{id}/details
+- Description: Get detailed bill data including tax and payment rows.
+- 200 Response: [bill object with items, taxes, and payments]
+
+### POST /fiscalbill/from-order
+- Description: Create fiscal bill from an existing shop order.
+- Request: same as POST /fiscalbill but specifically for order-linked flows.
+
+### POST /fiscalbill/manual
+- Description: Create fiscal bill from manual input.
+- Request: [manual entry payload]
+
+### GET /fiscalbill/status
+- Description: Get overall fiscal status summary for an organization.
 - Errors: `401`, `404`, `500`
 
 ### POST /fiscalbill/{id}/retry
@@ -126,28 +141,16 @@ Subscription behavior:
 
 ## 5. MerchantPro Sync Endpoints
 
-### POST /merchantpro/orders
-- Description: Pull/import orders from MerchantPro API (backend-to-MerchantPro integration).
-- Request:
-```json
-{
-  "filters": {
-    "created_after": "2026-04-01",
-    "shipping_status": "awaiting"
-  },
-  "paging": {
-    "limit": 100,
-    "start": 0
-  },
-  "additionalFilters": {
-    "payment_status": "paid",
-    "payment_method_code": "wire"
-  }
-}
-```
+### GET /merchantpro/orders
+- Description: Pull/import orders from MerchantPro API.
+- Parameters:
+  - orgId: (required)
+  - createdAfter: (ISO date)
+  - shippingStatus: (string)
+  - start: (offset, default 0)
+  - limit: (default 100)
 - Notes:
-  - `filters.created_after` and `filters.shipping_status` are required MVP filter fields.
-  - `additionalFilters` is an extensible map for new provider query parameters.
+  - `createdAfter` and `shippingStatus` are the primary MVP filter fields.
   - Backend resolves and validates allowed filter keys, then maps to provider URL query parameters.
 - 202 Response:
 ```json
