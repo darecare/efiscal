@@ -2,44 +2,34 @@ package com.efiscal.backend.controller;
 
 import com.efiscal.backend.model.PayTypeMapEntity;
 import com.efiscal.backend.repository.PayTypeMapRepository;
-import java.math.BigDecimal;
+import com.efiscal.backend.security.AuthorizationService;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-/**
- * REST controller for payment type mapping configuration (spec 4.1.6).
- * Maps external payment method codes (e.g. MerchantPro payment_method_code)
- * to fiscal payment type integers per client.
- */
 @RestController
 @RequestMapping("/api/v1/paytype-map")
 public class PayTypeMapController {
 
     private final PayTypeMapRepository payTypeMapRepository;
+    private final AuthorizationService authorizationService;
 
-    public PayTypeMapController(PayTypeMapRepository payTypeMapRepository) {
+    public PayTypeMapController(PayTypeMapRepository payTypeMapRepository, AuthorizationService authorizationService) {
         this.payTypeMapRepository = payTypeMapRepository;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping
     public ResponseEntity<List<PayTypeMapEntity>> list(@RequestParam Long clientId) {
+        authorizationService.requireAction("ORGS_MANAGE");
         return ResponseEntity.ok(payTypeMapRepository.findByClientId(clientId));
     }
 
     @PostMapping
     public ResponseEntity<?> create(@RequestBody PayTypeMapRequest request) {
-        // Prevent duplicate per client + code
+        authorizationService.requireAction("ORGS_MANAGE");
         if (payTypeMapRepository.findByClientIdAndPaymentMethodCode(
                 request.clientId(), request.paymentMethodCode()).isPresent()) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -59,6 +49,7 @@ public class PayTypeMapController {
 
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @RequestBody PayTypeMapRequest request) {
+        authorizationService.requireAction("ORGS_MANAGE");
         return payTypeMapRepository.findById(id).map(entity -> {
             entity.setPaymentMethodCode(request.paymentMethodCode());
             entity.setPaymentType(request.paymentType());
@@ -70,6 +61,7 @@ public class PayTypeMapController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
+        authorizationService.requireAction("ORGS_MANAGE");
         return payTypeMapRepository.findById(id).map(entity -> {
             entity.setIsactive("N");
             entity.setUpdated(LocalDateTime.now());

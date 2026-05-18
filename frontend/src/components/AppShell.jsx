@@ -1,39 +1,40 @@
 import React, { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { hasAction, hasAnyAction } from '../utils/permissions'
 
 const getNavItems = (user) => {
-  const hasAction = (action) => user?.actions?.includes(action) || user?.roleName === 'SUPERADMIN'
+  const can = (action) => hasAction(user, action)
 
   return [
-    { path: '/orders', label: 'Orders', show: hasAction('MERCHANTPRO_FETCH_ORDERS') || user?.roleName === 'SUPERADMIN' },
+    { path: '/orders', label: 'Orders', show: can('MERCHANTPRO_FETCH_ORDERS') },
     {
       label: 'Fiscal Bills',
-      show: hasAction('FISCAL_VIEW_BILLS') || hasAction('FISCAL_CREATE_BILL') || user?.roleName === 'SUPERADMIN',
+      show: can('FISCAL_VIEW_BILLS') || can('FISCAL_CREATE_BILL'),
       children: [
-        { path: '/fiscal-bills', label: 'Fiscal Bills', show: hasAction('FISCAL_VIEW_BILLS') || user?.roleName === 'SUPERADMIN' },
-        { path: '/fiscal-bills/create', label: 'Create Fiscal Bill', show: hasAction('FISCAL_CREATE_BILL') || user?.roleName === 'SUPERADMIN' },
-        { path: '/fiscal-bills/get-status', label: 'Get Status', show: true },
-        { path: '/taxes', label: 'Taxes', show: hasAction('ORGS_MANAGE') || user?.roleName === 'SUPERADMIN' },
+        { path: '/fiscal-bills', label: 'Fiscal Bills', show: can('FISCAL_VIEW_BILLS') },
+        { path: '/fiscal-bills/create', label: 'Create Fiscal Bill', show: can('FISCAL_CREATE_BILL') },
+        { path: '/fiscal-bills/get-status', label: 'Get Status', show: can('FISCAL_VIEW_BILLS') },
+        { path: '/taxes', label: 'Taxes', show: can('ORGS_MANAGE') },
       ],
     },
     {
       label: 'Administration',
-      show: hasAction('USERS_MANAGE') || hasAction('ROLES_MANAGE') || hasAction('ORGS_MANAGE') || user?.roleName === 'SUPERADMIN',
+      show: hasAnyAction(user, ['USERS_MANAGE', 'ROLES_MANAGE', 'ORGS_MANAGE']) || user?.roleName === 'SUPERADMIN',
       children: [
         { path: '/account', label: 'Account', show: true },
-        { path: '/users', label: 'User', show: hasAction('USERS_MANAGE') || user?.roleName === 'SUPERADMIN' },
-        { path: '/roles', label: 'Roles & Permissions', show: hasAction('ROLES_MANAGE') || user?.roleName === 'SUPERADMIN' },
-        { path: '/organizations', label: 'Organization', show: hasAction('ORGS_MANAGE') || user?.roleName === 'SUPERADMIN' },
+        { path: '/users', label: 'User', show: can('USERS_MANAGE') },
+        { path: '/roles', label: 'Roles & Permissions', show: hasAnyAction(user, ['ROLES_MANAGE', 'USERS_MANAGE']) },
+        { path: '/organizations', label: 'Organization', show: can('ORGS_MANAGE') },
         { path: '/clients', label: 'Client', show: user?.roleName === 'SUPERADMIN' },
       ],
     },
     {
       label: 'Configuration',
-      show: hasAction('ORGS_MANAGE') || user?.roleName === 'SUPERADMIN',
+      show: can('ORGS_MANAGE'),
       children: [
-        { path: '/api-config', label: 'API Configuration', show: hasAction('ORGS_MANAGE') || user?.roleName === 'SUPERADMIN' },
-        { path: '/fiscal-bills/paytype-map', label: 'Payment Type Mapping', show: hasAction('ORGS_MANAGE') || user?.roleName === 'SUPERADMIN' },
+        { path: '/api-config', label: 'API Configuration', show: can('ORGS_MANAGE') },
+        { path: '/fiscal-bills/paytype-map', label: 'Payment Type Mapping', show: can('ORGS_MANAGE') },
       ],
     },
   ]
@@ -51,7 +52,6 @@ export default function AppShell({ title, subtitle, actions, children }) {
       children: item.children ? item.children.filter((c) => c.show !== false) : null,
     }))
 
-  // Track which group menus are open; start with Fiscal Bills open if on that path
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {}
     filteredNavItems.forEach((item) => {

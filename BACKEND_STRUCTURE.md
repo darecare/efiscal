@@ -194,6 +194,8 @@ Subscription enforcement:
 - Role Definition is data-driven and managed by admin users.
 - Permissions are assigned as module actions (for example: MERCHANTPRO_FETCH_ORDERS, FISCAL_CREATE_BILL).
 - Endpoint protection must validate required action code, not only role name.
+- `AuthorizationService` (`com.efiscal.backend.security`) centralizes action checks for controllers.
+- `RolePermissionService` resolves effective action codes from `role_action_access` + `action_catalog` at login.
 
 ### 7.2 Scope Enforcement (Client + Organization)
 - User must belong to active client context.

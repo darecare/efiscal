@@ -2,6 +2,7 @@ import React from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
+import ActionProtectedRoute from './components/ActionProtectedRoute'
 import Login from './pages/Login'
 import Account from './pages/Account'
 import Users from './pages/Users'
@@ -16,23 +17,31 @@ import CreateFiscalBill from './pages/CreateFiscalBill'
 import PayTypeMap from './pages/PayTypeMap'
 import Roles from './pages/Roles'
 
+function guarded(element, options = {}) {
+  return (
+    <ProtectedRoute>
+      <ActionProtectedRoute {...options}>{element}</ActionProtectedRoute>
+    </ProtectedRoute>
+  )
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
-        <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
-        <Route path="/roles" element={<ProtectedRoute><Roles /></ProtectedRoute>} />
-        <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
-        <Route path="/organizations" element={<ProtectedRoute><Organizations /></ProtectedRoute>} />
-        <Route path="/api-config" element={<ProtectedRoute><ApiConfig /></ProtectedRoute>} />
-        <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
-        <Route path="/fiscal-bills" element={<ProtectedRoute><FiscalBills /></ProtectedRoute>} />
-        <Route path="/fiscal-bills/create" element={<ProtectedRoute><CreateFiscalBill /></ProtectedRoute>} />
-        <Route path="/fiscal-bills/get-status" element={<ProtectedRoute><GetStatus /></ProtectedRoute>} />
-        <Route path="/fiscal-bills/paytype-map" element={<ProtectedRoute><PayTypeMap /></ProtectedRoute>} />
-        <Route path="/taxes" element={<ProtectedRoute><Taxes /></ProtectedRoute>} />
+        <Route path="/users" element={guarded(<Users />, { action: 'USERS_MANAGE' })} />
+        <Route path="/roles" element={guarded(<Roles />, { actions: ['ROLES_MANAGE', 'USERS_MANAGE'] })} />
+        <Route path="/clients" element={guarded(<Clients />, { requireSuperAdmin: true })} />
+        <Route path="/organizations" element={guarded(<Organizations />, { action: 'ORGS_MANAGE' })} />
+        <Route path="/api-config" element={guarded(<ApiConfig />, { action: 'ORGS_MANAGE' })} />
+        <Route path="/orders" element={guarded(<Orders />, { action: 'MERCHANTPRO_FETCH_ORDERS' })} />
+        <Route path="/fiscal-bills" element={guarded(<FiscalBills />, { action: 'FISCAL_VIEW_BILLS' })} />
+        <Route path="/fiscal-bills/create" element={guarded(<CreateFiscalBill />, { action: 'FISCAL_CREATE_BILL' })} />
+        <Route path="/fiscal-bills/get-status" element={guarded(<GetStatus />, { action: 'FISCAL_VIEW_BILLS' })} />
+        <Route path="/fiscal-bills/paytype-map" element={guarded(<PayTypeMap />, { action: 'ORGS_MANAGE' })} />
+        <Route path="/taxes" element={guarded(<Taxes />, { action: 'ORGS_MANAGE' })} />
         <Route path="*" element={<Navigate to="/orders" replace />} />
       </Routes>
     </AuthProvider>

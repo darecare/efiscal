@@ -1,5 +1,6 @@
 package com.efiscal.backend.controller;
 
+import com.efiscal.backend.security.AuthorizationService;
 import com.efiscal.backend.service.MerchantProOrderService;
 import java.util.Map;
 import org.springframework.web.bind.annotation.*;
@@ -9,9 +10,14 @@ import org.springframework.web.bind.annotation.*;
 public class MerchantProOrderController {
 
     private final MerchantProOrderService merchantProOrderService;
+    private final AuthorizationService authorizationService;
 
-    public MerchantProOrderController(MerchantProOrderService merchantProOrderService) {
+    public MerchantProOrderController(
+        MerchantProOrderService merchantProOrderService,
+        AuthorizationService authorizationService
+    ) {
         this.merchantProOrderService = merchantProOrderService;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping
@@ -22,6 +28,7 @@ public class MerchantProOrderController {
         @RequestParam(required = false, defaultValue = "0") int start,
         @RequestParam(required = false, defaultValue = "100") int limit
     ) {
+        authorizationService.requireAction("MERCHANTPRO_FETCH_ORDERS");
         int effectiveLimit = Math.min(Math.max(limit, 1), 100);
         MerchantProOrderService.OrderFetchResult result =
             merchantProOrderService.fetchOrders(orgId, createdAfter, shippingStatus, start, effectiveLimit);

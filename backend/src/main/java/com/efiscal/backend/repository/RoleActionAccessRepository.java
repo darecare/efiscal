@@ -10,4 +10,5 @@ import java.util.List;
 @Repository
 public interface RoleActionAccessRepository extends JpaRepository<RoleActionAccessEntity, RoleActionAccessId> {
     List<RoleActionAccessEntity> findByRoleId(Long roleId);
+    void deleteByRoleId(Long roleId);
 }

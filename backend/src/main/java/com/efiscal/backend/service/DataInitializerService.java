@@ -6,6 +6,7 @@ import com.efiscal.backend.model.RoleEntity;
 import com.efiscal.backend.repository.AppUserRepository;
 import com.efiscal.backend.repository.ClientRepository;
 import com.efiscal.backend.repository.RoleRepository;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import org.slf4j.Logger;
@@ -46,15 +47,17 @@ public class DataInitializerService implements CommandLineRunner {
         RoleEntity superAdminRole = seedRole("SUPERADMIN", "Super Administrator",
             "Full unrestricted access across all clients and organizations");
 
-        seedRole("CLIENT_ADMIN", "Client Administrator",
+        RoleEntity clientAdminRole = seedRole("CLIENT_ADMIN", "Client Administrator",
             "Administrative access within an assigned client scope");
 
         seedRole("OPERATOR", "Operator",
             "Standard operational access for day-to-day tasks");
 
         ClientEntity globalClient = seedClient("Global", "ACTIVE", "RSD");
+        ClientEntity acmeClient = seedClient("Acme Retail", "ACTIVE", "RSD");
 
         seedAdminUser(globalClient, superAdminRole);
+        seedOpsUser(acmeClient, clientAdminRole);
     }
 
     private RoleEntity seedRole(String roleCode, String name, String description) {
@@ -95,6 +98,24 @@ public class DataInitializerService implements CommandLineRunner {
             admin.setActive(true);
             appUserRepository.save(admin);
             log.info("Seeded admin user: admin@efiscal.local");
+        }
+    }
+
+    private void seedOpsUser(ClientEntity client, RoleEntity role) {
+        if (!appUserRepository.existsByEmail("ops@acme.rs")) {
+            AppUserEntity ops = new AppUserEntity();
+            ops.setEmail("ops@acme.rs");
+            ops.setPasswordHash(passwordEncoder.encode("Ops123!"));
+            ops.setFullName("Acme Operations");
+            ops.setClient(client);
+            ops.setRole(role);
+            ops.setSubscriptionStatus("ACTIVE");
+            ops.setSubscriptionStartAt(OffsetDateTime.now(ZoneOffset.UTC));
+            ops.setSubscriptionExpiresAt(
+                LocalDate.now().plusMonths(6).atStartOfDay().atOffset(ZoneOffset.UTC));
+            ops.setActive(true);
+            appUserRepository.save(ops);
+            log.info("Seeded ops user: ops@acme.rs");
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.efiscal.backend.controller;
 
+import com.efiscal.backend.security.AuthorizationService;
 import com.efiscal.backend.service.FiscalBillService;
 import com.efiscal.backend.service.FiscalBillService.FiscalBillItemRequest;
 import com.efiscal.backend.service.FiscalBillService.ManualFiscalBillRequest;
@@ -24,14 +25,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class FiscalBillController {
 
     private final FiscalBillService fiscalBillService;
+    private final AuthorizationService authorizationService;
 
-    public FiscalBillController(FiscalBillService fiscalBillService) {
+    public FiscalBillController(FiscalBillService fiscalBillService, AuthorizationService authorizationService) {
         this.fiscalBillService = fiscalBillService;
+        this.authorizationService = authorizationService;
     }
 
     /** GET /api/v1/fiscalbill/status?orgId=N — Tax Authority status */
     @GetMapping("/status")
     public ResponseEntity<?> getTaxAuthorityStatus(@RequestParam(required = false) Long orgId) {
+        authorizationService.requireAction("FISCAL_VIEW_BILLS");
         if (orgId == null) {
             return ResponseEntity.badRequest().body(new ErrorResponse("orgId query parameter is required"));
         }
@@ -42,6 +46,7 @@ public class FiscalBillController {
     /** GET /api/v1/fiscalbill?orgId=N — List fiscal bills for organization */
     @GetMapping
     public ResponseEntity<?> listFiscalBills(@RequestParam(required = false) Long orgId) {
+        authorizationService.requireAction("FISCAL_VIEW_BILLS");
         if (orgId == null) {
             return ResponseEntity.badRequest().body(new ErrorResponse("orgId query parameter is required"));
         }
@@ -51,6 +56,7 @@ public class FiscalBillController {
     /** GET /api/v1/fiscalbill/{id} — Retrieve fiscal bill */
     @GetMapping("/{id}")
     public ResponseEntity<?> getFiscalBill(@PathVariable Long id) {
+        authorizationService.requireAction("FISCAL_VIEW_BILLS");
         FiscalBillService.FiscalBillView fiscalBill = fiscalBillService.findFiscalBillById(id);
         if (fiscalBill == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse("Fiscal bill not found"));
@@ -61,6 +67,7 @@ public class FiscalBillController {
     /** GET /api/v1/fiscalbill/{id}/details — Retrieve fiscal bill related tax/payment rows */
     @GetMapping("/{id}/details")
     public ResponseEntity<?> getFiscalBillDetails(@PathVariable Long id) {
+        authorizationService.requireAction("FISCAL_VIEW_BILLS");
         FiscalBillService.FiscalBillDetailsView details = fiscalBillService.findFiscalBillDetails(id);
         if (details == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse("Fiscal bill not found"));
@@ -78,7 +85,7 @@ public class FiscalBillController {
             @RequestParam(required = false) Long orgId,
             @RequestParam(required = false) Long clientId,
             @RequestBody CreateFromOrderRequest request) {
-
+        authorizationService.requireAction("FISCAL_CREATE_BILL");
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));
         }
@@ -120,7 +127,7 @@ public class FiscalBillController {
             @RequestParam(required = false) Long orgId,
             @RequestParam(required = false) Long clientId,
             @RequestBody CreateManualRequest request) {
-
+        authorizationService.requireAction("FISCAL_CREATE_BILL");
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));
         }
@@ -160,6 +167,7 @@ public class FiscalBillController {
     public ResponseEntity<?> retryFiscalBill(
             @PathVariable Long id,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        authorizationService.requireAction("FISCAL_RETRY_BILL");
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));
         }
@@ -181,6 +189,7 @@ public class FiscalBillController {
     public ResponseEntity<?> createCopyFiscalBill(
             @PathVariable Long id,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        authorizationService.requireAction("FISCAL_CREATE_BILL");
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));
         }
@@ -199,6 +208,7 @@ public class FiscalBillController {
     public ResponseEntity<?> createRefundFiscalBill(
             @PathVariable Long id,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        authorizationService.requireAction("FISCAL_CREATE_BILL");
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));
         }

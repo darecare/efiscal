@@ -1,57 +1,63 @@
 package com.efiscal.backend.controller;
 
+import com.efiscal.backend.security.AuthorizationService;
 import com.efiscal.backend.service.RoleManagementService;
+import com.efiscal.backend.service.RoleManagementService.CreateRoleRequest;
+import com.efiscal.backend.service.RoleManagementService.ReplaceRoleActionsRequest;
+import com.efiscal.backend.service.RoleManagementService.UpdateRoleRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/roles")
 public class RoleController {
 
     private final RoleManagementService roleManagementService;
+    private final AuthorizationService authorizationService;
 
-    public RoleController(RoleManagementService roleManagementService) {
+    public RoleController(RoleManagementService roleManagementService, AuthorizationService authorizationService) {
         this.roleManagementService = roleManagementService;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping
     public ResponseEntity<?> listRoles() {
-        if (!hasReadAccess()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
-        }
-        return ResponseEntity.ok(roleManagementService.listRoles());
+        authorizationService.requireAnyAction("ROLES_MANAGE", "USERS_MANAGE");
+        return ResponseEntity.ok(roleManagementService.listRoles(
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()));
     }
 
     @PostMapping
-    public ResponseEntity<?> createRole(@RequestBody RoleManagementService.CreateRoleRequest req) {
-        if (!hasWriteAccess()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
-        }
-        return ResponseEntity.status(HttpStatus.CREATED).body(roleManagementService.createRole(req));
+    public ResponseEntity<?> createRole(@RequestBody CreateRoleRequest req) {
+        authorizationService.requireAction("ROLES_MANAGE");
+        return ResponseEntity.status(HttpStatus.CREATED).body(roleManagementService.createRole(
+            req,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()));
     }
 
-    private boolean hasReadAccess() {
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null) return false;
-        Object principal = auth.getPrincipal();
-        if (principal instanceof com.efiscal.backend.service.DemoDataService.AuthenticatedUser u) {
-            return "SUPERADMIN".equals(u.roleName()) || 
-                   (u.actions() != null && (u.actions().contains("ROLES_MANAGE") || u.actions().contains("USERS_MANAGE")));
-        }
-        return false;
+    @PutMapping("/{roleId}")
+    public ResponseEntity<?> updateRole(@PathVariable Long roleId, @RequestBody UpdateRoleRequest req) {
+        authorizationService.requireAction("ROLES_MANAGE");
+        return ResponseEntity.ok(roleManagementService.updateRole(
+            roleId,
+            req,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()));
     }
 
-    private boolean hasWriteAccess() {
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null) return false;
-        Object principal = auth.getPrincipal();
-        if (principal instanceof com.efiscal.backend.service.DemoDataService.AuthenticatedUser u) {
-            return "SUPERADMIN".equals(u.roleName()) || 
-                   (u.actions() != null && u.actions().contains("ROLES_MANAGE"));
-        }
-        return false;
+    @PutMapping("/{roleId}/actions")
+    public ResponseEntity<?> replaceRoleActions(
+        @PathVariable Long roleId,
+        @RequestBody ReplaceRoleActionsRequest req
+    ) {
+        authorizationService.requireAction("ROLES_MANAGE");
+        return ResponseEntity.ok(roleManagementService.replaceRoleActions(
+            roleId,
+            req,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()));
     }
 }

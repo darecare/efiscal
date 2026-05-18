@@ -205,8 +205,33 @@ Subscription behavior:
 ```
 - Errors: `400`, `401`, `403`, `409`, `500`
 
+### PUT /roles/{roleId}
+- Description: Update role metadata (name, description, active flag).
+- Request:
+```json
+{
+  "name": "Updated Role Name",
+  "description": "Updated description",
+  "isActive": true
+}
+```
+- 200 Response: updated role object (same shape as GET /roles items).
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### PUT /roles/{roleId}/actions
+- Description: Replace all action assignments for a role.
+- Request:
+```json
+{
+  "actionIds": [1000, 1001, 1002]
+}
+```
+- 200 Response: updated role object including `actionIds`.
+- Errors: `400`, `401`, `403`, `404`, `500`
+
 ### GET /actions
 - Description: List available module actions (permission catalog).
+- Query: optional `module` filter (e.g. `?module=FISCAL`).
 - 200 Response:
 ```json
 [
