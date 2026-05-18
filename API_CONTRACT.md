@@ -165,36 +165,61 @@ Subscription behavior:
 
 ### GET /roles
 - Description: List roles for active client scope.
-- 200 Response: role list with metadata.
+- 200 Response:
+```json
+[
+  {
+    "roleId": 1000,
+    "roleCode": "RESTRICTED_OPERATOR",
+    "name": "Restricted Operator",
+    "description": "Standard operational access",
+    "clientId": 1001,
+    "actionIds": [1002, 1003]
+  }
+]
+```
 - Errors: `401`, `403`, `500`
 
 ### POST /roles
-- Description: Create new role.
-- Request includes role name/code and active flag.
-- 201 Response: created role object.
-- Errors: `400`, `401`, `403`, `409`, `500`
-
-### PUT /roles/{roleId}
-- Description: Update role metadata.
-- Errors: `400`, `401`, `403`, `404`, `409`, `500`
-
-### GET /actions
-- Description: List available module actions (permission catalog).
-- Query examples: `module=MERCHANTPRO`, `module=FISCAL`.
-- Errors: `401`, `403`, `500`
-
-### PUT /roles/{roleId}/actions
-- Description: Replace or update role action assignments.
+- Description: Create a new custom or global role with assigned actions.
 - Request:
 ```json
 {
-  "actions": [
-    "MERCHANTPRO_FETCH_ORDERS",
-    "FISCAL_CREATE_BILL"
-  ]
+  "roleCode": "CASHIER_ROLE",
+  "name": "Cashier",
+  "description": "Handles daily sales operations",
+  "clientId": 1001,
+  "actionIds": [1000, 1001]
 }
 ```
-- Errors: `400`, `401`, `403`, `404`, `500`
+- 201 Response:
+```json
+{
+  "roleId": 1004,
+  "roleCode": "CASHIER_ROLE",
+  "name": "Cashier",
+  "description": "Handles daily sales operations",
+  "clientId": 1001,
+  "actionIds": [1000, 1001]
+}
+```
+- Errors: `400`, `401`, `403`, `409`, `500`
+
+### GET /actions
+- Description: List available module actions (permission catalog).
+- 200 Response:
+```json
+[
+  {
+    "actionId": 1000,
+    "moduleCode": "FISCAL",
+    "actionCode": "FISCAL_CREATE_BILL",
+    "name": "Create Fiscal Bill",
+    "description": "Allows submitting new fiscal bills"
+  }
+]
+```
+- Errors: `401`, `403`, `500`
 
 ### PUT /users/{userId}/role
 - Description: Assign role to user.

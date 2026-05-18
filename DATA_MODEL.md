@@ -80,14 +80,15 @@ Represents reusable access profile definitions per client.
 | Column         | Type         | Constraints              | Notes                         |
 |----------------|--------------|--------------------------|-------------------------------|
 | role_id        | BIGINT       | PK, NOT NULL, IDENTITY(1000,1)      | Auto-generated integer        |
-| role_code      | VARCHAR(100) | NOT NULL, UNIQUE         | Unique code                   |
+| client_id      | BIGINT       | FK → client.client_id, NULL        | Client scoping for custom role|
+| role_code      | VARCHAR(100) | NOT NULL                 | Unique code per client scope  |
 | name           | VARCHAR(120) | NOT NULL                 | Display label                 |
 | description    | VARCHAR(255) |                          |                               |
 | is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 
-UNIQUE constraint: `(role_code)`
+UNIQUE constraint: `(coalesce(client_id, 0), role_code)`
 
 
 ### 2.5 User organization access
