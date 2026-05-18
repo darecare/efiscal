@@ -20,6 +20,7 @@ const emptyForm = {
 export default function Users() {
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
+  const canManageUsers = currentUser?.actions?.includes('USERS_MANAGE') || isSuperAdmin
 
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
@@ -156,7 +157,7 @@ export default function Users() {
       title="Users"
       subtitle="User accounts with role and subscription management."
       actions={
-        isSuperAdmin && (
+        canManageUsers && (
           <button className="primary-button" onClick={openAddModal}>
             Add User
           </button>
@@ -183,7 +184,7 @@ export default function Users() {
                 <th>Role</th>
                 <th>Subscription</th>
                 <th>Active</th>
-                {isSuperAdmin && <th>Actions</th>}
+                {canManageUsers && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -203,7 +204,7 @@ export default function Users() {
                       {u.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  {isSuperAdmin && (
+                  {canManageUsers && (
                     <td>
                       <button className="secondary-button" onClick={() => openEditModal(u)}>
                         Edit
@@ -257,7 +258,9 @@ export default function Users() {
                   <label>Role</label>
                   <select value={form.roleId} onChange={(e) => handleChange('roleId', e.target.value)}>
                     <option value="">— Select role —</option>
-                    {roles.map((r) => (
+                    {roles
+                      .filter(r => !r.clientId || (form.clientId && r.clientId === Number(form.clientId)))
+                      .map((r) => (
                       <option key={r.roleId} value={r.roleId}>{r.name}</option>
                     ))}
                   </select>

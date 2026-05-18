@@ -34,7 +34,8 @@ public class DemoDataService {
             "SUPERADMIN",
             "Global",
             "ACTIVE",
-            null);
+            null,
+            List.of("FISCAL_CREATE_BILL", "FISCAL_RETRY_BILL", "FISCAL_VIEW_BILLS", "MERCHANTPRO_FETCH_ORDERS", "USERS_MANAGE", "ROLES_MANAGE", "ORGS_MANAGE"));
         UserAccount manager = new UserAccount(
             UUID.randomUUID().toString(),
             "ops@acme.rs",
@@ -43,7 +44,8 @@ public class DemoDataService {
             "CLIENT_ADMIN",
             "Acme Retail",
             "ACTIVE",
-            LocalDate.now().plusMonths(6).toString());
+            LocalDate.now().plusMonths(6).toString(),
+            List.of("FISCAL_CREATE_BILL", "FISCAL_RETRY_BILL", "FISCAL_VIEW_BILLS", "MERCHANTPRO_FETCH_ORDERS", "USERS_MANAGE"));
         usersByEmail.put(superAdmin.email(), superAdmin);
         usersByEmail.put(manager.email(), manager);
 
@@ -86,7 +88,8 @@ public class DemoDataService {
             account.roleName(),
             account.clientName(),
             account.subscriptionStatus(),
-            account.subscriptionExpiresAt());
+            account.subscriptionExpiresAt(),
+            account.actions());
         String token = UUID.randomUUID().toString();
         sessionsByToken.put(token, authenticatedUser);
         return new LoginResult(token, authenticatedUser);
@@ -113,7 +116,8 @@ public class DemoDataService {
                 account.roleName(),
                 account.clientName(),
                 account.subscriptionStatus(),
-                account.subscriptionExpiresAt()))
+                account.subscriptionExpiresAt(),
+                account.actions()))
             .toList();
     }
 
@@ -230,7 +234,8 @@ public class DemoDataService {
         String roleName,
         String clientName,
         String subscriptionStatus,
-        String subscriptionExpiresAt) {
+        String subscriptionExpiresAt,
+        List<String> actions) {
     }
 
     public record AuthenticatedUser(
@@ -240,10 +245,16 @@ public class DemoDataService {
         String roleName,
         String clientName,
         String subscriptionStatus,
-        String subscriptionExpiresAt) {
+        String subscriptionExpiresAt,
+        List<String> actions) {
 
         public List<SimpleGrantedAuthority> authorities() {
-            return List.of(new SimpleGrantedAuthority("ROLE_" + roleName));
+            List<SimpleGrantedAuthority> auths = new java.util.ArrayList<>();
+            auths.add(new SimpleGrantedAuthority("ROLE_" + roleName));
+            if (actions != null) {
+                actions.forEach(a -> auths.add(new SimpleGrantedAuthority("ACTION_" + a)));
+            }
+            return auths;
         }
     }
 

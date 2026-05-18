@@ -33,26 +33,26 @@ public class UserController {
 
     @PostMapping
     public ResponseEntity<?> createUser(@RequestBody CreateUserRequest req) {
-        if (!isSuperAdmin()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Superadmin access required");
+        if (!canManageUsers()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(userManagementService.createUser(req));
     }
 
     @PutMapping("/{userId}")
     public ResponseEntity<?> updateUser(@PathVariable Long userId, @RequestBody UpdateUserRequest req) {
-        if (!isSuperAdmin()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Superadmin access required");
+        if (!canManageUsers()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
         }
         return ResponseEntity.ok(userManagementService.updateUser(userId, req));
     }
 
-    private boolean isSuperAdmin() {
+    private boolean canManageUsers() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) return false;
         Object principal = auth.getPrincipal();
         if (principal instanceof DemoDataService.AuthenticatedUser u) {
-            return "SUPERADMIN".equals(u.roleName());
+            return "SUPERADMIN".equals(u.roleName()) || u.actions() != null && u.actions().contains("USERS_MANAGE");
         }
         return false;
     }

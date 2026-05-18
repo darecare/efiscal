@@ -14,6 +14,7 @@ import GetStatus from './pages/GetStatus'
 import Taxes from './pages/Taxes'
 import CreateFiscalBill from './pages/CreateFiscalBill'
 import PayTypeMap from './pages/PayTypeMap'
+import Roles from './pages/Roles'
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
+        <Route path="/roles" element={<ProtectedRoute><Roles /></ProtectedRoute>} />
         <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
         <Route path="/organizations" element={<ProtectedRoute><Organizations /></ProtectedRoute>} />
         <Route path="/api-config" element={<ProtectedRoute><ApiConfig /></ProtectedRoute>} />

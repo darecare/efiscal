@@ -2,44 +2,59 @@ import React, { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
-const navItems = [
-  { path: '/orders', label: 'Orders' },
-  {
-    label: 'Fiscal Bills',
-    children: [
-      { path: '/fiscal-bills', label: 'Fiscal Bills' },
-      { path: '/fiscal-bills/create', label: 'Create Fiscal Bill' },
-      { path: '/fiscal-bills/get-status', label: 'Get Status' },
-      { path: '/taxes', label: 'Taxes' },
-    ],
-  },
-  {
-    label: 'Administration',
-    children: [
-      { path: '/account', label: 'Account' },
-      { path: '/users', label: 'User' },
-      { path: '/organizations', label: 'Organization' },
-      { path: '/clients', label: 'Client' },
-    ],
-  },
-  {
-    label: 'Configuration',
-    children: [
-      { path: '/api-config', label: 'API Configuration' },
-      { path: '/fiscal-bills/paytype-map', label: 'Payment Type Mapping' },
-    ],
-  },
-]
+const getNavItems = (user) => {
+  const hasAction = (action) => user?.actions?.includes(action) || user?.roleName === 'SUPERADMIN'
+
+  return [
+    { path: '/orders', label: 'Orders', show: hasAction('MERCHANTPRO_FETCH_ORDERS') || user?.roleName === 'SUPERADMIN' },
+    {
+      label: 'Fiscal Bills',
+      show: hasAction('FISCAL_VIEW_BILLS') || hasAction('FISCAL_CREATE_BILL') || user?.roleName === 'SUPERADMIN',
+      children: [
+        { path: '/fiscal-bills', label: 'Fiscal Bills', show: hasAction('FISCAL_VIEW_BILLS') || user?.roleName === 'SUPERADMIN' },
+        { path: '/fiscal-bills/create', label: 'Create Fiscal Bill', show: hasAction('FISCAL_CREATE_BILL') || user?.roleName === 'SUPERADMIN' },
+        { path: '/fiscal-bills/get-status', label: 'Get Status', show: true },
+        { path: '/taxes', label: 'Taxes', show: hasAction('ORGS_MANAGE') || user?.roleName === 'SUPERADMIN' },
+      ],
+    },
+    {
+      label: 'Administration',
+      show: hasAction('USERS_MANAGE') || hasAction('ROLES_MANAGE') || hasAction('ORGS_MANAGE') || user?.roleName === 'SUPERADMIN',
+      children: [
+        { path: '/account', label: 'Account', show: true },
+        { path: '/users', label: 'User', show: hasAction('USERS_MANAGE') || user?.roleName === 'SUPERADMIN' },
+        { path: '/roles', label: 'Roles & Permissions', show: hasAction('ROLES_MANAGE') || user?.roleName === 'SUPERADMIN' },
+        { path: '/organizations', label: 'Organization', show: hasAction('ORGS_MANAGE') || user?.roleName === 'SUPERADMIN' },
+        { path: '/clients', label: 'Client', show: user?.roleName === 'SUPERADMIN' },
+      ],
+    },
+    {
+      label: 'Configuration',
+      show: hasAction('ORGS_MANAGE') || user?.roleName === 'SUPERADMIN',
+      children: [
+        { path: '/api-config', label: 'API Configuration', show: hasAction('ORGS_MANAGE') || user?.roleName === 'SUPERADMIN' },
+        { path: '/fiscal-bills/paytype-map', label: 'Payment Type Mapping', show: hasAction('ORGS_MANAGE') || user?.roleName === 'SUPERADMIN' },
+      ],
+    },
+  ]
+}
 
 export default function AppShell({ title, subtitle, actions, children }) {
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
 
+  const filteredNavItems = getNavItems(user)
+    .filter((item) => item.show !== false)
+    .map((item) => ({
+      ...item,
+      children: item.children ? item.children.filter((c) => c.show !== false) : null,
+    }))
+
   // Track which group menus are open; start with Fiscal Bills open if on that path
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {}
-    navItems.forEach((item) => {
+    filteredNavItems.forEach((item) => {
       if (item.children) {
         initial[item.label] = item.children.some((c) => location.pathname.startsWith(c.path))
       }
@@ -71,7 +86,7 @@ export default function AppShell({ title, subtitle, actions, children }) {
       <div className="shell-body">
         <aside className="sidebar">
           <nav>
-            {navItems.map((item) => {
+            {filteredNavItems.map((item) => {
               if (item.children) {
                 const isOpen = openGroups[item.label]
                 const isGroupActive = item.children.some((c) => location.pathname.startsWith(c.path))

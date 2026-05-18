@@ -97,6 +97,17 @@ export const rolesApi = {
     const response = await api.get('/roles')
     return response.data
   },
+  async create(payload) {
+    const response = await api.post('/roles', payload)
+    return response.data
+  },
+}
+
+export const actionsApi = {
+  async list() {
+    const response = await api.get('/actions')
+    return response.data
+  },
 }
 
 export const apiConnApi = {

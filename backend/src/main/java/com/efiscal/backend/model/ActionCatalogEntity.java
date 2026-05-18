@@ -6,20 +6,19 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
-@Table(name = "role")
-public class RoleEntity {
+@Table(name = "action_catalog")
+public class ActionCatalogEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "role_id", nullable = false, updatable = false)
-    private Long roleId;
+    @Column(name = "action_id", nullable = false, updatable = false)
+    private Long actionId;
 
-    @Column(name = "role_code", nullable = false, length = 100)
-    private String roleCode;
+    @Column(name = "module_code", nullable = false, length = 80)
+    private String moduleCode;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "client_id")
-    private ClientEntity client;
+    @Column(name = "action_code", nullable = false, length = 120)
+    private String actionCode;
 
     @Column(name = "name", nullable = false, length = 120)
     private String name;
@@ -38,12 +37,12 @@ public class RoleEntity {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
-    public Long getRoleId() { return roleId; }
-    public void setRoleId(Long roleId) { this.roleId = roleId; }
-    public String getRoleCode() { return roleCode; }
-    public void setRoleCode(String roleCode) { this.roleCode = roleCode; }
-    public ClientEntity getClient() { return client; }
-    public void setClient(ClientEntity client) { this.client = client; }
+    public Long getActionId() { return actionId; }
+    public void setActionId(Long actionId) { this.actionId = actionId; }
+    public String getModuleCode() { return moduleCode; }
+    public void setModuleCode(String moduleCode) { this.moduleCode = moduleCode; }
+    public String getActionCode() { return actionCode; }
+    public void setActionCode(String actionCode) { this.actionCode = actionCode; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getDescription() { return description; }
