@@ -6,6 +6,15 @@ import { useAuth } from '../contexts/AuthContext'
 const emptyForm = { clientId: '', name: '', taxId: '', status: 'ACTIVE', currency: 'RSD', isActive: true }
 const STATUS_OPTIONS = ['ACTIVE', 'SETUP', 'SUSPENDED', 'INACTIVE']
 const CURRENCY_OPTIONS = ['RSD', 'EUR', 'USD']
+const PAYMENT_TYPES = [
+  { value: 0, label: 'Other' },
+  { value: 1, label: 'Cash' },
+  { value: 2, label: 'Card' },
+  { value: 3, label: 'Check' },
+  { value: 4, label: 'Wire Transfer' },
+  { value: 5, label: 'Voucher' },
+  { value: 6, label: 'Mobile Money' },
+]
 
 export default function Organizations() {
   const { user: currentUser } = useAuth()
@@ -24,6 +33,9 @@ export default function Organizations() {
   const [form, setForm] = useState(emptyForm)
   const [formError, setFormError] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState('main')
+  const [paymentTypes, setPaymentTypes] = useState([])
+  const [paymentTypesLoading, setPaymentTypesLoading] = useState(false)
 
   useEffect(() => {
     clientsApi.list().then(setClients).catch(() => setClients([]))
@@ -57,6 +69,8 @@ export default function Organizations() {
     setFormError(null)
     setModalMode('add')
     setEditOrgId(null)
+    setActiveTab('main')
+    setPaymentTypes([])
     setModalOpen(true)
   }
 
@@ -72,16 +86,31 @@ export default function Organizations() {
     setFormError(null)
     setModalMode('edit')
     setEditOrgId(o.orgId)
+    setActiveTab('main')
+    setPaymentTypesLoading(true)
+    orgsApi.getPaymentTypes(o.orgId)
+      .then(setPaymentTypes)
+      .catch(() => setPaymentTypes([]))
+      .finally(() => setPaymentTypesLoading(false))
     setModalOpen(true)
   }
 
   function closeModal() {
     setModalOpen(false)
     setFormError(null)
+    setActiveTab('main')
   }
 
   function handleChange(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function togglePaymentType(paymentTypeValue) {
+    setPaymentTypes((prev) =>
+      prev.includes(paymentTypeValue)
+        ? prev.filter((pt) => pt !== paymentTypeValue)
+        : [...prev, paymentTypeValue]
+    )
   }
 
   async function handleSubmit(e) {
@@ -108,6 +137,7 @@ export default function Organizations() {
         setSuccessMsg('Organization created successfully')
       } else {
         await orgsApi.update(editOrgId, payload)
+        await orgsApi.setPaymentTypes(editOrgId, paymentTypes)
         setSuccessMsg('Organization updated successfully')
       }
       closeModal()
@@ -204,63 +234,106 @@ export default function Organizations() {
               <h3>{modalMode === 'add' ? 'Add Organization' : 'Edit Organization'}</h3>
               <button className="modal-close" onClick={closeModal}>✕</button>
             </div>
+            
+            {modalMode === 'edit' && (
+              <div className="modal-tabs">
+                <button
+                  className={`tab-button ${activeTab === 'main' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('main')}
+                >
+                  Main
+                </button>
+                <button
+                  className={`tab-button ${activeTab === 'payment-types' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('payment-types')}
+                >
+                  Payment Types
+                </button>
+              </div>
+            )}
+            
             <form onSubmit={handleSubmit}>
-              <div className="form-grid">
-                <div className="field">
-                  <label>Client *</label>
-                  <select value={form.clientId} onChange={(e) => handleChange('clientId', e.target.value)} required>
-                    <option value="">— Select client —</option>
-                    {clients.map((c) => (
-                      <option key={c.clientId} value={c.clientId}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Organization Name *</label>
-                  <input
-                    value={form.name}
-                    onChange={(e) => handleChange('name', e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="field">
-                  <label>Tax ID (PIB)</label>
-                  <input
-                    value={form.taxId}
-                    onChange={(e) => handleChange('taxId', e.target.value)}
-                    placeholder="e.g. 101234567"
-                  />
-                </div>
-                <div className="field">
-                  <label>Status</label>
-                  <select value={form.status} onChange={(e) => handleChange('status', e.target.value)}>
-                    {STATUS_OPTIONS.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Currency</label>
-                  <select value={form.currency} onChange={(e) => handleChange('currency', e.target.value)}>
-                    {CURRENCY_OPTIONS.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-                {modalMode === 'edit' && (
+              {activeTab === 'main' && (
+                <div className="form-grid">
                   <div className="field">
-                    <label>Active</label>
-                    <select
-                      value={form.isActive ? 'true' : 'false'}
-                      onChange={(e) => handleChange('isActive', e.target.value === 'true')}
-                    >
-                      <option value="true">Active</option>
-                      <option value="false">Inactive</option>
+                    <label>Client *</label>
+                    <select value={form.clientId} onChange={(e) => handleChange('clientId', e.target.value)} required>
+                      <option value="">— Select client —</option>
+                      {clients.map((c) => (
+                        <option key={c.clientId} value={c.clientId}>{c.name}</option>
+                      ))}
                     </select>
                   </div>
-                )}
-              </div>
-              {formError && <p className="error-text" style={{ marginTop: 12 }}>{formError}</p>}
+                  <div className="field">
+                    <label>Organization Name *</label>
+                    <input
+                      value={form.name}
+                      onChange={(e) => handleChange('name', e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Tax ID (PIB)</label>
+                    <input
+                      value={form.taxId}
+                      onChange={(e) => handleChange('taxId', e.target.value)}
+                      placeholder="e.g. 101234567"
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Status</label>
+                    <select value={form.status} onChange={(e) => handleChange('status', e.target.value)}>
+                      {STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>Currency</label>
+                    <select value={form.currency} onChange={(e) => handleChange('currency', e.target.value)}>
+                      {CURRENCY_OPTIONS.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {modalMode === 'edit' && (
+                    <div className="field">
+                      <label>Active</label>
+                      <select
+                        value={form.isActive ? 'true' : 'false'}
+                        onChange={(e) => handleChange('isActive', e.target.value === 'true')}
+                      >
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {activeTab === 'payment-types' && (
+                <div style={{ padding: '20px' }}>
+                  <h4 style={{ marginBottom: '16px' }}>Allowed Payment Types</h4>
+                  {paymentTypesLoading ? (
+                    <p className="muted">Loading…</p>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      {PAYMENT_TYPES.map((pt) => (
+                        <label key={pt.value} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={paymentTypes.includes(pt.value)}
+                            onChange={() => togglePaymentType(pt.value)}
+                          />
+                          <span>{pt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {formError && <p className="error-text" style={{ marginTop: 12, padding: '0 20px' }}>{formError}</p>}
               <div className="modal-actions">
                 <button type="button" className="secondary-button" onClick={closeModal}>Cancel</button>
                 <button type="submit" className="primary-button" disabled={saving}>

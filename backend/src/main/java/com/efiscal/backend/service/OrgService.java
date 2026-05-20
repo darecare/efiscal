@@ -2,8 +2,10 @@ package com.efiscal.backend.service;
 
 import com.efiscal.backend.model.ClientEntity;
 import com.efiscal.backend.model.OrgEntity;
+import com.efiscal.backend.model.OrgPayTypeEntity;
 import com.efiscal.backend.repository.AppUserRepository;
 import com.efiscal.backend.repository.ClientRepository;
+import com.efiscal.backend.repository.OrgPayTypeRepository;
 import com.efiscal.backend.repository.OrgRepository;
 import com.efiscal.backend.repository.UserOrgAccessRepository;
 import java.time.OffsetDateTime;
@@ -20,13 +22,16 @@ public class OrgService {
     private final ClientRepository clientRepository;
     private final AppUserRepository appUserRepository;
     private final UserOrgAccessRepository userOrgAccessRepository;
+    private final OrgPayTypeRepository orgPayTypeRepository;
 
     public OrgService(OrgRepository orgRepository, ClientRepository clientRepository,
-                      AppUserRepository appUserRepository, UserOrgAccessRepository userOrgAccessRepository) {
+                      AppUserRepository appUserRepository, UserOrgAccessRepository userOrgAccessRepository,
+                      OrgPayTypeRepository orgPayTypeRepository) {
         this.orgRepository = orgRepository;
         this.clientRepository = clientRepository;
         this.appUserRepository = appUserRepository;
         this.userOrgAccessRepository = userOrgAccessRepository;
+        this.orgPayTypeRepository = orgPayTypeRepository;
     }
 
     @Transactional(readOnly = true)
@@ -92,6 +97,30 @@ public class OrgService {
                 .map(this::toDto)
                 .toList())
             .orElse(List.of());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Integer> getOrgPaymentTypes(Long orgId) {
+        orgRepository.findById(orgId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
+        return orgPayTypeRepository.findByOrgId(orgId).stream()
+            .map(OrgPayTypeEntity::getPaymentType)
+            .toList();
+    }
+
+    @Transactional
+    public void setOrgPaymentTypes(Long orgId, List<Integer> paymentTypes) {
+        orgRepository.findById(orgId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
+        
+        orgPayTypeRepository.deleteByOrgId(orgId);
+        
+        List<OrgPayTypeEntity> entities = paymentTypes.stream()
+            .distinct()
+            .map(pt -> new OrgPayTypeEntity(orgId, pt))
+            .toList();
+        
+        orgPayTypeRepository.saveAll(entities);
     }
 
     private OrgDto toDto(OrgEntity o) {

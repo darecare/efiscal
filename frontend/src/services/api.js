@@ -82,6 +82,14 @@ export const orgsApi = {
     const response = await api.put(`/orgs/${orgId}`, payload)
     return response.data
   },
+  async getPaymentTypes(orgId) {
+    const response = await api.get(`/orgs/${orgId}/payment-types`)
+    return response.data
+  },
+  async setPaymentTypes(orgId, paymentTypes) {
+    const response = await api.post(`/orgs/${orgId}/payment-types`, paymentTypes)
+    return response.data
+  },
 }
 
 export const rolesApi = {
