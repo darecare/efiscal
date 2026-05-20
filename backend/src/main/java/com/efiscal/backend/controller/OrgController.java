@@ -56,6 +56,20 @@ public class OrgController {
         return ResponseEntity.ok(orgService.updateOrg(orgId, req));
     }
 
+    @GetMapping("/{orgId}/payment-types")
+    public List<Integer> getOrgPaymentTypes(@PathVariable Long orgId) {
+        return orgService.getOrgPaymentTypes(orgId);
+    }
+
+    @PostMapping("/{orgId}/payment-types")
+    public ResponseEntity<?> setOrgPaymentTypes(@PathVariable Long orgId, @RequestBody List<Integer> paymentTypes) {
+        if (!isSuperAdmin()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Superadmin access required");
+        }
+        orgService.setOrgPaymentTypes(orgId, paymentTypes);
+        return ResponseEntity.ok().build();
+    }
+
     private boolean isSuperAdmin() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) return false;

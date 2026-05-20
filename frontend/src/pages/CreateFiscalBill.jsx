@@ -72,6 +72,7 @@ export default function CreateFiscalBill() {
 
   const [orgs, setOrgs] = useState([])
   const [selectedOrgId, setSelectedOrgId] = useState('')
+  const [allowedPaymentTypes, setAllowedPaymentTypes] = useState([])
 
   // Header fields
   const [invoiceType, setInvoiceType] = useState(0)
@@ -96,6 +97,18 @@ export default function CreateFiscalBill() {
     const loadOrgs = isSuperAdmin ? orgsApi.list() : orgsApi.myAccess()
     loadOrgs.then(setOrgs).catch(() => setOrgs([]))
   }, [isSuperAdmin])
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      orgsApi.getPaymentTypes(selectedOrgId)
+        .then(types => {
+          setAllowedPaymentTypes(types.length > 0 ? types : PAYMENT_TYPES.map(p => p.value))
+        })
+        .catch(() => {
+          setAllowedPaymentTypes(PAYMENT_TYPES.map(p => p.value))
+        })
+    }
+  }, [selectedOrgId])
 
   const selectedOrg = orgs.find(org => String(org.orgId) === String(selectedOrgId))
   const selectedClientId = selectedOrg?.clientId != null ? String(selectedOrg.clientId) : ''
@@ -354,7 +367,7 @@ export default function CreateFiscalBill() {
                     <div className="fiscal-field">
                       <label className="fiscal-field-label">Payment Type</label>
                       <select className="fiscal-input fiscal-input--select" value={payment.paymentType} onChange={e => setPaymentField(payment.id, 'paymentType', e.target.value)}>
-                        {PAYMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        {PAYMENT_TYPES.filter(t => allowedPaymentTypes.includes(t.value)).map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                       </select>
                     </div>
                     <div className="fiscal-field">
