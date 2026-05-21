@@ -29,13 +29,13 @@ public class TaxCategoryController {
 
     @PostMapping
     public ResponseEntity<?> createTaxCategory(@RequestBody TaxCategoryRequest req) {
-        authorizationService.requireAction("ORGS_MANAGE");
+        authorizationService.requireSuperAdmin();
         return ResponseEntity.status(HttpStatus.CREATED).body(taxCategoryService.createTaxCategory(req));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<?> updateTaxCategory(@PathVariable Long id, @RequestBody TaxCategoryRequest req) {
-        authorizationService.requireAction("ORGS_MANAGE");
+        authorizationService.requireSuperAdmin();
         return ResponseEntity.ok(taxCategoryService.updateTaxCategory(id, req));
     }
 }

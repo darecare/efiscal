@@ -54,7 +54,7 @@ export default function Users() {
       const [usersData, rolesData, clientsData] = await Promise.all([
         usersApi.list(),
         rolesApi.list(),
-        clientsApi.list(),
+        isSuperAdmin ? clientsApi.list() : Promise.resolve([]),
       ])
       setUsers(usersData)
       setRoles(rolesData)
@@ -67,7 +67,10 @@ export default function Users() {
   }
 
   function openAddModal() {
-    setForm(emptyForm)
+    setForm({
+      ...emptyForm,
+      clientId: isSuperAdmin ? '' : (currentUser?.clientId || ''),
+    })
     setFormError(null)
     setModalMode('add')
     setEditUserId(null)
@@ -267,11 +270,21 @@ export default function Users() {
                 </div>
                 <div className="field">
                   <label>Client</label>
-                  <select value={form.clientId} onChange={(e) => handleChange('clientId', e.target.value)}>
-                    <option value="">— Select client —</option>
-                    {clients.map((c) => (
-                      <option key={c.clientId} value={c.clientId}>{c.name}</option>
-                    ))}
+                  <select
+                    value={form.clientId}
+                    onChange={(e) => handleChange('clientId', e.target.value)}
+                    disabled={!isSuperAdmin}
+                  >
+                    {isSuperAdmin ? (
+                      <>
+                        <option value="">— Select client —</option>
+                        {clients.map((c) => (
+                          <option key={c.clientId} value={c.clientId}>{c.name}</option>
+                        ))}
+                      </>
+                    ) : (
+                      <option value={currentUser?.clientId || ''}>{currentUser?.clientName || 'My Client'}</option>
+                    )}
                   </select>
                 </div>
                 <div className="field">

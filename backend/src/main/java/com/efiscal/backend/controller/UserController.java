@@ -25,24 +25,44 @@ public class UserController {
     @GetMapping
     public List<UserDto> listUsers() {
         authorizationService.requireAction("USERS_MANAGE");
-        return userManagementService.listUsers();
+        return userManagementService.listUsers(
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()
+        );
     }
 
     @GetMapping("/{userId}")
     public UserDto getUser(@PathVariable Long userId) {
         authorizationService.requireAction("USERS_MANAGE");
-        return userManagementService.getUser(userId);
+        return userManagementService.getUser(
+            userId,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()
+        );
     }
 
     @PostMapping
     public ResponseEntity<?> createUser(@RequestBody CreateUserRequest req) {
         authorizationService.requireAction("USERS_MANAGE");
-        return ResponseEntity.status(HttpStatus.CREATED).body(userManagementService.createUser(req));
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+            userManagementService.createUser(
+                req,
+                authorizationService.getClientId(),
+                authorizationService.isSuperAdmin()
+            )
+        );
     }
 
     @PutMapping("/{userId}")
     public ResponseEntity<?> updateUser(@PathVariable Long userId, @RequestBody UpdateUserRequest req) {
         authorizationService.requireAction("USERS_MANAGE");
-        return ResponseEntity.ok(userManagementService.updateUser(userId, req));
+        return ResponseEntity.ok(
+            userManagementService.updateUser(
+                userId,
+                req,
+                authorizationService.getClientId(),
+                authorizationService.isSuperAdmin()
+            )
+        );
     }
 }

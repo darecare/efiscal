@@ -24,12 +24,23 @@ public class PayTypeMapController {
     @GetMapping
     public ResponseEntity<List<PayTypeMapEntity>> list(@RequestParam Long clientId) {
         authorizationService.requireAction("ORGS_MANAGE");
+        Long callerClientId = authorizationService.getClientId();
+        if (!authorizationService.isSuperAdmin()) {
+            clientId = callerClientId;
+        }
         return ResponseEntity.ok(payTypeMapRepository.findByClientId(clientId));
     }
 
     @PostMapping
     public ResponseEntity<?> create(@RequestBody PayTypeMapRequest request) {
         authorizationService.requireAction("ORGS_MANAGE");
+        Long callerClientId = authorizationService.getClientId();
+        if (!authorizationService.isSuperAdmin() && (request.clientId() == null || !request.clientId().equals(callerClientId))) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        if (request.clientId() == null) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "Client ID must not be null");
+        }
         if (payTypeMapRepository.findByClientIdAndPaymentMethodCode(
                 request.clientId(), request.paymentMethodCode()).isPresent()) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -50,7 +61,14 @@ public class PayTypeMapController {
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @RequestBody PayTypeMapRequest request) {
         authorizationService.requireAction("ORGS_MANAGE");
+        Long callerClientId = authorizationService.getClientId();
         return payTypeMapRepository.findById(id).map(entity -> {
+            if (!authorizationService.isSuperAdmin() && !entity.getClientId().equals(callerClientId)) {
+                throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+            }
+            if (!authorizationService.isSuperAdmin() && request.clientId() != null && !request.clientId().equals(callerClientId)) {
+                throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+            }
             entity.setPaymentMethodCode(request.paymentMethodCode());
             entity.setPaymentType(request.paymentType());
             entity.setDescription(request.description());
@@ -62,7 +80,11 @@ public class PayTypeMapController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         authorizationService.requireAction("ORGS_MANAGE");
+        Long callerClientId = authorizationService.getClientId();
         return payTypeMapRepository.findById(id).map(entity -> {
+            if (!authorizationService.isSuperAdmin() && !entity.getClientId().equals(callerClientId)) {
+                throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+            }
             entity.setIsactive("N");
             entity.setUpdated(LocalDateTime.now());
             payTypeMapRepository.save(entity);

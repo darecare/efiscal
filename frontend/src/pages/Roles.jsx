@@ -13,25 +13,29 @@ export default function Roles() {
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showInactive, setShowInactive] = useState(false)
 
   const [showModal, setShowModal] = useState(false)
+  const [modalMode, setModalMode] = useState('add')
+  const [editRoleId, setEditRoleId] = useState(null)
   const [form, setForm] = useState({
     roleCode: '',
     name: '',
     description: '',
     clientId: '',
     actionIds: [],
+    isActive: true,
   })
 
   useEffect(() => {
-    fetchData()
+    fetchData(showInactive)
   }, [])
 
-  async function fetchData() {
+  async function fetchData(incInactive = showInactive) {
     try {
       setLoading(true)
       const [rolesData, actionsData, clientsData] = await Promise.all([
-        rolesApi.list(),
+        rolesApi.list(incInactive),
         actionsApi.list(),
         isSuperAdmin ? clientsApi.list() : Promise.resolve([]),
       ])
@@ -43,6 +47,26 @@ export default function Roles() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleToggleShowInactive = (e) => {
+    const val = e.target.checked
+    setShowInactive(val)
+    fetchData(val)
+  }
+
+  function openEditModal(role) {
+    setForm({
+      roleCode: role.roleCode,
+      name: role.name,
+      description: role.description || '',
+      clientId: role.clientId || '',
+      actionIds: role.actionIds || [],
+      isActive: role.isActive !== false,
+    })
+    setModalMode('edit')
+    setEditRoleId(role.roleId)
+    setShowModal(true)
   }
 
   const handleActionToggle = (actionId) => {
@@ -59,15 +83,27 @@ export default function Roles() {
     e.preventDefault()
     try {
       setError('')
-      const payload = {
-        ...form,
-        clientId: isSuperAdmin 
-          ? (form.clientId ? Number(form.clientId) : null)
-          : currentUser?.clientId,
+      if (modalMode === 'add') {
+        const payload = {
+          roleCode: form.roleCode.trim(),
+          name: form.name.trim(),
+          description: form.description.trim(),
+          clientId: isSuperAdmin 
+            ? (form.clientId ? Number(form.clientId) : null)
+            : currentUser?.clientId,
+          actionIds: form.actionIds,
+        }
+        await rolesApi.create(payload)
+      } else {
+        await rolesApi.update(editRoleId, {
+          name: form.name.trim(),
+          description: form.description.trim(),
+          isActive: form.isActive,
+        })
+        await rolesApi.replaceActions(editRoleId, form.actionIds)
       }
-      await rolesApi.create(payload)
       setShowModal(false)
-      fetchData()
+      fetchData(showInactive)
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save role')
     }
@@ -88,7 +124,9 @@ export default function Roles() {
           <button
             className="primary-button"
             onClick={() => {
-              setForm({ roleCode: '', name: '', description: '', clientId: '', actionIds: [] })
+              setForm({ roleCode: '', name: '', description: '', clientId: '', actionIds: [], isActive: true })
+              setModalMode('add')
+              setEditRoleId(null)
               setShowModal(true)
             }}
           >
@@ -99,8 +137,16 @@ export default function Roles() {
     >
       {error && <div className="error-banner">{error}</div>}
 
-      <section className="action-bar card">
+      <section className="action-bar card" style={{ display: 'flex', alignItems: 'center' }}>
         <span className="badge">{roles.length} roles</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginLeft: 'auto' }}>
+          <input
+            type="checkbox"
+            checked={showInactive}
+            onChange={handleToggleShowInactive}
+          />
+          <span style={{ fontSize: '0.9rem' }}>Show Inactive Roles</span>
+        </label>
       </section>
 
       <section className="table-card">
@@ -115,6 +161,8 @@ export default function Roles() {
                 <th>Description</th>
                 <th>Client Scope</th>
                 <th>Permissions Count</th>
+                <th>Status</th>
+                {canManageRoles && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -125,11 +173,23 @@ export default function Roles() {
                   <td>{r.description}</td>
                   <td>{r.clientId ? clients.find((c) => c.clientId === r.clientId)?.name || r.clientId : 'Global'}</td>
                   <td>{r.actionIds?.length || 0} actions</td>
+                  <td>
+                    <span className={`status-chip ${r.isActive !== false ? 'active' : 'inactive'}`}>
+                      {r.isActive !== false ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  {canManageRoles && (
+                    <td>
+                      <button className="secondary-button" onClick={() => openEditModal(r)}>
+                        Edit
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
               {roles.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="muted">No roles found</td>
+                  <td colSpan={canManageRoles ? "7" : "6"} className="muted">No roles found</td>
                 </tr>
               )}
             </tbody>
@@ -141,7 +201,7 @@ export default function Roles() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Create Custom Role</h3>
+              <h3>{modalMode === 'add' ? 'Create Custom Role' : 'Edit Custom Role'}</h3>
               <button type="button" className="modal-close" onClick={() => setShowModal(false)}>✕</button>
             </div>
             <form onSubmit={handleSubmit}>
@@ -151,6 +211,7 @@ export default function Roles() {
                   <input
                     type="text"
                     required
+                    disabled={modalMode === 'edit'}
                     value={form.roleCode}
                     onChange={(e) => setForm({ ...form, roleCode: e.target.value })}
                     placeholder="e.g. RESTRICTED_OPERATOR"
@@ -173,7 +234,7 @@ export default function Roles() {
                     onChange={(e) => setForm({ ...form, description: e.target.value })}
                   />
                 </div>
-                {isSuperAdmin && (
+                {isSuperAdmin && modalMode === 'add' && (
                   <div className="field">
                     <label>Assign to Client</label>
                     <select
@@ -184,6 +245,18 @@ export default function Roles() {
                       {clients.map((c) => (
                         <option key={c.clientId} value={c.clientId}>{c.name}</option>
                       ))}
+                    </select>
+                  </div>
+                )}
+                {modalMode === 'edit' && (
+                  <div className="field">
+                    <label>Status</label>
+                    <select
+                      value={form.isActive ? 'true' : 'false'}
+                      onChange={(e) => setForm({ ...form, isActive: e.target.value === 'true' })}
+                    >
+                      <option value="true">Active</option>
+                      <option value="false">Inactive</option>
                     </select>
                   </div>
                 )}

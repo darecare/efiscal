@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface AppUserRepository extends JpaRepository<AppUserEntity, Long> {
     List<AppUserEntity> findAllByDeletedAtIsNull();
+    List<AppUserEntity> findAllByClientClientIdAndDeletedAtIsNull(Long clientId);
     Optional<AppUserEntity> findByEmail(String email);
     boolean existsByEmail(String email);
 }

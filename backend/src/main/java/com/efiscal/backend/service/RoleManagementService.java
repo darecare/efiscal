@@ -34,18 +34,41 @@ public class RoleManagementService {
     }
 
     @Transactional(readOnly = true)
-    public List<RoleDto> listRoles(Long callerClientId, boolean superAdmin) {
-        return roleRepository.findAll().stream()
-            .filter(RoleEntity::isActive)
+    public List<RoleDto> listRoles(Long callerClientId, boolean superAdmin, boolean includeInactive) {
+        List<RoleEntity> roles = roleRepository.findAll();
+        List<Long> roleIds = roles.stream().map(RoleEntity::getRoleId).toList();
+        List<RoleActionAccessEntity> allAccess = roleActionAccessRepository.findByRoleIdIn(roleIds);
+        
+        java.util.Map<Long, List<Long>> actionsByRoleId = new java.util.HashMap<>();
+        for (RoleActionAccessEntity access : allAccess) {
+            if (access.isAllowed()) {
+                actionsByRoleId.computeIfAbsent(access.getRoleId(), k -> new java.util.ArrayList<>())
+                    .add(access.getActionId());
+            }
+        }
+
+        return roles.stream()
+            .filter(role -> includeInactive || role.isActive())
             .filter(role -> superAdmin || isRoleVisibleToClient(role, callerClientId))
-            .map(this::toDto)
+            .map(r -> new RoleDto(
+                r.getRoleId(),
+                r.getRoleCode(),
+                r.getName(),
+                r.getDescription(),
+                r.getClient() != null ? r.getClient().getClientId() : null,
+                actionsByRoleId.getOrDefault(r.getRoleId(), List.of()),
+                r.isActive()
+            ))
             .toList();
     }
 
     @Transactional
-    public RoleDto createRole(CreateRoleRequest req, Long callerClientId, boolean superAdmin) {
+    public RoleDto createRole(CreateRoleRequest req, Long callerClientId, boolean superAdmin, List<String> callerActions) {
         validateClientScope(req.clientId(), callerClientId, superAdmin);
         assertRoleCodeAvailable(req.roleCode(), req.clientId());
+        if (req.actionIds() != null) {
+            validateRoleActions(req.actionIds(), callerActions, superAdmin);
+        }
 
         RoleEntity role = new RoleEntity();
         role.setRoleCode(req.roleCode());
@@ -83,13 +106,28 @@ public class RoleManagementService {
     }
 
     @Transactional
-    public RoleDto replaceRoleActions(Long roleId, ReplaceRoleActionsRequest req, Long callerClientId, boolean superAdmin) {
+    public RoleDto replaceRoleActions(Long roleId, ReplaceRoleActionsRequest req, Long callerClientId, boolean superAdmin, List<String> callerActions) {
         RoleEntity role = findRoleForCaller(roleId, callerClientId, superAdmin);
+        if (req.actionIds() != null && !req.actionIds().isEmpty()) {
+            validateRoleActions(req.actionIds(), callerActions, superAdmin);
+        }
         roleActionAccessRepository.deleteByRoleId(role.getRoleId());
         if (req.actionIds() != null && !req.actionIds().isEmpty()) {
             saveRoleActions(role.getRoleId(), req.actionIds());
         }
         return toDto(role);
+    }
+
+    private void validateRoleActions(List<Long> actionIds, List<String> callerActions, boolean superAdmin) {
+        if (superAdmin) return;
+        for (Long actionId : actionIds) {
+            com.efiscal.backend.model.ActionCatalogEntity action = actionCatalogRepository.findById(actionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Action ID " + actionId + " not found"));
+            if (callerActions == null || !callerActions.contains(action.getActionCode())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                    "Cannot assign permission '" + action.getActionCode() + "' which you do not possess.");
+            }
+        }
     }
 
     private RoleEntity findRoleForCaller(Long roleId, Long callerClientId, boolean superAdmin) {
@@ -156,11 +194,12 @@ public class RoleManagementService {
             r.getName(),
             r.getDescription(),
             r.getClient() != null ? r.getClient().getClientId() : null,
-            actionIds
+            actionIds,
+            r.isActive()
         );
     }
 
-    public record RoleDto(Long roleId, String roleCode, String name, String description, Long clientId, List<Long> actionIds) {}
+    public record RoleDto(Long roleId, String roleCode, String name, String description, Long clientId, List<Long> actionIds, Boolean isActive) {}
     public record CreateRoleRequest(String roleCode, String name, String description, Long clientId, List<Long> actionIds) {}
     public record UpdateRoleRequest(String name, String description, Boolean isActive) {}
     public record ReplaceRoleActionsRequest(List<Long> actionIds) {}

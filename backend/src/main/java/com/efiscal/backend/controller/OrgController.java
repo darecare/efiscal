@@ -26,7 +26,11 @@ public class OrgController {
     @GetMapping
     public List<OrgDto> listOrgs(@RequestParam(required = false) Long clientId) {
         authorizationService.requireAction("ORGS_MANAGE");
-        return orgService.listOrgs(clientId);
+        return orgService.listOrgs(
+            clientId,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()
+        );
     }
 
     @GetMapping("/my-access")
@@ -42,19 +46,36 @@ public class OrgController {
     @GetMapping("/{orgId}")
     public OrgDto getOrg(@PathVariable Long orgId) {
         authorizationService.requireAction("ORGS_MANAGE");
-        return orgService.getOrg(orgId);
+        return orgService.getOrg(
+            orgId,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()
+        );
     }
 
     @PostMapping
     public ResponseEntity<?> createOrg(@RequestBody OrgRequest req) {
         authorizationService.requireAction("ORGS_MANAGE");
-        return ResponseEntity.status(HttpStatus.CREATED).body(orgService.createOrg(req));
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+            orgService.createOrg(
+                req,
+                authorizationService.getClientId(),
+                authorizationService.isSuperAdmin()
+            )
+        );
     }
 
     @PutMapping("/{orgId}")
     public ResponseEntity<?> updateOrg(@PathVariable Long orgId, @RequestBody OrgRequest req) {
         authorizationService.requireAction("ORGS_MANAGE");
-        return ResponseEntity.ok(orgService.updateOrg(orgId, req));
+        return ResponseEntity.ok(
+            orgService.updateOrg(
+                orgId,
+                req,
+                authorizationService.getClientId(),
+                authorizationService.isSuperAdmin()
+            )
+        );
     }
 
     @GetMapping("/{orgId}/payment-types")

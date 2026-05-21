@@ -34,21 +34,33 @@ public class UserManagementService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserDto> listUsers() {
-        return userRepository.findAllByDeletedAtIsNull().stream()
+    public List<UserDto> listUsers(Long callerClientId, boolean isSuperAdmin) {
+        List<AppUserEntity> users = isSuperAdmin
+            ? userRepository.findAllByDeletedAtIsNull()
+            : userRepository.findAllByClientClientIdAndDeletedAtIsNull(callerClientId);
+        return users.stream()
             .map(this::toDto)
             .toList();
     }
 
     @Transactional(readOnly = true)
-    public UserDto getUser(Long userId) {
-        return userRepository.findById(userId)
-            .map(this::toDto)
+    public UserDto getUser(Long userId, Long callerClientId, boolean isSuperAdmin) {
+        AppUserEntity user = userRepository.findById(userId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        if (!isSuperAdmin && !user.getClient().getClientId().equals(callerClientId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        return toDto(user);
     }
 
     @Transactional
-    public UserDto createUser(CreateUserRequest req) {
+    public UserDto createUser(CreateUserRequest req, Long callerClientId, boolean isSuperAdmin) {
+        if (!isSuperAdmin && (req.clientId() == null || !req.clientId().equals(callerClientId))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        if (req.clientId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Client ID must not be null");
+        }
         if (userRepository.existsByEmail(req.email())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already in use");
         }
@@ -56,6 +68,8 @@ public class UserManagementService {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Client not found"));
         RoleEntity role = roleRepository.findById(req.roleId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role not found"));
+
+        validateRoleScope(role, req.clientId(), isSuperAdmin);
 
         AppUserEntity user = new AppUserEntity();
         user.setEmail(req.email());
@@ -71,9 +85,13 @@ public class UserManagementService {
     }
 
     @Transactional
-    public UserDto updateUser(Long userId, UpdateUserRequest req) {
+    public UserDto updateUser(Long userId, UpdateUserRequest req, Long callerClientId, boolean isSuperAdmin) {
         AppUserEntity user = userRepository.findById(userId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        if (!isSuperAdmin && !user.getClient().getClientId().equals(callerClientId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
 
         if (req.fullName() != null) user.setFullName(req.fullName());
         if (req.subscriptionStatus() != null) user.setSubscriptionStatus(req.subscriptionStatus());
@@ -83,17 +101,35 @@ public class UserManagementService {
         if (req.newPassword() != null && !req.newPassword().isBlank()) {
             user.setPasswordHash(passwordEncoder.encode(req.newPassword()));
         }
-        if (req.roleId() != null) {
-            RoleEntity role = roleRepository.findById(req.roleId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role not found"));
-            user.setRole(role);
-        }
+
+        Long targetClientId = user.getClient().getClientId();
         if (req.clientId() != null) {
+            if (!isSuperAdmin && !req.clientId().equals(callerClientId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot assign user to another client");
+            }
             ClientEntity client = clientRepository.findById(req.clientId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Client not found"));
             user.setClient(client);
+            targetClientId = client.getClientId();
         }
+
+        if (req.roleId() != null) {
+            RoleEntity role = roleRepository.findById(req.roleId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role not found"));
+            validateRoleScope(role, targetClientId, isSuperAdmin);
+            user.setRole(role);
+        }
+
         return toDto(userRepository.save(user));
+    }
+
+    private void validateRoleScope(RoleEntity role, Long targetClientId, boolean isSuperAdmin) {
+        if (role.getClient() != null && !role.getClient().getClientId().equals(targetClientId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot assign a role belonging to another client");
+        }
+        if ("SUPERADMIN".equals(role.getRoleCode()) && !isSuperAdmin) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only superadmins can assign the SUPERADMIN role");
+        }
     }
 
     private UserDto toDto(AppUserEntity u) {

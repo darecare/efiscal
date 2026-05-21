@@ -26,36 +26,70 @@ public class ApiConfigController {
     @GetMapping("/apiconn")
     public List<ApiConnDto> listConnections(@RequestParam(required = false) Long orgId) {
         authorizationService.requireAction("ORGS_MANAGE");
-        return apiConnService.listConnections(orgId);
+        return apiConnService.listConnections(
+            orgId,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()
+        );
     }
 
     @PostMapping("/apiconn")
     public ResponseEntity<?> createConnection(@RequestBody ApiConnRequest req) {
         authorizationService.requireAction("ORGS_MANAGE");
-        return ResponseEntity.status(HttpStatus.CREATED).body(apiConnService.createConnection(req));
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+            apiConnService.createConnection(
+                req,
+                authorizationService.getClientId(),
+                authorizationService.isSuperAdmin()
+            )
+        );
     }
 
     @PutMapping("/apiconn/{id}")
     public ResponseEntity<?> updateConnection(@PathVariable Long id, @RequestBody ApiConnRequest req) {
         authorizationService.requireAction("ORGS_MANAGE");
-        return ResponseEntity.ok(apiConnService.updateConnection(id, req));
+        return ResponseEntity.ok(
+            apiConnService.updateConnection(
+                id,
+                req,
+                authorizationService.getClientId(),
+                authorizationService.isSuperAdmin()
+            )
+        );
     }
 
     @GetMapping("/apitemplate")
     public List<ApiTemplateDto> listTemplates(@RequestParam Long apiconnId) {
         authorizationService.requireAction("ORGS_MANAGE");
-        return apiConnService.listTemplates(apiconnId);
+        return apiConnService.listTemplates(
+            apiconnId,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()
+        );
     }
 
     @PostMapping("/apitemplate")
     public ResponseEntity<?> createTemplate(@RequestBody ApiTemplateRequest req) {
         authorizationService.requireAction("ORGS_MANAGE");
-        return ResponseEntity.status(HttpStatus.CREATED).body(apiConnService.createTemplate(req));
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+            apiConnService.createTemplate(
+                req,
+                authorizationService.getClientId(),
+                authorizationService.isSuperAdmin()
+            )
+        );
     }
 
     @PutMapping("/apitemplate/{id}")
     public ResponseEntity<?> updateTemplate(@PathVariable Long id, @RequestBody ApiTemplateRequest req) {
         authorizationService.requireAction("ORGS_MANAGE");
-        return ResponseEntity.ok(apiConnService.updateTemplate(id, req));
+        return ResponseEntity.ok(
+            apiConnService.updateTemplate(
+                id,
+                req,
+                authorizationService.getClientId(),
+                authorizationService.isSuperAdmin()
+            )
+        );
     }
 }

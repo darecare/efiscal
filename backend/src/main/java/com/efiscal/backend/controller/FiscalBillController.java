@@ -26,10 +26,48 @@ public class FiscalBillController {
 
     private final FiscalBillService fiscalBillService;
     private final AuthorizationService authorizationService;
+    private final com.efiscal.backend.repository.OrgRepository orgRepository;
+    private final com.efiscal.backend.repository.FiscalBillRepository fiscalBillRepository;
 
-    public FiscalBillController(FiscalBillService fiscalBillService, AuthorizationService authorizationService) {
+    public FiscalBillController(
+            FiscalBillService fiscalBillService,
+            AuthorizationService authorizationService,
+            com.efiscal.backend.repository.OrgRepository orgRepository,
+            com.efiscal.backend.repository.FiscalBillRepository fiscalBillRepository) {
         this.fiscalBillService = fiscalBillService;
         this.authorizationService = authorizationService;
+        this.orgRepository = orgRepository;
+        this.fiscalBillRepository = fiscalBillRepository;
+    }
+
+    private void validateOrg(Long orgId) {
+        if (orgId == null) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "orgId is required");
+        }
+        if (authorizationService.isSuperAdmin()) {
+            return;
+        }
+        com.efiscal.backend.model.OrgEntity org = orgRepository.findById(orgId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
+        if (!org.getClient().getClientId().equals(authorizationService.getClientId())) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+    }
+
+    private void validateFiscalBill(Long fiscalBillId) {
+        if (fiscalBillId == null) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "id is required");
+        }
+        if (authorizationService.isSuperAdmin()) {
+            return;
+        }
+        com.efiscal.backend.model.FiscalBillEntity bill = fiscalBillRepository.findById(fiscalBillId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Fiscal bill not found"));
+        com.efiscal.backend.model.OrgEntity org = orgRepository.findById(bill.getOrgId())
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
+        if (!org.getClient().getClientId().equals(authorizationService.getClientId())) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
     }
 
     /** GET /api/v1/fiscalbill/status?orgId=N — Tax Authority status */
@@ -39,6 +77,7 @@ public class FiscalBillController {
         if (orgId == null) {
             return ResponseEntity.badRequest().body(new ErrorResponse("orgId query parameter is required"));
         }
+        validateOrg(orgId);
         Map<String, Object> statusResponse = fiscalBillService.getStatus(orgId);
         return ResponseEntity.ok(statusResponse);
     }
@@ -50,6 +89,7 @@ public class FiscalBillController {
         if (orgId == null) {
             return ResponseEntity.badRequest().body(new ErrorResponse("orgId query parameter is required"));
         }
+        validateOrg(orgId);
         return ResponseEntity.ok(fiscalBillService.listFiscalBills(orgId));
     }
 
@@ -57,6 +97,7 @@ public class FiscalBillController {
     @GetMapping("/{id}")
     public ResponseEntity<?> getFiscalBill(@PathVariable Long id) {
         authorizationService.requireAction("FISCAL_VIEW_BILLS");
+        validateFiscalBill(id);
         FiscalBillService.FiscalBillView fiscalBill = fiscalBillService.findFiscalBillById(id);
         if (fiscalBill == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse("Fiscal bill not found"));
@@ -68,6 +109,7 @@ public class FiscalBillController {
     @GetMapping("/{id}/details")
     public ResponseEntity<?> getFiscalBillDetails(@PathVariable Long id) {
         authorizationService.requireAction("FISCAL_VIEW_BILLS");
+        validateFiscalBill(id);
         FiscalBillService.FiscalBillDetailsView details = fiscalBillService.findFiscalBillDetails(id);
         if (details == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse("Fiscal bill not found"));
@@ -91,6 +133,10 @@ public class FiscalBillController {
         }
         if (orgId == null || clientId == null) {
             return ResponseEntity.badRequest().body(new ErrorResponse("orgId and clientId query parameters are required"));
+        }
+        validateOrg(orgId);
+        if (!authorizationService.isSuperAdmin() && !clientId.equals(authorizationService.getClientId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse("Access denied"));
         }
 
         List<FiscalBillItemRequest> items = request.items() == null ? List.of() :
@@ -134,6 +180,10 @@ public class FiscalBillController {
         if (orgId == null || clientId == null) {
             return ResponseEntity.badRequest().body(new ErrorResponse("orgId and clientId query parameters are required"));
         }
+        validateOrg(orgId);
+        if (!authorizationService.isSuperAdmin() && !clientId.equals(authorizationService.getClientId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse("Access denied"));
+        }
 
         List<FiscalBillItemRequest> items = request.items() == null ? List.of() :
                 request.items().stream().map(i -> new FiscalBillItemRequest(
@@ -171,6 +221,7 @@ public class FiscalBillController {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));
         }
+        validateFiscalBill(id);
         FiscalBillService.FiscalBillRetryResult result = fiscalBillService.retryFiscalBill(id, idempotencyKey);
         if (result.notFound()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse("Fiscal bill not found"));
@@ -193,6 +244,7 @@ public class FiscalBillController {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));
         }
+        validateFiscalBill(id);
         FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createCopyFiscalBill(id, idempotencyKey);
         if (result.alreadyExists()) {
             return ResponseEntity.ok(result.fiscalBill());
@@ -212,6 +264,7 @@ public class FiscalBillController {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));
         }
+        validateFiscalBill(id);
         FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createRefundFiscalBill(id, idempotencyKey);
         if (result.alreadyExists()) {
             return ResponseEntity.ok(result.fiscalBill());

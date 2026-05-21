@@ -93,8 +93,8 @@ export const orgsApi = {
 }
 
 export const rolesApi = {
-  async list() {
-    const response = await api.get('/roles')
+  async list(includeInactive = false) {
+    const response = await api.get('/roles', { params: { includeInactive } })
     return response.data
   },
   async create(payload) {

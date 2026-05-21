@@ -22,20 +22,25 @@ public class RoleController {
     }
 
     @GetMapping
-    public ResponseEntity<?> listRoles() {
+    public ResponseEntity<?> listRoles(@RequestParam(required = false, defaultValue = "false") boolean includeInactive) {
         authorizationService.requireAnyAction("ROLES_MANAGE", "USERS_MANAGE");
         return ResponseEntity.ok(roleManagementService.listRoles(
             authorizationService.getClientId(),
-            authorizationService.isSuperAdmin()));
+            authorizationService.isSuperAdmin(),
+            includeInactive));
     }
 
     @PostMapping
     public ResponseEntity<?> createRole(@RequestBody CreateRoleRequest req) {
         authorizationService.requireAction("ROLES_MANAGE");
+        java.util.List<String> callerActions = authorizationService.getCurrentUser()
+            .map(com.efiscal.backend.service.DemoDataService.AuthenticatedUser::actions)
+            .orElse(java.util.List.of());
         return ResponseEntity.status(HttpStatus.CREATED).body(roleManagementService.createRole(
             req,
             authorizationService.getClientId(),
-            authorizationService.isSuperAdmin()));
+            authorizationService.isSuperAdmin(),
+            callerActions));
     }
 
     @PutMapping("/{roleId}")
@@ -54,10 +59,14 @@ public class RoleController {
         @RequestBody ReplaceRoleActionsRequest req
     ) {
         authorizationService.requireAction("ROLES_MANAGE");
+        java.util.List<String> callerActions = authorizationService.getCurrentUser()
+            .map(com.efiscal.backend.service.DemoDataService.AuthenticatedUser::actions)
+            .orElse(java.util.List.of());
         return ResponseEntity.ok(roleManagementService.replaceRoleActions(
             roleId,
             req,
             authorizationService.getClientId(),
-            authorizationService.isSuperAdmin()));
+            authorizationService.isSuperAdmin(),
+            callerActions));
     }
 }
