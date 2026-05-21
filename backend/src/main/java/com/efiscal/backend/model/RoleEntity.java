@@ -8,6 +8,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Entity
 @Table(name = "role")
 public class RoleEntity {
+    public static final String ROLE_SUPERADMIN = "SUPERADMIN";
+
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

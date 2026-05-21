@@ -7,7 +7,10 @@ import com.efiscal.backend.repository.ActionCatalogRepository;
 import com.efiscal.backend.repository.ClientRepository;
 import com.efiscal.backend.repository.RoleActionAccessRepository;
 import com.efiscal.backend.repository.RoleRepository;
+import com.efiscal.backend.repository.AppUserRepository;
+import com.efiscal.backend.security.RolePermissionService;
 import java.util.List;
+import jakarta.validation.constraints.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,17 +23,23 @@ public class RoleManagementService {
     private final RoleActionAccessRepository roleActionAccessRepository;
     private final ActionCatalogRepository actionCatalogRepository;
     private final ClientRepository clientRepository;
+    private final AppUserRepository appUserRepository;
+    private final RolePermissionService rolePermissionService;
 
     public RoleManagementService(
         RoleRepository roleRepository,
         RoleActionAccessRepository roleActionAccessRepository,
         ActionCatalogRepository actionCatalogRepository,
-        ClientRepository clientRepository
+        ClientRepository clientRepository,
+        AppUserRepository appUserRepository,
+        RolePermissionService rolePermissionService
     ) {
         this.roleRepository = roleRepository;
         this.roleActionAccessRepository = roleActionAccessRepository;
         this.actionCatalogRepository = actionCatalogRepository;
         this.clientRepository = clientRepository;
+        this.appUserRepository = appUserRepository;
+        this.rolePermissionService = rolePermissionService;
     }
 
     @Transactional(readOnly = true)
@@ -63,11 +72,11 @@ public class RoleManagementService {
     }
 
     @Transactional
-    public RoleDto createRole(CreateRoleRequest req, Long callerClientId, boolean superAdmin, List<String> callerActions) {
+    public RoleDto createRole(CreateRoleRequest req, Long callerClientId, boolean superAdmin, String callerUserId, List<String> callerActions) {
         validateClientScope(req.clientId(), callerClientId, superAdmin);
         assertRoleCodeAvailable(req.roleCode(), req.clientId());
         if (req.actionIds() != null) {
-            validateRoleActions(req.actionIds(), callerActions, superAdmin);
+            validateRoleActions(req.actionIds(), getFreshCallerActions(callerUserId, superAdmin, callerActions), superAdmin);
         }
 
         RoleEntity role = new RoleEntity();
@@ -91,7 +100,7 @@ public class RoleManagementService {
     }
 
     @Transactional
-    public RoleDto updateRole(Long roleId, UpdateRoleRequest req, Long callerClientId, boolean superAdmin) {
+    public RoleDto updateRole(Long roleId, UpdateRoleRequest req, Long callerClientId, boolean superAdmin, String callerUserId, List<String> callerActions) {
         RoleEntity role = findRoleForCaller(roleId, callerClientId, superAdmin);
         if (req.name() != null) {
             role.setName(req.name());
@@ -102,20 +111,46 @@ public class RoleManagementService {
         if (req.isActive() != null) {
             role.setActive(req.isActive());
         }
-        return toDto(roleRepository.save(role));
+        role = roleRepository.save(role);
+
+        if (req.actionIds() != null) {
+            validateRoleActions(req.actionIds(), getFreshCallerActions(callerUserId, superAdmin, callerActions), superAdmin);
+            roleActionAccessRepository.deleteByRoleId(role.getRoleId());
+            if (!req.actionIds().isEmpty()) {
+                saveRoleActions(role.getRoleId(), req.actionIds());
+            }
+        }
+        return toDto(role);
     }
 
     @Transactional
-    public RoleDto replaceRoleActions(Long roleId, ReplaceRoleActionsRequest req, Long callerClientId, boolean superAdmin, List<String> callerActions) {
+    public RoleDto replaceRoleActions(Long roleId, ReplaceRoleActionsRequest req, Long callerClientId, boolean superAdmin, String callerUserId, List<String> callerActions) {
         RoleEntity role = findRoleForCaller(roleId, callerClientId, superAdmin);
         if (req.actionIds() != null && !req.actionIds().isEmpty()) {
-            validateRoleActions(req.actionIds(), callerActions, superAdmin);
+            validateRoleActions(req.actionIds(), getFreshCallerActions(callerUserId, superAdmin, callerActions), superAdmin);
         }
         roleActionAccessRepository.deleteByRoleId(role.getRoleId());
         if (req.actionIds() != null && !req.actionIds().isEmpty()) {
             saveRoleActions(role.getRoleId(), req.actionIds());
         }
         return toDto(role);
+    }
+
+    private List<String> getFreshCallerActions(String callerUserId, boolean superAdmin, List<String> sessionActions) {
+        if (superAdmin) {
+            return List.of();
+        }
+        if (callerUserId == null) {
+            return sessionActions != null ? sessionActions : List.of();
+        }
+        try {
+            Long userId = Long.parseLong(callerUserId);
+            return appUserRepository.findById(userId)
+                .map(user -> rolePermissionService.resolveActionCodes(user.getRole()))
+                .orElse(sessionActions != null ? sessionActions : List.of());
+        } catch (NumberFormatException e) {
+            return sessionActions != null ? sessionActions : List.of();
+        }
     }
 
     private void validateRoleActions(List<Long> actionIds, List<String> callerActions, boolean superAdmin) {
@@ -200,7 +235,30 @@ public class RoleManagementService {
     }
 
     public record RoleDto(Long roleId, String roleCode, String name, String description, Long clientId, List<Long> actionIds, Boolean isActive) {}
-    public record CreateRoleRequest(String roleCode, String name, String description, Long clientId, List<Long> actionIds) {}
-    public record UpdateRoleRequest(String name, String description, Boolean isActive) {}
+    public record CreateRoleRequest(
+        @NotBlank(message = "Role code is required")
+        @Size(max = 50, message = "Role code must not exceed 50 characters")
+        String roleCode,
+
+        @NotBlank(message = "Role name is required")
+        @Size(max = 100, message = "Role name must not exceed 100 characters")
+        String name,
+
+        @Size(max = 255, message = "Description must not exceed 255 characters")
+        String description,
+
+        Long clientId,
+        List<Long> actionIds
+    ) {}
+    public record UpdateRoleRequest(
+        @Size(max = 100, message = "Role name must not exceed 100 characters")
+        String name,
+
+        @Size(max = 255, message = "Description must not exceed 255 characters")
+        String description,
+
+        Boolean isActive,
+        List<Long> actionIds
+    ) {}
     public record ReplaceRoleActionsRequest(List<Long> actionIds) {}
 }

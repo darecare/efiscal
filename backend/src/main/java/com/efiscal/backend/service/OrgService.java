@@ -8,6 +8,9 @@ import com.efiscal.backend.repository.ClientRepository;
 import com.efiscal.backend.repository.OrgPayTypeRepository;
 import com.efiscal.backend.repository.OrgRepository;
 import com.efiscal.backend.repository.UserOrgAccessRepository;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -60,7 +63,7 @@ public class OrgService {
     }
 
     @Transactional
-    public OrgDto createOrg(OrgRequest req, Long callerClientId, boolean isSuperAdmin) {
+    public OrgDto createOrg(CreateOrgRequest req, Long callerClientId, boolean isSuperAdmin) {
         if (!isSuperAdmin && (req.clientId() == null || !req.clientId().equals(callerClientId))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
@@ -81,7 +84,7 @@ public class OrgService {
     }
 
     @Transactional
-    public OrgDto updateOrg(Long orgId, OrgRequest req, Long callerClientId, boolean isSuperAdmin) {
+    public OrgDto updateOrg(Long orgId, UpdateOrgRequest req, Long callerClientId, boolean isSuperAdmin) {
         OrgEntity org = orgRepository.findById(orgId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
 
@@ -172,12 +175,42 @@ public class OrgService {
         OffsetDateTime createdAt
     ) {}
 
-    public record OrgRequest(
+    public record CreateOrgRequest(
+        @NotNull(message = "Client ID is required")
         Long clientId,
+
+        @NotBlank(message = "Organization name is required")
+        @Size(max = 255, message = "Name must not exceed 255 characters")
         String name,
+
+        @NotBlank(message = "Tax ID is required")
+        @Size(max = 50, message = "Tax ID must not exceed 50 characters")
         String taxId,
+
+        @Size(max = 30, message = "Status must not exceed 30 characters")
         String status,
+
+        @Size(max = 10, message = "Currency must not exceed 10 characters")
         String currency,
+
+        Boolean isActive
+    ) {}
+
+    public record UpdateOrgRequest(
+        Long clientId,
+
+        @Size(max = 255, message = "Name must not exceed 255 characters")
+        String name,
+
+        @Size(max = 50, message = "Tax ID must not exceed 50 characters")
+        String taxId,
+
+        @Size(max = 30, message = "Status must not exceed 30 characters")
+        String status,
+
+        @Size(max = 10, message = "Currency must not exceed 10 characters")
+        String currency,
+
         Boolean isActive
     ) {}
 }

@@ -4,7 +4,9 @@ import com.efiscal.backend.security.AuthorizationService;
 import com.efiscal.backend.service.DemoDataService;
 import com.efiscal.backend.service.OrgService;
 import com.efiscal.backend.service.OrgService.OrgDto;
-import com.efiscal.backend.service.OrgService.OrgRequest;
+import com.efiscal.backend.service.OrgService.CreateOrgRequest;
+import com.efiscal.backend.service.OrgService.UpdateOrgRequest;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -54,7 +56,7 @@ public class OrgController {
     }
 
     @PostMapping
-    public ResponseEntity<?> createOrg(@RequestBody OrgRequest req) {
+    public ResponseEntity<?> createOrg(@Valid @RequestBody CreateOrgRequest req) {
         authorizationService.requireAction("ORGS_MANAGE");
         return ResponseEntity.status(HttpStatus.CREATED).body(
             orgService.createOrg(
@@ -66,7 +68,7 @@ public class OrgController {
     }
 
     @PutMapping("/{orgId}")
-    public ResponseEntity<?> updateOrg(@PathVariable Long orgId, @RequestBody OrgRequest req) {
+    public ResponseEntity<?> updateOrg(@PathVariable Long orgId, @Valid @RequestBody UpdateOrgRequest req) {
         authorizationService.requireAction("ORGS_MANAGE");
         return ResponseEntity.ok(
             orgService.updateOrg(
@@ -90,3 +92,4 @@ public class OrgController {
         return ResponseEntity.ok().build();
     }
 }
+

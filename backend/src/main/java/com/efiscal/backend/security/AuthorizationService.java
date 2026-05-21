@@ -1,5 +1,6 @@
 package com.efiscal.backend.security;
 
+import com.efiscal.backend.model.RoleEntity;
 import com.efiscal.backend.service.DemoDataService;
 import java.util.Arrays;
 import java.util.Optional;
@@ -30,7 +31,7 @@ public class AuthorizationService {
 
     public boolean isSuperAdmin() {
         return getCurrentUser()
-            .map(u -> "SUPERADMIN".equals(u.roleName()))
+            .map(u -> RoleEntity.ROLE_SUPERADMIN.equals(u.roleName()))
             .orElse(false);
     }
 

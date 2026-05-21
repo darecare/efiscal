@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { hasAction, hasAnyAction, isSuperAdmin } from '../utils/permissions'
@@ -10,7 +10,19 @@ export default function ActionProtectedRoute({
   requireSuperAdmin = false,
   fallback = '/account',
 }) {
-  const { user, loading } = useAuth()
+  const { user, loading, showNotification } = useAuth()
+
+  const allowed = !loading && user && (
+    requireSuperAdmin
+      ? isSuperAdmin(user)
+      : (action ? hasAction(user, action) : hasAnyAction(user, actions ?? []))
+  )
+
+  useEffect(() => {
+    if (!loading && user && !allowed) {
+      showNotification('You do not have permission to access this page.', 'error')
+    }
+  }, [loading, user, allowed, showNotification])
 
   if (loading) {
     return <div className="center-state">Loading...</div>
@@ -19,14 +31,6 @@ export default function ActionProtectedRoute({
   if (!user) {
     return <Navigate to="/login" replace />
   }
-
-  if (requireSuperAdmin && !isSuperAdmin(user)) {
-    return <Navigate to={fallback} replace />
-  }
-
-  const allowed = action
-    ? hasAction(user, action)
-    : hasAnyAction(user, actions ?? [])
 
   if (!allowed) {
     return <Navigate to={fallback} replace />

@@ -99,8 +99,8 @@ export default function Roles() {
           name: form.name.trim(),
           description: form.description.trim(),
           isActive: form.isActive,
+          actionIds: form.actionIds,
         })
-        await rolesApi.replaceActions(editRoleId, form.actionIds)
       }
       setShowModal(false)
       fetchData(showInactive)
@@ -160,7 +160,7 @@ export default function Roles() {
                 <th>Name</th>
                 <th>Description</th>
                 <th>Client Scope</th>
-                <th>Permissions Count</th>
+                <th>Permissions</th>
                 <th>Status</th>
                 {canManageRoles && <th>Actions</th>}
               </tr>
@@ -172,7 +172,26 @@ export default function Roles() {
                   <td>{r.name}</td>
                   <td>{r.description}</td>
                   <td>{r.clientId ? clients.find((c) => c.clientId === r.clientId)?.name || r.clientId : 'Global'}</td>
-                  <td>{r.actionIds?.length || 0} actions</td>
+                  <td>
+                    <div className="action-tags-container">
+                      {r.actionIds && r.actionIds.length > 0 ? (
+                        r.actionIds.map(id => {
+                          const action = actions.find(a => a.actionId === id);
+                          return action ? (
+                            <span key={id} className="action-tag" title={action.description}>
+                              {action.name}
+                            </span>
+                          ) : (
+                            <span key={id} className="action-tag">
+                              {id}
+                            </span>
+                          );
+                        })
+                      ) : (
+                        <span className="muted" style={{ fontSize: '0.85rem' }}>None</span>
+                      )}
+                    </div>
+                  </td>
                   <td>
                     <span className={`status-chip ${r.isActive !== false ? 'active' : 'inactive'}`}>
                       {r.isActive !== false ? 'Active' : 'Inactive'}
@@ -266,16 +285,33 @@ export default function Roles() {
                     {Object.entries(groupedActions).map(([module, moduleActions]) => (
                       <div key={module} style={{ background: '#f8f9fa', padding: '12px', borderRadius: '8px', border: '1px solid #eee' }}>
                         <h4 style={{ margin: '0 0 12px 0', fontSize: '0.9rem' }}>{module}</h4>
-                        {moduleActions.map((action) => (
-                          <label key={action.actionId} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={form.actionIds.includes(action.actionId)}
-                              onChange={() => handleActionToggle(action.actionId)}
-                            />
-                            <span style={{ fontSize: '0.9rem' }}>{action.name}</span>
-                          </label>
-                        ))}
+                        {moduleActions.map((action) => {
+                          const userHasPermission = isSuperAdmin || currentUser?.actions?.includes(action.actionCode);
+                          return (
+                            <label
+                              key={action.actionId}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                marginBottom: '8px',
+                                cursor: userHasPermission ? 'pointer' : 'not-allowed',
+                                opacity: userHasPermission ? 1 : 0.5,
+                              }}
+                              title={userHasPermission ? '' : 'You do not possess this permission'}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={form.actionIds.includes(action.actionId)}
+                                disabled={!userHasPermission}
+                                onChange={() => handleActionToggle(action.actionId)}
+                              />
+                              <span style={{ fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                {action.name} {!userHasPermission && <span title="You do not possess this permission" style={{ cursor: 'help' }}>🔒</span>}
+                              </span>
+                            </label>
+                          )
+                        })}
                       </div>
                     ))}
                   </div>

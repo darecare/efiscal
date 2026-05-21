@@ -6,6 +6,10 @@ import com.efiscal.backend.model.RoleEntity;
 import com.efiscal.backend.repository.AppUserRepository;
 import com.efiscal.backend.repository.ClientRepository;
 import com.efiscal.backend.repository.RoleRepository;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -127,8 +131,8 @@ public class UserManagementService {
         if (role.getClient() != null && !role.getClient().getClientId().equals(targetClientId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot assign a role belonging to another client");
         }
-        if ("SUPERADMIN".equals(role.getRoleCode()) && !isSuperAdmin) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only superadmins can assign the SUPERADMIN role");
+        if (RoleEntity.ROLE_SUPERADMIN.equals(role.getRoleCode()) && !isSuperAdmin) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only superadmins can assign the " + RoleEntity.ROLE_SUPERADMIN + " role");
         }
     }
 
@@ -137,11 +141,11 @@ public class UserManagementService {
             u.getUserId(),
             u.getEmail(),
             u.getFullName(),
-            u.getRole().getRoleCode(),
-            u.getRole().getName(),
-            u.getRole().getRoleId(),
-            u.getClient().getClientId(),
-            u.getClient().getName(),
+            u.getRole() != null ? u.getRole().getRoleCode() : null,
+            u.getRole() != null ? u.getRole().getName() : null,
+            u.getRole() != null ? u.getRole().getRoleId() : null,
+            u.getClient() != null ? u.getClient().getClientId() : null,
+            u.getClient() != null ? u.getClient().getName() : null,
             u.getSubscriptionStatus(),
             u.getSubscriptionStartAt(),
             u.getSubscriptionExpiresAt(),
@@ -165,24 +169,47 @@ public class UserManagementService {
     ) {}
 
     public record CreateUserRequest(
+        @NotBlank(message = "Email is required")
+        @Email(message = "Invalid email format")
+        @Size(max = 255, message = "Email must not exceed 255 characters")
         String email,
+
+        @NotBlank(message = "Password is required")
+        @Size(min = 6, max = 100, message = "Password must be between 6 and 100 characters")
         String password,
+
+        @NotBlank(message = "Full name is required")
+        @Size(max = 255, message = "Full name must not exceed 255 characters")
         String fullName,
+
+        @NotNull(message = "Client ID is required")
         Long clientId,
+
+        @NotNull(message = "Role ID is required")
         Long roleId,
+
+        @Size(max = 30, message = "Subscription status must not exceed 30 characters")
         String subscriptionStatus,
+
         OffsetDateTime subscriptionStartAt,
         OffsetDateTime subscriptionExpiresAt
     ) {}
 
     public record UpdateUserRequest(
+        @Size(max = 255, message = "Full name must not exceed 255 characters")
         String fullName,
+
         Long roleId,
         Long clientId,
+
+        @Size(max = 30, message = "Subscription status must not exceed 30 characters")
         String subscriptionStatus,
+
         OffsetDateTime subscriptionStartAt,
         OffsetDateTime subscriptionExpiresAt,
         Boolean isActive,
+
+        @Size(max = 100, message = "Password must not exceed 100 characters")
         String newPassword
     ) {}
 }

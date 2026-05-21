@@ -30,26 +30,28 @@ public class RolePermissionService {
     @Transactional(readOnly = true)
     public List<String> resolveActionCodes(String roleCode) {
         return roleRepository.findByRoleCodeAndClientIsNull(roleCode)
-            .or(() -> roleRepository.findByRoleCode(roleCode))
             .map(role -> resolveActionCodes(role.getRoleId()))
             .orElse(List.of());
     }
 
     @Transactional(readOnly = true)
+    public List<String> resolveActionCodes(String roleCode, Long clientId) {
+        if (clientId == null) {
+            return resolveActionCodes(roleCode);
+        }
+        return roleRepository.findByRoleCodeAndClient_ClientId(roleCode, clientId)
+            .map(role -> resolveActionCodes(role.getRoleId()))
+            .or(() -> roleRepository.findByRoleCodeAndClientIsNull(roleCode)
+                .map(role -> resolveActionCodes(role.getRoleId())))
+            .orElse(List.of());
+    }
+
+    @Transactional(readOnly = true)
     public List<String> resolveActionCodes(Long roleId) {
-        List<RoleActionAccessEntity> accessRows = roleActionAccessRepository.findByRoleId(roleId);
-        if (accessRows.isEmpty()) {
+        if (roleId == null) {
             return List.of();
         }
-        return accessRows.stream()
-            .filter(RoleActionAccessEntity::isAllowed)
-            .map(RoleActionAccessEntity::getActionId)
-            .distinct()
-            .map(actionId -> actionCatalogRepository.findById(actionId).orElse(null))
-            .filter(action -> action != null && action.isActive())
-            .map(ActionCatalogEntity::getActionCode)
-            .sorted()
-            .toList();
+        return roleActionAccessRepository.findActionCodesByRoleId(roleId);
     }
 
     @Transactional(readOnly = true)

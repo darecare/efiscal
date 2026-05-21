@@ -16,6 +16,7 @@ import Taxes from './pages/Taxes'
 import CreateFiscalBill from './pages/CreateFiscalBill'
 import PayTypeMap from './pages/PayTypeMap'
 import Roles from './pages/Roles'
+import Toast from './components/Toast'
 
 function guarded(element, options = {}) {
   return (
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/taxes" element={guarded(<Taxes />, { action: 'ORGS_MANAGE' })} />
         <Route path="*" element={<Navigate to="/orders" replace />} />
       </Routes>
+      <Toast />
     </AuthProvider>
   )
 }

@@ -3,6 +3,10 @@ package com.efiscal.backend.controller;
 import com.efiscal.backend.model.PayTypeMapEntity;
 import com.efiscal.backend.repository.PayTypeMapRepository;
 import com.efiscal.backend.security.AuthorizationService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -32,7 +36,7 @@ public class PayTypeMapController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody PayTypeMapRequest request) {
+    public ResponseEntity<?> create(@Valid @RequestBody PayTypeMapRequest request) {
         authorizationService.requireAction("ORGS_MANAGE");
         Long callerClientId = authorizationService.getClientId();
         if (!authorizationService.isSuperAdmin() && (request.clientId() == null || !request.clientId().equals(callerClientId))) {
@@ -59,7 +63,7 @@ public class PayTypeMapController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody PayTypeMapRequest request) {
+    public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody PayTypeMapRequest request) {
         authorizationService.requireAction("ORGS_MANAGE");
         Long callerClientId = authorizationService.getClientId();
         return payTypeMapRepository.findById(id).map(entity -> {
@@ -93,9 +97,17 @@ public class PayTypeMapController {
     }
 
     public record PayTypeMapRequest(
+            @NotNull(message = "Client ID is required")
             Long clientId,
+
+            @NotBlank(message = "Payment method code is required")
+            @Size(max = 50, message = "Payment method code must not exceed 50 characters")
             String paymentMethodCode,
+
+            @NotNull(message = "Payment type is required")
             Integer paymentType,
+
+            @Size(max = 255, message = "Description must not exceed 255 characters")
             String description) {}
 
     public record ErrorResponse(String message) {}

@@ -44,7 +44,7 @@ public class DataInitializerService implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        RoleEntity superAdminRole = seedRole("SUPERADMIN", "Super Administrator",
+        RoleEntity superAdminRole = seedRole(RoleEntity.ROLE_SUPERADMIN, "Super Administrator",
             "Full unrestricted access across all clients and organizations");
 
         RoleEntity clientAdminRole = seedRole("CLIENT_ADMIN", "Client Administrator",

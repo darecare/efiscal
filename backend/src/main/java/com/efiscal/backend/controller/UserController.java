@@ -5,6 +5,7 @@ import com.efiscal.backend.service.UserManagementService;
 import com.efiscal.backend.service.UserManagementService.CreateUserRequest;
 import com.efiscal.backend.service.UserManagementService.UpdateUserRequest;
 import com.efiscal.backend.service.UserManagementService.UserDto;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -42,7 +43,7 @@ public class UserController {
     }
 
     @PostMapping
-    public ResponseEntity<?> createUser(@RequestBody CreateUserRequest req) {
+    public ResponseEntity<?> createUser(@Valid @RequestBody CreateUserRequest req) {
         authorizationService.requireAction("USERS_MANAGE");
         return ResponseEntity.status(HttpStatus.CREATED).body(
             userManagementService.createUser(
@@ -54,7 +55,7 @@ public class UserController {
     }
 
     @PutMapping("/{userId}")
-    public ResponseEntity<?> updateUser(@PathVariable Long userId, @RequestBody UpdateUserRequest req) {
+    public ResponseEntity<?> updateUser(@PathVariable Long userId, @Valid @RequestBody UpdateUserRequest req) {
         authorizationService.requireAction("USERS_MANAGE");
         return ResponseEntity.ok(
             userManagementService.updateUser(

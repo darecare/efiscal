@@ -5,6 +5,7 @@ import com.efiscal.backend.service.RoleManagementService;
 import com.efiscal.backend.service.RoleManagementService.CreateRoleRequest;
 import com.efiscal.backend.service.RoleManagementService.ReplaceRoleActionsRequest;
 import com.efiscal.backend.service.RoleManagementService.UpdateRoleRequest;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -31,8 +32,11 @@ public class RoleController {
     }
 
     @PostMapping
-    public ResponseEntity<?> createRole(@RequestBody CreateRoleRequest req) {
+    public ResponseEntity<?> createRole(@Valid @RequestBody CreateRoleRequest req) {
         authorizationService.requireAction("ROLES_MANAGE");
+        String callerUserId = authorizationService.getCurrentUser()
+            .map(com.efiscal.backend.service.DemoDataService.AuthenticatedUser::id)
+            .orElse(null);
         java.util.List<String> callerActions = authorizationService.getCurrentUser()
             .map(com.efiscal.backend.service.DemoDataService.AuthenticatedUser::actions)
             .orElse(java.util.List.of());
@@ -40,17 +44,26 @@ public class RoleController {
             req,
             authorizationService.getClientId(),
             authorizationService.isSuperAdmin(),
+            callerUserId,
             callerActions));
     }
 
     @PutMapping("/{roleId}")
-    public ResponseEntity<?> updateRole(@PathVariable Long roleId, @RequestBody UpdateRoleRequest req) {
+    public ResponseEntity<?> updateRole(@PathVariable Long roleId, @Valid @RequestBody UpdateRoleRequest req) {
         authorizationService.requireAction("ROLES_MANAGE");
+        String callerUserId = authorizationService.getCurrentUser()
+            .map(com.efiscal.backend.service.DemoDataService.AuthenticatedUser::id)
+            .orElse(null);
+        java.util.List<String> callerActions = authorizationService.getCurrentUser()
+            .map(com.efiscal.backend.service.DemoDataService.AuthenticatedUser::actions)
+            .orElse(java.util.List.of());
         return ResponseEntity.ok(roleManagementService.updateRole(
             roleId,
             req,
             authorizationService.getClientId(),
-            authorizationService.isSuperAdmin()));
+            authorizationService.isSuperAdmin(),
+            callerUserId,
+            callerActions));
     }
 
     @PutMapping("/{roleId}/actions")
@@ -59,6 +72,9 @@ public class RoleController {
         @RequestBody ReplaceRoleActionsRequest req
     ) {
         authorizationService.requireAction("ROLES_MANAGE");
+        String callerUserId = authorizationService.getCurrentUser()
+            .map(com.efiscal.backend.service.DemoDataService.AuthenticatedUser::id)
+            .orElse(null);
         java.util.List<String> callerActions = authorizationService.getCurrentUser()
             .map(com.efiscal.backend.service.DemoDataService.AuthenticatedUser::actions)
             .orElse(java.util.List.of());
@@ -67,6 +83,7 @@ public class RoleController {
             req,
             authorizationService.getClientId(),
             authorizationService.isSuperAdmin(),
+            callerUserId,
             callerActions));
     }
 }
