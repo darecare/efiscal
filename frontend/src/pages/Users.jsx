@@ -129,8 +129,8 @@ export default function Users() {
           roleId: form.roleId ? Number(form.roleId) : null,
           clientId: form.clientId ? Number(form.clientId) : null,
           subscriptionStatus: form.subscriptionStatus,
-          subscriptionStartAt: form.subscriptionStartAt || null,
-          subscriptionExpiresAt: form.subscriptionExpiresAt || null,
+          subscriptionStartAt: form.subscriptionStartAt ? new Date(form.subscriptionStartAt).toISOString() : null,
+          subscriptionExpiresAt: form.subscriptionExpiresAt ? new Date(form.subscriptionExpiresAt).toISOString() : null,
         })
         setSuccessMsg('User created successfully')
       } else {
@@ -139,8 +139,8 @@ export default function Users() {
           roleId: form.roleId ? Number(form.roleId) : null,
           clientId: form.clientId ? Number(form.clientId) : null,
           subscriptionStatus: form.subscriptionStatus,
-          subscriptionStartAt: form.subscriptionStartAt || null,
-          subscriptionExpiresAt: form.subscriptionExpiresAt || null,
+          subscriptionStartAt: form.subscriptionStartAt ? new Date(form.subscriptionStartAt).toISOString() : null,
+          subscriptionExpiresAt: form.subscriptionExpiresAt ? new Date(form.subscriptionExpiresAt).toISOString() : null,
           isActive: form.isActive,
           newPassword: form.newPassword || null,
         })
