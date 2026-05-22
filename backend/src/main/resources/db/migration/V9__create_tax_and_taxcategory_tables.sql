@@ -8,7 +8,7 @@ CREATE TABLE taxcategory (
     deleted_at     TIMESTAMPTZ
 );
 
-CREATE UNIQUE INDEX uq_taxcategory_name_active ON taxcategory (LOWER(name)) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX uq_taxcategory_name_active ON taxcategory (name) WHERE deleted_at IS NULL;
 
 CREATE TABLE tax (
     tax_id           BIGINT GENERATED ALWAYS AS IDENTITY (START WITH 1000 INCREMENT BY 1) PRIMARY KEY,
@@ -22,5 +22,5 @@ CREATE TABLE tax (
     CONSTRAINT fk_tax_taxcategory FOREIGN KEY (taxcategory_id) REFERENCES taxcategory (taxcategory_id)
 );
 
-CREATE UNIQUE INDEX uq_tax_taxcategory_label_active ON tax (taxcategory_id, UPPER(label)) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX uq_tax_taxcategory_label_active ON tax (taxcategory_id, label) WHERE deleted_at IS NULL;
 CREATE INDEX idx_tax_taxcategory_id ON tax (taxcategory_id);

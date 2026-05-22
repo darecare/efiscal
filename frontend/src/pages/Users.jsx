@@ -262,7 +262,12 @@ export default function Users() {
                   <select value={form.roleId} onChange={(e) => handleChange('roleId', e.target.value)}>
                     <option value="">— Select role —</option>
                     {roles
-                      .filter(r => !r.clientId || (form.clientId && r.clientId === Number(form.clientId)))
+                      .filter(r => {
+                        if (r.roleCode === 'SUPERADMIN' && !isSuperAdmin) {
+                          return false
+                        }
+                        return !r.clientId || (form.clientId && r.clientId === Number(form.clientId))
+                      })
                       .map((r) => (
                       <option key={r.roleId} value={r.roleId}>{r.name}</option>
                     ))}

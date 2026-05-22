@@ -109,6 +109,9 @@ public class RoleManagementService {
             role.setDescription(req.description());
         }
         if (req.isActive() != null) {
+            if (!req.isActive() && role.getClient() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Built-in system roles cannot be deactivated");
+            }
             role.setActive(req.isActive());
         }
         role = roleRepository.save(role);

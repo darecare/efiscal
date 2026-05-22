@@ -39,6 +39,9 @@ public class UserManagementService {
 
     @Transactional(readOnly = true)
     public List<UserDto> listUsers(Long callerClientId, boolean isSuperAdmin) {
+        if (!isSuperAdmin && callerClientId == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: client scope not resolved");
+        }
         List<AppUserEntity> users = isSuperAdmin
             ? userRepository.findAllByDeletedAtIsNull()
             : userRepository.findAllByClientClientIdAndDeletedAtIsNull(callerClientId);

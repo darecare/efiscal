@@ -1,5 +1,6 @@
 package com.efiscal.backend.controller;
 
+import com.efiscal.backend.security.AuthorizationService;
 import com.efiscal.backend.service.DemoDataService;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,13 +12,25 @@ import org.springframework.web.bind.annotation.RestController;
 public class ClientOrgController {
 
     private final DemoDataService demoDataService;
+    private final AuthorizationService authorizationService;
 
-    public ClientOrgController(DemoDataService demoDataService) {
+    public ClientOrgController(DemoDataService demoDataService, AuthorizationService authorizationService) {
         this.demoDataService = demoDataService;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping
     public List<DemoDataService.ClientOrgView> listClientOrgs() {
-        return demoDataService.listClientOrgs();
+        authorizationService.requireAction("ORGS_MANAGE");
+        List<DemoDataService.ClientOrgView> all = demoDataService.listClientOrgs();
+        if (authorizationService.isSuperAdmin()) {
+            return all;
+        }
+        String clientName = authorizationService.getCurrentUser()
+            .map(DemoDataService.AuthenticatedUser::clientName)
+            .orElse("");
+        return all.stream()
+            .filter(org -> org.clientName().equalsIgnoreCase(clientName))
+            .toList();
     }
 }
