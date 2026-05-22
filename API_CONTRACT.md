@@ -70,7 +70,7 @@ Subscription behavior:
 - Request:
 ```json
 {
-  "OrderId": "string",
+  "orderId": "string",
   "customer": {
     "name": "string"
   },
@@ -109,6 +109,21 @@ Subscription behavior:
   "updatedAt": "2026-03-24T10:05:00Z"
 }
 ```
+
+### GET /fiscalbill/{id}/details
+- Description: Get detailed bill data including tax and payment rows.
+- 200 Response: [bill object with items, taxes, and payments]
+
+### POST /fiscalbill/from-order
+- Description: Create fiscal bill from an existing shop order.
+- Request: same as POST /fiscalbill but specifically for order-linked flows.
+
+### POST /fiscalbill/manual
+- Description: Create fiscal bill from manual input.
+- Request: [manual entry payload]
+
+### GET /fiscalbill/status
+- Description: Get overall fiscal status summary for an organization.
 - Errors: `401`, `404`, `500`
 
 ### POST /fiscalbill/{id}/retry
@@ -126,28 +141,16 @@ Subscription behavior:
 
 ## 5. MerchantPro Sync Endpoints
 
-### POST /merchantpro/orders
-- Description: Pull/import orders from MerchantPro API (backend-to-MerchantPro integration).
-- Request:
-```json
-{
-  "filters": {
-    "created_after": "2026-04-01",
-    "shipping_status": "awaiting"
-  },
-  "paging": {
-    "limit": 100,
-    "start": 0
-  },
-  "additionalFilters": {
-    "payment_status": "paid",
-    "payment_method_code": "wire"
-  }
-}
-```
+### GET /merchantpro/orders
+- Description: Pull/import orders from MerchantPro API.
+- Parameters:
+  - orgId: (required)
+  - createdAfter: (ISO date)
+  - shippingStatus: (string)
+  - start: (offset, default 0)
+  - limit: (default 100)
 - Notes:
-  - `filters.created_after` and `filters.shipping_status` are required MVP filter fields.
-  - `additionalFilters` is an extensible map for new provider query parameters.
+  - `createdAfter` and `shippingStatus` are the primary MVP filter fields.
   - Backend resolves and validates allowed filter keys, then maps to provider URL query parameters.
 - 202 Response:
 ```json
@@ -162,36 +165,86 @@ Subscription behavior:
 
 ### GET /roles
 - Description: List roles for active client scope.
-- 200 Response: role list with metadata.
+- 200 Response:
+```json
+[
+  {
+    "roleId": 1000,
+    "roleCode": "RESTRICTED_OPERATOR",
+    "name": "Restricted Operator",
+    "description": "Standard operational access",
+    "clientId": 1001,
+    "actionIds": [1002, 1003]
+  }
+]
+```
 - Errors: `401`, `403`, `500`
 
 ### POST /roles
-- Description: Create new role.
-- Request includes role name/code and active flag.
-- 201 Response: created role object.
-- Errors: `400`, `401`, `403`, `409`, `500`
-
-### PUT /roles/{roleId}
-- Description: Update role metadata.
-- Errors: `400`, `401`, `403`, `404`, `409`, `500`
-
-### GET /actions
-- Description: List available module actions (permission catalog).
-- Query examples: `module=MERCHANTPRO`, `module=FISCAL`.
-- Errors: `401`, `403`, `500`
-
-### PUT /roles/{roleId}/actions
-- Description: Replace or update role action assignments.
+- Description: Create a new custom or global role with assigned actions.
 - Request:
 ```json
 {
-  "actions": [
-    "MERCHANTPRO_FETCH_ORDERS",
-    "FISCAL_CREATE_BILL"
-  ]
+  "roleCode": "CASHIER_ROLE",
+  "name": "Cashier",
+  "description": "Handles daily sales operations",
+  "clientId": 1001,
+  "actionIds": [1000, 1001]
 }
 ```
+- 201 Response:
+```json
+{
+  "roleId": 1004,
+  "roleCode": "CASHIER_ROLE",
+  "name": "Cashier",
+  "description": "Handles daily sales operations",
+  "clientId": 1001,
+  "actionIds": [1000, 1001]
+}
+```
+- Errors: `400`, `401`, `403`, `409`, `500`
+
+### PUT /roles/{roleId}
+- Description: Update role metadata (name, description, active flag).
+- Request:
+```json
+{
+  "name": "Updated Role Name",
+  "description": "Updated description",
+  "isActive": true
+}
+```
+- 200 Response: updated role object (same shape as GET /roles items).
 - Errors: `400`, `401`, `403`, `404`, `500`
+
+### PUT /roles/{roleId}/actions
+- Description: Replace all action assignments for a role.
+- Request:
+```json
+{
+  "actionIds": [1000, 1001, 1002]
+}
+```
+- 200 Response: updated role object including `actionIds`.
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### GET /actions
+- Description: List available module actions (permission catalog).
+- Query: optional `module` filter (e.g. `?module=FISCAL`).
+- 200 Response:
+```json
+[
+  {
+    "actionId": 1000,
+    "moduleCode": "FISCAL",
+    "actionCode": "FISCAL_CREATE_BILL",
+    "name": "Create Fiscal Bill",
+    "description": "Allows submitting new fiscal bills"
+  }
+]
+```
+- Errors: `401`, `403`, `500`
 
 ### PUT /users/{userId}/role
 - Description: Assign role to user.

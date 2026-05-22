@@ -29,23 +29,41 @@ public class ApiConnService {
     }
 
     @Transactional(readOnly = true)
-    public List<ApiConnDto> listConnections(Long orgId) {
-        List<ApiConnEntity> list = orgId != null
-            ? apiConnRepository.findAllByOrgOrgIdAndDeletedAtIsNull(orgId)
-            : apiConnRepository.findAllByDeletedAtIsNull();
-        return list.stream().map(this::toConnDto).toList();
+    public List<ApiConnDto> listConnections(Long orgId, Long callerClientId, boolean isSuperAdmin) {
+        if (orgId != null) {
+            OrgEntity org = orgRepository.findById(orgId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Org not found"));
+            if (!isSuperAdmin && !org.getClient().getClientId().equals(callerClientId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+            }
+            return apiConnRepository.findAllByOrgOrgIdAndDeletedAtIsNull(orgId).stream()
+                .map(this::toConnDto).toList();
+        } else {
+            List<ApiConnEntity> list = isSuperAdmin
+                ? apiConnRepository.findAllByDeletedAtIsNull()
+                : apiConnRepository.findAllByOrgClientClientIdAndDeletedAtIsNull(callerClientId);
+            return list.stream().map(this::toConnDto).toList();
+        }
     }
 
     @Transactional(readOnly = true)
-    public List<ApiTemplateDto> listTemplates(Long apiconnId) {
+    public List<ApiTemplateDto> listTemplates(Long apiconnId, Long callerClientId, boolean isSuperAdmin) {
+        ApiConnEntity conn = apiConnRepository.findById(apiconnId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Connection not found"));
+        if (!isSuperAdmin && !conn.getOrg().getClient().getClientId().equals(callerClientId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
         return apiTemplateRepository.findAllByApiConnApiconnId(apiconnId)
             .stream().map(this::toTemplateDto).toList();
     }
 
     @Transactional
-    public ApiConnDto createConnection(ApiConnRequest req) {
+    public ApiConnDto createConnection(ApiConnRequest req, Long callerClientId, boolean isSuperAdmin) {
         OrgEntity org = orgRepository.findById(req.orgId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Org not found"));
+        if (!isSuperAdmin && !org.getClient().getClientId().equals(callerClientId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
         ApiConnEntity e = new ApiConnEntity();
         e.setOrg(org);
         e.setDisplayName(req.displayName());
@@ -62,12 +80,18 @@ public class ApiConnService {
     }
 
     @Transactional
-    public ApiConnDto updateConnection(Long apiconnId, ApiConnRequest req) {
+    public ApiConnDto updateConnection(Long apiconnId, ApiConnRequest req, Long callerClientId, boolean isSuperAdmin) {
         ApiConnEntity e = apiConnRepository.findById(apiconnId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Connection not found"));
+        if (!isSuperAdmin && !e.getOrg().getClient().getClientId().equals(callerClientId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
         if (req.orgId() != null) {
             OrgEntity org = orgRepository.findById(req.orgId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Org not found"));
+            if (!isSuperAdmin && !org.getClient().getClientId().equals(callerClientId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+            }
             e.setOrg(org);
         }
         if (req.displayName() != null) e.setDisplayName(req.displayName());
@@ -84,9 +108,12 @@ public class ApiConnService {
     }
 
     @Transactional
-    public ApiTemplateDto createTemplate(ApiTemplateRequest req) {
+    public ApiTemplateDto createTemplate(ApiTemplateRequest req, Long callerClientId, boolean isSuperAdmin) {
         ApiConnEntity conn = apiConnRepository.findById(req.apiconnId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Connection not found"));
+        if (!isSuperAdmin && !conn.getOrg().getClient().getClientId().equals(callerClientId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
         ApiTemplateEntity t = new ApiTemplateEntity();
         t.setApiConn(conn);
         t.setOperationKey(req.operationKey());
@@ -98,9 +125,12 @@ public class ApiConnService {
     }
 
     @Transactional
-    public ApiTemplateDto updateTemplate(Long apitemplateId, ApiTemplateRequest req) {
+    public ApiTemplateDto updateTemplate(Long apitemplateId, ApiTemplateRequest req, Long callerClientId, boolean isSuperAdmin) {
         ApiTemplateEntity t = apiTemplateRepository.findById(apitemplateId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Template not found"));
+        if (!isSuperAdmin && !t.getApiConn().getOrg().getClient().getClientId().equals(callerClientId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
         if (req.operationKey() != null) t.setOperationKey(req.operationKey());
         if (req.httpMethod() != null) t.setHttpMethod(req.httpMethod());
         if (req.contentType() != null) t.setContentType(req.contentType());

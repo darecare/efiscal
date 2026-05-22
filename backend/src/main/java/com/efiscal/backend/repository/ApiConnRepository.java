@@ -7,4 +7,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface ApiConnRepository extends JpaRepository<ApiConnEntity, Long> {
     List<ApiConnEntity> findAllByDeletedAtIsNull();
     List<ApiConnEntity> findAllByOrgOrgIdAndDeletedAtIsNull(Long orgId);
+    List<ApiConnEntity> findAllByOrgClientClientIdAndDeletedAtIsNull(Long clientId);
 }

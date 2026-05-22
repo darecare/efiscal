@@ -20,6 +20,7 @@ const emptyForm = {
 export default function Users() {
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
+  const canManageUsers = currentUser?.actions?.includes('USERS_MANAGE') || isSuperAdmin
 
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
@@ -53,7 +54,7 @@ export default function Users() {
       const [usersData, rolesData, clientsData] = await Promise.all([
         usersApi.list(),
         rolesApi.list(),
-        clientsApi.list(),
+        isSuperAdmin ? clientsApi.list() : Promise.resolve([]),
       ])
       setUsers(usersData)
       setRoles(rolesData)
@@ -66,7 +67,10 @@ export default function Users() {
   }
 
   function openAddModal() {
-    setForm(emptyForm)
+    setForm({
+      ...emptyForm,
+      clientId: isSuperAdmin ? '' : (currentUser?.clientId || ''),
+    })
     setFormError(null)
     setModalMode('add')
     setEditUserId(null)
@@ -156,7 +160,7 @@ export default function Users() {
       title="Users"
       subtitle="User accounts with role and subscription management."
       actions={
-        isSuperAdmin && (
+        canManageUsers && (
           <button className="primary-button" onClick={openAddModal}>
             Add User
           </button>
@@ -183,7 +187,7 @@ export default function Users() {
                 <th>Role</th>
                 <th>Subscription</th>
                 <th>Active</th>
-                {isSuperAdmin && <th>Actions</th>}
+                {canManageUsers && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -203,7 +207,7 @@ export default function Users() {
                       {u.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  {isSuperAdmin && (
+                  {canManageUsers && (
                     <td>
                       <button className="secondary-button" onClick={() => openEditModal(u)}>
                         Edit
@@ -257,18 +261,35 @@ export default function Users() {
                   <label>Role</label>
                   <select value={form.roleId} onChange={(e) => handleChange('roleId', e.target.value)}>
                     <option value="">— Select role —</option>
-                    {roles.map((r) => (
+                    {roles
+                      .filter(r => {
+                        if (r.roleCode === 'SUPERADMIN' && !isSuperAdmin) {
+                          return false
+                        }
+                        return !r.clientId || (form.clientId && r.clientId === Number(form.clientId))
+                      })
+                      .map((r) => (
                       <option key={r.roleId} value={r.roleId}>{r.name}</option>
                     ))}
                   </select>
                 </div>
                 <div className="field">
                   <label>Client</label>
-                  <select value={form.clientId} onChange={(e) => handleChange('clientId', e.target.value)}>
-                    <option value="">— Select client —</option>
-                    {clients.map((c) => (
-                      <option key={c.clientId} value={c.clientId}>{c.name}</option>
-                    ))}
+                  <select
+                    value={form.clientId}
+                    onChange={(e) => handleChange('clientId', e.target.value)}
+                    disabled={!isSuperAdmin}
+                  >
+                    {isSuperAdmin ? (
+                      <>
+                        <option value="">— Select client —</option>
+                        {clients.map((c) => (
+                          <option key={c.clientId} value={c.clientId}>{c.name}</option>
+                        ))}
+                      </>
+                    ) : (
+                      <option value={currentUser?.clientId || ''}>{currentUser?.clientName || 'My Client'}</option>
+                    )}
                   </select>
                 </div>
                 <div className="field">

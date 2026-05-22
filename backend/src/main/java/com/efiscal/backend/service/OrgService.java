@@ -8,6 +8,9 @@ import com.efiscal.backend.repository.ClientRepository;
 import com.efiscal.backend.repository.OrgPayTypeRepository;
 import com.efiscal.backend.repository.OrgRepository;
 import com.efiscal.backend.repository.UserOrgAccessRepository;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -35,7 +38,14 @@ public class OrgService {
     }
 
     @Transactional(readOnly = true)
-    public List<OrgDto> listOrgs(Long clientId) {
+    public List<OrgDto> listOrgs(Long clientId, Long callerClientId, boolean isSuperAdmin) {
+        if (!isSuperAdmin) {
+            if (callerClientId == null) {
+                return List.of();
+            }
+            return orgRepository.findAllByClientClientIdAndDeletedAtIsNull(callerClientId)
+                .stream().map(this::toDto).toList();
+        }
         List<OrgEntity> entities = clientId != null
             ? orgRepository.findAllByClientClientIdAndDeletedAtIsNull(clientId)
             : orgRepository.findAllByDeletedAtIsNull();
@@ -43,14 +53,23 @@ public class OrgService {
     }
 
     @Transactional(readOnly = true)
-    public OrgDto getOrg(Long orgId) {
-        return orgRepository.findById(orgId)
-            .map(this::toDto)
+    public OrgDto getOrg(Long orgId, Long callerClientId, boolean isSuperAdmin) {
+        OrgEntity org = orgRepository.findById(orgId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
+        if (!isSuperAdmin && !org.getClient().getClientId().equals(callerClientId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        return toDto(org);
     }
 
     @Transactional
-    public OrgDto createOrg(OrgRequest req) {
+    public OrgDto createOrg(CreateOrgRequest req, Long callerClientId, boolean isSuperAdmin) {
+        if (!isSuperAdmin && (req.clientId() == null || !req.clientId().equals(callerClientId))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        if (req.clientId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Client ID must not be null");
+        }
         ClientEntity client = clientRepository.findById(req.clientId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Client not found"));
 
@@ -65,11 +84,18 @@ public class OrgService {
     }
 
     @Transactional
-    public OrgDto updateOrg(Long orgId, OrgRequest req) {
+    public OrgDto updateOrg(Long orgId, UpdateOrgRequest req, Long callerClientId, boolean isSuperAdmin) {
         OrgEntity org = orgRepository.findById(orgId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
 
+        if (!isSuperAdmin && !org.getClient().getClientId().equals(callerClientId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+
         if (req.clientId() != null) {
+            if (!isSuperAdmin && !req.clientId().equals(callerClientId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot assign organization to another client");
+            }
             ClientEntity client = clientRepository.findById(req.clientId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Client not found"));
             org.setClient(client);
@@ -85,7 +111,7 @@ public class OrgService {
     @Transactional(readOnly = true)
     public List<OrgDto> listMyOrgs(String email, boolean isSuperAdmin) {
         if (isSuperAdmin) {
-            return listOrgs(null);
+            return orgRepository.findAllByDeletedAtIsNull().stream().map(this::toDto).toList();
         }
         return appUserRepository.findByEmail(email)
             .map(user -> userOrgAccessRepository.findAllByIdUserId(user.getUserId())
@@ -149,12 +175,42 @@ public class OrgService {
         OffsetDateTime createdAt
     ) {}
 
-    public record OrgRequest(
+    public record CreateOrgRequest(
+        @NotNull(message = "Client ID is required")
         Long clientId,
+
+        @NotBlank(message = "Organization name is required")
+        @Size(max = 255, message = "Name must not exceed 255 characters")
         String name,
+
+        @NotBlank(message = "Tax ID is required")
+        @Size(max = 50, message = "Tax ID must not exceed 50 characters")
         String taxId,
+
+        @Size(max = 30, message = "Status must not exceed 30 characters")
         String status,
+
+        @Size(max = 10, message = "Currency must not exceed 10 characters")
         String currency,
+
+        Boolean isActive
+    ) {}
+
+    public record UpdateOrgRequest(
+        Long clientId,
+
+        @Size(max = 255, message = "Name must not exceed 255 characters")
+        String name,
+
+        @Size(max = 50, message = "Tax ID must not exceed 50 characters")
+        String taxId,
+
+        @Size(max = 30, message = "Status must not exceed 30 characters")
+        String status,
+
+        @Size(max = 10, message = "Currency must not exceed 10 characters")
+        String currency,
+
         Boolean isActive
     ) {}
 }

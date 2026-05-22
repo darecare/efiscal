@@ -1,0 +1,26 @@
+---
+description: External API integration patterns
+globs: backend/src/main/java/com/efiscal/backend/service/**/*.java
+alwaysApply: false
+---
+
+# External Integrations
+
+## Extensibility
+- Dynamic configuration via database (`apiconn` and `apitemplate` tables) instead of hardcoding endpoints
+- Support flexible parameterization (e.g., query params for MerchantPro orders)
+
+## Resilience & Operational Rules
+- External API calls MUST use timeouts
+- Implement safe retries with exponential backoff for transient failures (especially Tax Authority API)
+- Use circuit breakers for downstream provider instability
+- Always log requests with a Correlation ID
+
+## Security
+- Never log raw secrets or API keys in plain text
+- Keys/passwords configured in `apiconn` should be securely managed
+- Tax Authority communication uses mTLS (certificates) configured in `apiconn`
+
+## Domain Specifics
+- **MerchantPro**: Primary source of Orders and Products. Uses Basic/API Key auth.
+- **Tax Authority (eFiscal)**: Target for fiscal bills. Requires strict adherence to request formats (Invoice types: Normal, Advance, Refund, etc.). Implements specific logic for chained documents (e.g., Advance Refund before Normal Sale).

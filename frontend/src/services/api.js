@@ -93,8 +93,28 @@ export const orgsApi = {
 }
 
 export const rolesApi = {
-  async list() {
-    const response = await api.get('/roles')
+  async list(includeInactive = false) {
+    const response = await api.get('/roles', { params: { includeInactive } })
+    return response.data
+  },
+  async create(payload) {
+    const response = await api.post('/roles', payload)
+    return response.data
+  },
+  async update(roleId, payload) {
+    const response = await api.put(`/roles/${roleId}`, payload)
+    return response.data
+  },
+  async replaceActions(roleId, actionIds) {
+    const response = await api.put(`/roles/${roleId}/actions`, { actionIds })
+    return response.data
+  },
+}
+
+export const actionsApi = {
+  async list(module) {
+    const params = module ? { module } : {}
+    const response = await api.get('/actions', { params })
     return response.data
   },
 }

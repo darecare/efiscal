@@ -1,0 +1,33 @@
+---
+description: Backend API conventions (Spring Boot, auth, error handling)
+globs: backend/src/main/java/**/*.java
+alwaysApply: false
+---
+
+# Backend API Conventions
+
+## Structure
+- Controllers in `com.efiscal.backend.controller`
+- Business logic in `com.efiscal.backend.service`
+- JPA Entities in `com.efiscal.backend.model`
+- Repositories in `com.efiscal.backend.repository`
+- Config & Security in `com.efiscal.backend.config` and `com.efiscal.backend.security`
+
+## Authentication
+- Most endpoints require JWT Bearer token via `BearerTokenFilter`
+- Use Spring Security annotations or filter logic for protected routes
+- Granular Role-Based Access Control (RBAC): Enforce action-based permissions (e.g. `FISCAL_CREATE_BILL`) and client/organization scope bounds.
+
+## Error Responses
+- Adhere to the API Error Model defined in `API_CONTRACT.md`
+- Use consistent HTTP status codes:
+  - 400: Validation/Bad Request
+  - 401: Unauthorized (Invalid/missing token)
+  - 403: Forbidden (Missing role/scope or expired subscription)
+  - 404: Resource not found
+  - 500: Internal server error
+
+## Patterns
+- DTO pattern for request/response bodies (do not expose internal entities directly to controllers)
+- Password hashing: BCryptPasswordEncoder
+- Idempotency-Key support required for mutating fiscal endpoints to avoid duplicate submissions

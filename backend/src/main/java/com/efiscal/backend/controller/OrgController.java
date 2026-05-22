@@ -1,9 +1,12 @@
 package com.efiscal.backend.controller;
 
+import com.efiscal.backend.security.AuthorizationService;
 import com.efiscal.backend.service.DemoDataService;
 import com.efiscal.backend.service.OrgService;
 import com.efiscal.backend.service.OrgService.OrgDto;
-import com.efiscal.backend.service.OrgService.OrgRequest;
+import com.efiscal.backend.service.OrgService.CreateOrgRequest;
+import com.efiscal.backend.service.OrgService.UpdateOrgRequest;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,14 +18,21 @@ import org.springframework.web.bind.annotation.*;
 public class OrgController {
 
     private final OrgService orgService;
+    private final AuthorizationService authorizationService;
 
-    public OrgController(OrgService orgService) {
+    public OrgController(OrgService orgService, AuthorizationService authorizationService) {
         this.orgService = orgService;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping
     public List<OrgDto> listOrgs(@RequestParam(required = false) Long clientId) {
-        return orgService.listOrgs(clientId);
+        authorizationService.requireAction("ORGS_MANAGE");
+        return orgService.listOrgs(
+            clientId,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()
+        );
     }
 
     @GetMapping("/my-access")
@@ -31,29 +41,43 @@ public class OrgController {
         if (auth == null || !(auth.getPrincipal() instanceof DemoDataService.AuthenticatedUser u)) {
             return List.of();
         }
-        boolean isSuperAdmin = "SUPERADMIN".equals(u.roleName());
+        boolean isSuperAdmin = authorizationService.isSuperAdmin();
         return orgService.listMyOrgs(u.email(), isSuperAdmin);
     }
 
     @GetMapping("/{orgId}")
     public OrgDto getOrg(@PathVariable Long orgId) {
-        return orgService.getOrg(orgId);
+        authorizationService.requireAction("ORGS_MANAGE");
+        return orgService.getOrg(
+            orgId,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()
+        );
     }
 
     @PostMapping
-    public ResponseEntity<?> createOrg(@RequestBody OrgRequest req) {
-        if (!isSuperAdmin()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Superadmin access required");
-        }
-        return ResponseEntity.status(HttpStatus.CREATED).body(orgService.createOrg(req));
+    public ResponseEntity<?> createOrg(@Valid @RequestBody CreateOrgRequest req) {
+        authorizationService.requireAction("ORGS_MANAGE");
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+            orgService.createOrg(
+                req,
+                authorizationService.getClientId(),
+                authorizationService.isSuperAdmin()
+            )
+        );
     }
 
     @PutMapping("/{orgId}")
-    public ResponseEntity<?> updateOrg(@PathVariable Long orgId, @RequestBody OrgRequest req) {
-        if (!isSuperAdmin()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Superadmin access required");
-        }
-        return ResponseEntity.ok(orgService.updateOrg(orgId, req));
+    public ResponseEntity<?> updateOrg(@PathVariable Long orgId, @Valid @RequestBody UpdateOrgRequest req) {
+        authorizationService.requireAction("ORGS_MANAGE");
+        return ResponseEntity.ok(
+            orgService.updateOrg(
+                orgId,
+                req,
+                authorizationService.getClientId(),
+                authorizationService.isSuperAdmin()
+            )
+        );
     }
 
     @GetMapping("/{orgId}/payment-types")
@@ -63,20 +87,9 @@ public class OrgController {
 
     @PostMapping("/{orgId}/payment-types")
     public ResponseEntity<?> setOrgPaymentTypes(@PathVariable Long orgId, @RequestBody List<Integer> paymentTypes) {
-        if (!isSuperAdmin()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Superadmin access required");
-        }
+        authorizationService.requireSuperAdmin();
         orgService.setOrgPaymentTypes(orgId, paymentTypes);
         return ResponseEntity.ok().build();
     }
-
-    private boolean isSuperAdmin() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null) return false;
-        Object principal = auth.getPrincipal();
-        if (principal instanceof DemoDataService.AuthenticatedUser u) {
-            return "SUPERADMIN".equals(u.roleName());
-        }
-        return false;
-    }
 }
+
