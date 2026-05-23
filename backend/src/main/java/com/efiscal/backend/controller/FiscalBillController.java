@@ -41,17 +41,7 @@ public class FiscalBillController {
     }
 
     private void validateOrg(Long orgId) {
-        if (orgId == null) {
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "orgId is required");
-        }
-        if (authorizationService.isSuperAdmin()) {
-            return;
-        }
-        com.efiscal.backend.model.OrgEntity org = orgRepository.findById(orgId)
-            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
-        if (!org.getClient().getClientId().equals(authorizationService.getClientId())) {
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
+        authorizationService.requireOrgAccess(orgId);
     }
 
     private void validateFiscalBill(Long fiscalBillId) {
@@ -63,11 +53,7 @@ public class FiscalBillController {
         }
         com.efiscal.backend.model.FiscalBillEntity bill = fiscalBillRepository.findById(fiscalBillId)
             .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Fiscal bill not found"));
-        com.efiscal.backend.model.OrgEntity org = orgRepository.findById(bill.getOrgId())
-            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
-        if (!org.getClient().getClientId().equals(authorizationService.getClientId())) {
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
+        authorizationService.requireOrgAccess(bill.getOrgId());
     }
 
     /** GET /api/v1/fiscalbill/status?orgId=N — Tax Authority status */

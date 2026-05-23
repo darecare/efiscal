@@ -18,6 +18,11 @@ export default function Roles() {
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('add')
   const [editRoleId, setEditRoleId] = useState(null)
+  
+  const [deleteRoleModalOpen, setDeleteRoleModalOpen] = useState(false)
+  const [roleToDelete, setRoleToDelete] = useState(null)
+  const [reassignToRoleId, setReassignToRoleId] = useState('')
+  const [deletingRole, setDeletingRole] = useState(false)
   const [form, setForm] = useState({
     roleCode: '',
     name: '',
@@ -106,6 +111,34 @@ export default function Roles() {
       fetchData(showInactive)
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save role')
+    }
+  }
+
+  function handleDeleteClick(role) {
+    if (role.roleCode === 'SUPERADMIN') {
+      setError('Cannot delete SUPERADMIN role')
+      return
+    }
+    if (!role.clientId && !isSuperAdmin) {
+      setError('Only superadmins can delete global roles')
+      return
+    }
+    setRoleToDelete(role)
+    setReassignToRoleId('')
+    setDeleteRoleModalOpen(true)
+  }
+
+  async function handleConfirmDelete() {
+    try {
+      setDeletingRole(true)
+      setError('')
+      await rolesApi.remove(roleToDelete.roleId, reassignToRoleId ? Number(reassignToRoleId) : undefined)
+      setDeleteRoleModalOpen(false)
+      fetchData(showInactive)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete role')
+    } finally {
+      setDeletingRole(false)
     }
   }
 
@@ -198,9 +231,12 @@ export default function Roles() {
                     </span>
                   </td>
                   {canManageRoles && (
-                    <td>
+                    <td style={{ display: 'flex', gap: '8px' }}>
                       <button className="secondary-button" onClick={() => openEditModal(r)}>
                         Edit
+                      </button>
+                      <button className="secondary-button" style={{ color: 'var(--danger-color, red)' }} onClick={() => handleDeleteClick(r)}>
+                        Delete
                       </button>
                     </td>
                   )}
@@ -326,6 +362,40 @@ export default function Roles() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteRoleModalOpen && roleToDelete && (
+        <div className="modal-overlay" onClick={() => setDeleteRoleModalOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Delete Role: {roleToDelete.name}</h3>
+              <button type="button" className="modal-close" onClick={() => setDeleteRoleModalOpen(false)}>✕</button>
+            </div>
+            <div style={{ padding: '16px' }}>
+              <p>Are you sure you want to delete this role?</p>
+              <div className="field" style={{ marginTop: '16px' }}>
+                <label>If this role is assigned to users, select a new role to reassign them to:</label>
+                <select value={reassignToRoleId} onChange={(e) => setReassignToRoleId(e.target.value)}>
+                  <option value="">— Skip Reassign —</option>
+                  {roles
+                    .filter(r => r.roleId !== roleToDelete.roleId && (r.clientId === roleToDelete.clientId || !r.clientId))
+                    .map(r => (
+                      <option key={r.roleId} value={r.roleId}>{r.name}</option>
+                  ))}
+                </select>
+                <p className="muted" style={{ fontSize: '0.8rem', marginTop: '4px' }}>
+                  If users are assigned and you skip reassigning, the deletion will fail.
+                </p>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={() => setDeleteRoleModalOpen(false)}>Cancel</button>
+              <button type="button" className="primary-button" style={{ background: 'var(--danger-color, #dc3545)', borderColor: 'var(--danger-color, #dc3545)' }} onClick={handleConfirmDelete} disabled={deletingRole}>
+                {deletingRole ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

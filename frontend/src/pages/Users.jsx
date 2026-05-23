@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import AppShell from '../components/AppShell'
-import { usersApi, rolesApi, clientsApi } from '../services/api'
+import { usersApi, rolesApi, clientsApi, orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const SUBSCRIPTION_STATUSES = ['ACTIVE', 'EXPIRED', 'SUSPENDED']
@@ -15,6 +15,7 @@ const emptyForm = {
   subscriptionExpiresAt: '',
   isActive: true,
   newPassword: '',
+  orgIds: [],
 }
 
 export default function Users() {
@@ -25,6 +26,8 @@ export default function Users() {
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
   const [clients, setClients] = useState([])
+  const [allOrgs, setAllOrgs] = useState([])
+  const [clientOrgs, setClientOrgs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [successMsg, setSuccessMsg] = useState(null)
@@ -41,6 +44,16 @@ export default function Users() {
   }, [])
 
   useEffect(() => {
+    if (form.clientId) {
+      orgsApi.list(form.clientId)
+        .then(setClientOrgs)
+        .catch(() => setClientOrgs([]))
+    } else {
+      setClientOrgs([])
+    }
+  }, [form.clientId])
+
+  useEffect(() => {
     if (successMsg) {
       const t = setTimeout(() => setSuccessMsg(null), 4000)
       return () => clearTimeout(t)
@@ -51,14 +64,16 @@ export default function Users() {
     try {
       setLoading(true)
       setError(null)
-      const [usersData, rolesData, clientsData] = await Promise.all([
+      const [usersData, rolesData, clientsData, orgsData] = await Promise.all([
         usersApi.list(),
         rolesApi.list(),
         isSuperAdmin ? clientsApi.list() : Promise.resolve([]),
+        orgsApi.list(),
       ])
       setUsers(usersData)
       setRoles(rolesData)
       setClients(clientsData)
+      setAllOrgs(orgsData)
     } catch (err) {
       setError('Failed to load users')
     } finally {
@@ -88,6 +103,7 @@ export default function Users() {
       subscriptionExpiresAt: u.subscriptionExpiresAt ? u.subscriptionExpiresAt.slice(0, 10) : '',
       isActive: u.isActive,
       newPassword: '',
+      orgIds: u.orgIds || [],
     })
     setFormError(null)
     setModalMode('edit')
@@ -131,6 +147,7 @@ export default function Users() {
           subscriptionStatus: form.subscriptionStatus,
           subscriptionStartAt: form.subscriptionStartAt ? new Date(form.subscriptionStartAt).toISOString() : null,
           subscriptionExpiresAt: form.subscriptionExpiresAt ? new Date(form.subscriptionExpiresAt).toISOString() : null,
+          orgIds: form.orgIds,
         })
         setSuccessMsg('User created successfully')
       } else {
@@ -143,6 +160,7 @@ export default function Users() {
           subscriptionExpiresAt: form.subscriptionExpiresAt ? new Date(form.subscriptionExpiresAt).toISOString() : null,
           isActive: form.isActive,
           newPassword: form.newPassword || null,
+          orgIds: form.orgIds,
         })
         setSuccessMsg('User updated successfully')
       }
@@ -152,6 +170,17 @@ export default function Users() {
       setFormError(err.response?.data?.message || err.response?.data || 'Operation failed')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleDelete(u) {
+    if (!window.confirm(`Are you sure you want to delete user ${u.fullName}?`)) return
+    try {
+      await usersApi.remove(u.userId)
+      setSuccessMsg('User deleted successfully')
+      loadAll()
+    } catch (err) {
+      setError(err.response?.data?.message || err.response?.data || 'Delete failed')
     }
   }
 
@@ -195,7 +224,17 @@ export default function Users() {
                 <tr key={u.userId}>
                   <td>{u.fullName}</td>
                   <td>{u.email}</td>
-                  <td>{u.clientName}</td>
+                  <td>
+                    <div>{u.clientName}</div>
+                    {u.orgIds && u.orgIds.length > 0 && (
+                      <div className="muted" style={{ fontSize: '0.75rem', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {u.orgIds.map(oid => {
+                          const o = allOrgs.find(org => org.orgId === oid)
+                          return o ? <span key={oid} className="action-tag" style={{ fontSize: '0.7rem', padding: '2px 4px' }}>{o.name}</span> : null
+                        })}
+                      </div>
+                    )}
+                  </td>
                   <td>{u.roleName}</td>
                   <td>
                     <span className={`status-chip ${(u.subscriptionStatus || '').toLowerCase()}`}>
@@ -208,10 +247,19 @@ export default function Users() {
                     </span>
                   </td>
                   {canManageUsers && (
-                    <td>
+                    <td style={{ display: 'flex', gap: '8px' }}>
                       <button className="secondary-button" onClick={() => openEditModal(u)}>
                         Edit
                       </button>
+                      {String(u.userId) !== String(currentUser?.id) ? (
+                        <button className="secondary-button" style={{ color: 'var(--danger-color, red)' }} onClick={() => handleDelete(u)}>
+                          Delete
+                        </button>
+                      ) : (
+                        <button className="secondary-button" disabled title="Cannot delete your own account" style={{ opacity: 0.5, cursor: 'not-allowed' }}>
+                          Delete
+                        </button>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -291,6 +339,36 @@ export default function Users() {
                       <option value={currentUser?.clientId || ''}>{currentUser?.clientName || 'My Client'}</option>
                     )}
                   </select>
+                </div>
+                <div className="field" style={{ gridColumn: '1 / -1' }}>
+                  <label>Organization Access</label>
+                  {clientOrgs.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px', marginTop: '6px' }}>
+                      {clientOrgs.map((org) => (
+                        <label key={org.orgId} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={form.orgIds.includes(org.orgId)}
+                            onChange={(e) => {
+                              const val = org.orgId
+                              setForm(prev => {
+                                const isChecked = prev.orgIds.includes(val)
+                                return {
+                                  ...prev,
+                                  orgIds: isChecked
+                                    ? prev.orgIds.filter(id => id !== val)
+                                    : [...prev.orgIds, val]
+                                }
+                              })
+                            }}
+                          />
+                          <span style={{ fontSize: '0.9rem' }}>{org.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted" style={{ fontSize: '0.85rem', marginTop: '4px' }}>No organizations found for this client.</p>
+                  )}
                 </div>
                 <div className="field">
                   <label>Subscription Status</label>

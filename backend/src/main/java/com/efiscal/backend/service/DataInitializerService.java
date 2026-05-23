@@ -3,14 +3,19 @@ package com.efiscal.backend.service;
 import com.efiscal.backend.model.ActionCatalogEntity;
 import com.efiscal.backend.model.AppUserEntity;
 import com.efiscal.backend.model.ClientEntity;
+import com.efiscal.backend.model.OrgEntity;
 import com.efiscal.backend.model.RoleActionAccessEntity;
 import com.efiscal.backend.model.RoleActionAccessId;
 import com.efiscal.backend.model.RoleEntity;
+import com.efiscal.backend.model.UserOrgAccessEntity;
+import com.efiscal.backend.model.UserOrgAccessId;
 import com.efiscal.backend.repository.ActionCatalogRepository;
 import com.efiscal.backend.repository.AppUserRepository;
 import com.efiscal.backend.repository.ClientRepository;
+import com.efiscal.backend.repository.OrgRepository;
 import com.efiscal.backend.repository.RoleActionAccessRepository;
 import com.efiscal.backend.repository.RoleRepository;
+import com.efiscal.backend.repository.UserOrgAccessRepository;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -36,6 +41,8 @@ public class DataInitializerService implements CommandLineRunner {
     private final AppUserRepository appUserRepository;
     private final ActionCatalogRepository actionCatalogRepository;
     private final RoleActionAccessRepository roleActionAccessRepository;
+    private final OrgRepository orgRepository;
+    private final UserOrgAccessRepository userOrgAccessRepository;
     private final BCryptPasswordEncoder passwordEncoder;
 
     public DataInitializerService(
@@ -43,13 +50,17 @@ public class DataInitializerService implements CommandLineRunner {
         ClientRepository clientRepository,
         AppUserRepository appUserRepository,
         ActionCatalogRepository actionCatalogRepository,
-        RoleActionAccessRepository roleActionAccessRepository
+        RoleActionAccessRepository roleActionAccessRepository,
+        OrgRepository orgRepository,
+        UserOrgAccessRepository userOrgAccessRepository
     ) {
         this.roleRepository = roleRepository;
         this.clientRepository = clientRepository;
         this.appUserRepository = appUserRepository;
         this.actionCatalogRepository = actionCatalogRepository;
         this.roleActionAccessRepository = roleActionAccessRepository;
+        this.orgRepository = orgRepository;
+        this.userOrgAccessRepository = userOrgAccessRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -84,8 +95,18 @@ public class DataInitializerService implements CommandLineRunner {
         ClientEntity globalClient = seedClient("Global", "ACTIVE", "RSD");
         ClientEntity acmeClient = seedClient("Acme Retail", "ACTIVE", "RSD");
 
-        seedAdminUser(globalClient, superAdminRole);
-        seedOpsUser(acmeClient, clientAdminRole);
+        AppUserEntity adminUser = seedAdminUser(globalClient, superAdminRole);
+        AppUserEntity opsUser = seedOpsUser(acmeClient, clientAdminRole);
+
+        // Seed organizations for Acme Retail
+        OrgEntity acmeHq = seedOrg(acmeClient, "Acme HQ", "123456789");
+        OrgEntity acmeWeb = seedOrg(acmeClient, "Acme Webshop", "987654321");
+
+        // Seed organization access for Acme Retail operations user
+        if (opsUser != null) {
+            seedUserOrgAccess(opsUser, acmeHq);
+            seedUserOrgAccess(opsUser, acmeWeb);
+        }
     }
 
     private RoleEntity seedRole(String roleCode, String name, String description) {
@@ -114,8 +135,8 @@ public class DataInitializerService implements CommandLineRunner {
         });
     }
 
-    private void seedAdminUser(ClientEntity client, RoleEntity role) {
-        if (!appUserRepository.existsByEmail("admin@efiscal.local")) {
+    private AppUserEntity seedAdminUser(ClientEntity client, RoleEntity role) {
+        return appUserRepository.findByEmail("admin@efiscal.local").orElseGet(() -> {
             AppUserEntity admin = new AppUserEntity();
             admin.setEmail("admin@efiscal.local");
             admin.setPasswordHash(passwordEncoder.encode("Admin123!"));
@@ -124,13 +145,14 @@ public class DataInitializerService implements CommandLineRunner {
             admin.setRole(role);
             admin.setSubscriptionStatus("ACTIVE");
             admin.setActive(true);
-            appUserRepository.save(admin);
+            AppUserEntity saved = appUserRepository.save(admin);
             log.info("Seeded admin user: admin@efiscal.local");
-        }
+            return saved;
+        });
     }
 
-    private void seedOpsUser(ClientEntity client, RoleEntity role) {
-        if (!appUserRepository.existsByEmail("ops@acme.rs")) {
+    private AppUserEntity seedOpsUser(ClientEntity client, RoleEntity role) {
+        return appUserRepository.findByEmail("ops@acme.rs").orElseGet(() -> {
             AppUserEntity ops = new AppUserEntity();
             ops.setEmail("ops@acme.rs");
             ops.setPasswordHash(passwordEncoder.encode("Ops123!"));
@@ -142,9 +164,10 @@ public class DataInitializerService implements CommandLineRunner {
             ops.setSubscriptionExpiresAt(
                 LocalDate.now().plusMonths(6).atStartOfDay().atOffset(ZoneOffset.UTC));
             ops.setActive(true);
-            appUserRepository.save(ops);
+            AppUserEntity saved = appUserRepository.save(ops);
             log.info("Seeded ops user: ops@acme.rs");
-        }
+            return saved;
+        });
     }
 
     private void seedActions() {
@@ -183,6 +206,37 @@ public class DataInitializerService implements CommandLineRunner {
                     log.info("Seeded role action access: {} -> {}", role.getRoleCode(), code);
                 }
             });
+        }
+    }
+
+    private OrgEntity seedOrg(ClientEntity client, String name, String taxId) {
+        return orgRepository.findAllByClientClientIdAndDeletedAtIsNull(client.getClientId()).stream()
+            .filter(o -> o.getName().equalsIgnoreCase(name))
+            .findFirst()
+            .orElseGet(() -> {
+                OrgEntity org = new OrgEntity();
+                org.setClient(client);
+                org.setName(name);
+                org.setTaxId(taxId);
+                org.setStatus("ACTIVE");
+                org.setCurrency("RSD");
+                org.setActive(true);
+                OrgEntity saved = orgRepository.save(org);
+                log.info("Seeded org: {}", name);
+                return saved;
+            });
+    }
+
+    private void seedUserOrgAccess(AppUserEntity user, OrgEntity org) {
+        UserOrgAccessId id = new UserOrgAccessId(user.getUserId(), org.getOrgId());
+        if (userOrgAccessRepository.findById(id).isEmpty()) {
+            UserOrgAccessEntity access = new UserOrgAccessEntity();
+            access.setId(id);
+            access.setUser(user);
+            access.setOrg(org);
+            access.setActive(true);
+            userOrgAccessRepository.save(access);
+            log.info("Seeded user organization access: {} -> {}", user.getEmail(), org.getName());
         }
     }
 }

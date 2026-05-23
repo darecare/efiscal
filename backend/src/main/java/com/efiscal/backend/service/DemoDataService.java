@@ -3,6 +3,7 @@ package com.efiscal.backend.service;
 import com.efiscal.backend.model.AppUserEntity;
 import com.efiscal.backend.repository.AppUserRepository;
 import com.efiscal.backend.repository.ClientRepository;
+import com.efiscal.backend.repository.UserOrgAccessRepository;
 import com.efiscal.backend.security.RolePermissionService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -24,6 +25,7 @@ public class DemoDataService {
     private final AppUserRepository appUserRepository;
     private final ClientRepository clientRepository;
     private final RolePermissionService rolePermissionService;
+    private final UserOrgAccessRepository userOrgAccessRepository;
     private final Map<String, UserAccount> usersByEmail = new ConcurrentHashMap<>();
     private final Map<String, AuthenticatedUser> sessionsByToken = new ConcurrentHashMap<>();
     private final Map<String, FiscalBillView> fiscalBillsById = new ConcurrentHashMap<>();
@@ -32,16 +34,18 @@ public class DemoDataService {
     private final List<ApiConnectionView> apiConnections;
     private final List<ApiTemplateView> apiTemplates;
     private final List<OrderView> orders;
-
+ 
     public DemoDataService(
         AppUserRepository appUserRepository,
         ClientRepository clientRepository,
-        RolePermissionService rolePermissionService
+        RolePermissionService rolePermissionService,
+        UserOrgAccessRepository userOrgAccessRepository
     ) {
         this.passwordEncoder = new BCryptPasswordEncoder();
         this.appUserRepository = appUserRepository;
         this.clientRepository = clientRepository;
         this.rolePermissionService = rolePermissionService;
+        this.userOrgAccessRepository = userOrgAccessRepository;
 
         UserAccount superAdmin = new UserAccount(
             UUID.randomUUID().toString(),
@@ -108,6 +112,9 @@ public class DemoDataService {
             Long clientId = user.getClient() != null ? user.getClient().getClientId() : null;
             String clientName = user.getClient() != null ? user.getClient().getName() : null;
             List<String> actions = rolePermissionService.resolveActionCodes(user.getRole());
+            List<Long> allowedOrgIds = userOrgAccessRepository.findAllByIdUserId(user.getUserId()).stream()
+                .map(access -> access.getId().getOrgId())
+                .toList();
             AuthenticatedUser authenticatedUser = new AuthenticatedUser(
                 String.valueOf(user.getUserId()),
                 user.getEmail(),
@@ -117,12 +124,13 @@ public class DemoDataService {
                 clientName,
                 subscriptionStatus,
                 subscriptionExpiresAt,
-                actions);
+                actions,
+                allowedOrgIds);
             String token = UUID.randomUUID().toString();
             sessionsByToken.put(token, authenticatedUser);
             return new LoginResult(token, authenticatedUser);
         }
-
+ 
         UserAccount account = usersByEmail.get(email);
         if (account == null || !passwordEncoder.matches(password, account.passwordHash())) {
             return null;
@@ -134,6 +142,7 @@ public class DemoDataService {
             .map(c -> c.getClientId())
             .orElse(null);
         List<String> actions = rolePermissionService.resolveActionCodes(account.roleName(), clientId);
+        List<Long> allowedOrgIds = List.of();
         AuthenticatedUser authenticatedUser = new AuthenticatedUser(
             account.id(),
             account.email(),
@@ -143,7 +152,8 @@ public class DemoDataService {
             account.clientName(),
             account.subscriptionStatus(),
             account.subscriptionExpiresAt(),
-            actions);
+            actions,
+            allowedOrgIds);
         String token = UUID.randomUUID().toString();
         sessionsByToken.put(token, authenticatedUser);
         return new LoginResult(token, authenticatedUser);
@@ -179,6 +189,9 @@ public class DemoDataService {
             Long clientId = dbUser.getClient() != null ? dbUser.getClient().getClientId() : null;
             String clientName = dbUser.getClient() != null ? dbUser.getClient().getName() : null;
             List<String> actions = rolePermissionService.resolveActionCodes(dbUser.getRole());
+            List<Long> allowedOrgIds = userOrgAccessRepository.findAllByIdUserId(dbUser.getUserId()).stream()
+                .map(access -> access.getId().getOrgId())
+                .toList();
             AuthenticatedUser updatedUser = new AuthenticatedUser(
                 user.id(),
                 dbUser.getEmail(),
@@ -188,7 +201,8 @@ public class DemoDataService {
                 clientName,
                 subscriptionStatus,
                 subscriptionExpiresAt,
-                actions
+                actions,
+                allowedOrgIds
             );
             sessionsByToken.put(token, updatedUser);
             return updatedUser;
@@ -208,6 +222,7 @@ public class DemoDataService {
                     .map(c -> c.getClientId())
                     .orElse(null);
                 List<String> actions = rolePermissionService.resolveActionCodes(account.roleName(), clientId);
+                List<Long> allowedOrgIds = List.of();
                 return new AuthenticatedUser(
                     account.id(),
                     account.email(),
@@ -217,7 +232,8 @@ public class DemoDataService {
                     account.clientName(),
                     account.subscriptionStatus(),
                     account.subscriptionExpiresAt(),
-                    actions);
+                    actions,
+                    allowedOrgIds);
             })
             .toList();
     }
@@ -347,7 +363,8 @@ public class DemoDataService {
         String clientName,
         String subscriptionStatus,
         String subscriptionExpiresAt,
-        List<String> actions) {
+        List<String> actions,
+        List<Long> allowedOrgIds) {
 
         public List<SimpleGrantedAuthority> authorities() {
             List<SimpleGrantedAuthority> auths = new java.util.ArrayList<>();

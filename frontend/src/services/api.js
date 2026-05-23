@@ -40,6 +40,9 @@ export const usersApi = {
     const response = await api.put(`/users/${userId}`, payload)
     return response.data
   },
+  async remove(userId) {
+    await api.delete(`/users/${userId}`)
+  },
 }
 
 export const clientsOrgsApi = {
@@ -108,6 +111,9 @@ export const rolesApi = {
   async replaceActions(roleId, actionIds) {
     const response = await api.put(`/roles/${roleId}/actions`, { actionIds })
     return response.data
+  },
+  async remove(roleId, reassignToRoleId) {
+    await api.delete(`/roles/${roleId}`, { params: { reassignToRoleId } })
   },
 }
 

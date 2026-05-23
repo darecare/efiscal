@@ -10,4 +10,10 @@ public interface AppUserRepository extends JpaRepository<AppUserEntity, Long> {
     List<AppUserEntity> findAllByClientClientIdAndDeletedAtIsNull(Long clientId);
     Optional<AppUserEntity> findByEmail(String email);
     boolean existsByEmail(String email);
+
+    long countByRoleRoleIdAndDeletedAtIsNull(Long roleId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("UPDATE AppUserEntity u SET u.role = :newRole WHERE u.role.roleId = :oldRoleId AND u.deletedAt IS NULL")
+    int updateRoleForUsers(Long oldRoleId, com.efiscal.backend.model.RoleEntity newRole);
 }

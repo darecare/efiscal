@@ -86,4 +86,19 @@ public class RoleController {
             callerUserId,
             callerActions));
     }
+
+    @DeleteMapping("/{roleId}")
+    public ResponseEntity<?> deleteRole(
+        @PathVariable Long roleId,
+        @RequestParam(required = false) Long reassignToRoleId
+    ) {
+        authorizationService.requireAction("ROLES_MANAGE");
+        roleManagementService.deleteRole(
+            roleId,
+            reassignToRoleId,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()
+        );
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -6,6 +6,7 @@ import com.efiscal.backend.model.OrgEntity;
 import com.efiscal.backend.repository.ApiConnRepository;
 import com.efiscal.backend.repository.ApiTemplateRepository;
 import com.efiscal.backend.repository.OrgRepository;
+import com.efiscal.backend.security.AuthorizationService;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -19,23 +20,22 @@ public class ApiConnService {
     private final ApiConnRepository apiConnRepository;
     private final ApiTemplateRepository apiTemplateRepository;
     private final OrgRepository orgRepository;
+    private final AuthorizationService authorizationService;
 
     public ApiConnService(ApiConnRepository apiConnRepository,
                           ApiTemplateRepository apiTemplateRepository,
-                          OrgRepository orgRepository) {
+                          OrgRepository orgRepository,
+                          AuthorizationService authorizationService) {
         this.apiConnRepository = apiConnRepository;
         this.apiTemplateRepository = apiTemplateRepository;
         this.orgRepository = orgRepository;
+        this.authorizationService = authorizationService;
     }
 
     @Transactional(readOnly = true)
     public List<ApiConnDto> listConnections(Long orgId, Long callerClientId, boolean isSuperAdmin) {
         if (orgId != null) {
-            OrgEntity org = orgRepository.findById(orgId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Org not found"));
-            if (!isSuperAdmin && !org.getClient().getClientId().equals(callerClientId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-            }
+            authorizationService.requireOrgAccess(orgId);
             return apiConnRepository.findAllByOrgOrgIdAndDeletedAtIsNull(orgId).stream()
                 .map(this::toConnDto).toList();
         } else {
@@ -50,20 +50,16 @@ public class ApiConnService {
     public List<ApiTemplateDto> listTemplates(Long apiconnId, Long callerClientId, boolean isSuperAdmin) {
         ApiConnEntity conn = apiConnRepository.findById(apiconnId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Connection not found"));
-        if (!isSuperAdmin && !conn.getOrg().getClient().getClientId().equals(callerClientId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
+        authorizationService.requireOrgAccess(conn.getOrg().getOrgId());
         return apiTemplateRepository.findAllByApiConnApiconnId(apiconnId)
             .stream().map(this::toTemplateDto).toList();
     }
 
     @Transactional
     public ApiConnDto createConnection(ApiConnRequest req, Long callerClientId, boolean isSuperAdmin) {
+        authorizationService.requireOrgAccess(req.orgId());
         OrgEntity org = orgRepository.findById(req.orgId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Org not found"));
-        if (!isSuperAdmin && !org.getClient().getClientId().equals(callerClientId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
         ApiConnEntity e = new ApiConnEntity();
         e.setOrg(org);
         e.setDisplayName(req.displayName());
@@ -83,15 +79,11 @@ public class ApiConnService {
     public ApiConnDto updateConnection(Long apiconnId, ApiConnRequest req, Long callerClientId, boolean isSuperAdmin) {
         ApiConnEntity e = apiConnRepository.findById(apiconnId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Connection not found"));
-        if (!isSuperAdmin && !e.getOrg().getClient().getClientId().equals(callerClientId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
+        authorizationService.requireOrgAccess(e.getOrg().getOrgId());
         if (req.orgId() != null) {
+            authorizationService.requireOrgAccess(req.orgId());
             OrgEntity org = orgRepository.findById(req.orgId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Org not found"));
-            if (!isSuperAdmin && !org.getClient().getClientId().equals(callerClientId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-            }
             e.setOrg(org);
         }
         if (req.displayName() != null) e.setDisplayName(req.displayName());
@@ -111,9 +103,7 @@ public class ApiConnService {
     public ApiTemplateDto createTemplate(ApiTemplateRequest req, Long callerClientId, boolean isSuperAdmin) {
         ApiConnEntity conn = apiConnRepository.findById(req.apiconnId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Connection not found"));
-        if (!isSuperAdmin && !conn.getOrg().getClient().getClientId().equals(callerClientId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
+        authorizationService.requireOrgAccess(conn.getOrg().getOrgId());
         ApiTemplateEntity t = new ApiTemplateEntity();
         t.setApiConn(conn);
         t.setOperationKey(req.operationKey());
@@ -128,9 +118,7 @@ public class ApiConnService {
     public ApiTemplateDto updateTemplate(Long apitemplateId, ApiTemplateRequest req, Long callerClientId, boolean isSuperAdmin) {
         ApiTemplateEntity t = apiTemplateRepository.findById(apitemplateId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Template not found"));
-        if (!isSuperAdmin && !t.getApiConn().getOrg().getClient().getClientId().equals(callerClientId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
+        authorizationService.requireOrgAccess(t.getApiConn().getOrg().getOrgId());
         if (req.operationKey() != null) t.setOperationKey(req.operationKey());
         if (req.httpMethod() != null) t.setHttpMethod(req.httpMethod());
         if (req.contentType() != null) t.setContentType(req.contentType());

@@ -36,11 +36,7 @@ public class MerchantProOrderController {
         @RequestParam(required = false, defaultValue = "100") int limit
     ) {
         authorizationService.requireAction("MERCHANTPRO_FETCH_ORDERS");
-        OrgEntity org = orgRepository.findById(orgId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
-        if (!authorizationService.isSuperAdmin() && !org.getClient().getClientId().equals(authorizationService.getClientId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
+        authorizationService.requireOrgAccess(orgId);
 
         int effectiveLimit = Math.min(Math.max(limit, 1), 100);
         MerchantProOrderService.OrderFetchResult result =

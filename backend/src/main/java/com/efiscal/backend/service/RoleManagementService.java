@@ -139,6 +139,31 @@ public class RoleManagementService {
         return toDto(role);
     }
 
+    @Transactional
+    public void deleteRole(Long roleId, Long reassignToRoleId, Long callerClientId, boolean superAdmin) {
+        RoleEntity role = findRoleForCaller(roleId, callerClientId, superAdmin);
+
+        if (role.getClient() == null && !superAdmin) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only superadmin can delete global roles");
+        }
+
+        if (RoleEntity.ROLE_SUPERADMIN.equals(role.getRoleCode())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot delete immutable system role");
+        }
+
+        long userCount = appUserRepository.countByRoleRoleIdAndDeletedAtIsNull(roleId);
+        if (userCount > 0) {
+            if (reassignToRoleId == null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Role is in use by " + userCount + " users. Provide a role to reassign them to.");
+            }
+            RoleEntity newRole = findRoleForCaller(reassignToRoleId, callerClientId, superAdmin);
+            appUserRepository.updateRoleForUsers(roleId, newRole);
+        }
+
+        roleActionAccessRepository.deleteByRoleId(role.getRoleId());
+        roleRepository.delete(role);
+    }
+
     private List<String> getFreshCallerActions(String callerUserId, boolean superAdmin, List<String> sessionActions) {
         if (superAdmin) {
             return List.of();

@@ -3,9 +3,14 @@ package com.efiscal.backend.service;
 import com.efiscal.backend.model.AppUserEntity;
 import com.efiscal.backend.model.ClientEntity;
 import com.efiscal.backend.model.RoleEntity;
+import com.efiscal.backend.model.OrgEntity;
+import com.efiscal.backend.model.UserOrgAccessEntity;
+import com.efiscal.backend.model.UserOrgAccessId;
 import com.efiscal.backend.repository.AppUserRepository;
 import com.efiscal.backend.repository.ClientRepository;
 import com.efiscal.backend.repository.RoleRepository;
+import com.efiscal.backend.repository.OrgRepository;
+import com.efiscal.backend.repository.UserOrgAccessRepository;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -24,16 +29,22 @@ public class UserManagementService {
     private final AppUserRepository userRepository;
     private final ClientRepository clientRepository;
     private final RoleRepository roleRepository;
+    private final OrgRepository orgRepository;
+    private final UserOrgAccessRepository userOrgAccessRepository;
     private final BCryptPasswordEncoder passwordEncoder;
 
     public UserManagementService(
         AppUserRepository userRepository,
         ClientRepository clientRepository,
-        RoleRepository roleRepository
+        RoleRepository roleRepository,
+        OrgRepository orgRepository,
+        UserOrgAccessRepository userOrgAccessRepository
     ) {
         this.userRepository = userRepository;
         this.clientRepository = clientRepository;
         this.roleRepository = roleRepository;
+        this.orgRepository = orgRepository;
+        this.userOrgAccessRepository = userOrgAccessRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -88,8 +99,28 @@ public class UserManagementService {
         user.setSubscriptionStartAt(req.subscriptionStartAt());
         user.setSubscriptionExpiresAt(req.subscriptionExpiresAt());
         user.setActive(true);
-        return toDto(userRepository.save(user));
+        AppUserEntity savedUser = userRepository.save(user);
+
+        if (req.orgIds() != null && !req.orgIds().isEmpty()) {
+            saveUserOrgs(savedUser, req.orgIds(), req.clientId(), isSuperAdmin);
+        }
+        return toDto(savedUser);
     }
+
+    private void saveUserOrgs(AppUserEntity user, List<Long> orgIds, Long targetClientId, boolean isSuperAdmin) {
+        for (Long orgId : orgIds) {
+            OrgEntity org = orgRepository.findById(orgId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Organization not found: " + orgId));
+            if (!isSuperAdmin && !org.getClient().getClientId().equals(targetClientId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Organization " + orgId + " is outside user client scope");
+            }
+            UserOrgAccessEntity access = new UserOrgAccessEntity();
+            access.setId(new UserOrgAccessId(user.getUserId(), orgId));
+            access.setUser(user);
+            access.setOrg(org);
+            access.setActive(true);
+            userOrgAccessRepository.save(access);
+        }
 
     @Transactional
     public UserDto updateUser(Long userId, UpdateUserRequest req, Long callerClientId, boolean isSuperAdmin) {
@@ -127,7 +158,34 @@ public class UserManagementService {
             user.setRole(role);
         }
 
-        return toDto(userRepository.save(user));
+        AppUserEntity savedUser = userRepository.save(user);
+
+        if (req.orgIds() != null) {
+            userOrgAccessRepository.deleteByUserId(savedUser.getUserId());
+            if (!req.orgIds().isEmpty()) {
+                saveUserOrgs(savedUser, req.orgIds(), targetClientId, isSuperAdmin);
+            }
+        }
+
+        return toDto(savedUser);
+    }
+
+    @Transactional
+    public void deleteUser(Long userId, Long callerClientId, boolean isSuperAdmin, String callerUserId) {
+        AppUserEntity user = userRepository.findById(userId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        if (!isSuperAdmin && !user.getClient().getClientId().equals(callerClientId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        
+        if (callerUserId != null && callerUserId.equals(String.valueOf(user.getUserId()))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot delete your own account");
+        }
+
+        user.setDeletedAt(OffsetDateTime.now());
+        userRepository.save(user);
+        userOrgAccessRepository.deleteByUserId(user.getUserId());
     }
 
     private void validateRoleScope(RoleEntity role, Long targetClientId, boolean isSuperAdmin) {
@@ -140,6 +198,9 @@ public class UserManagementService {
     }
 
     private UserDto toDto(AppUserEntity u) {
+        List<Long> orgIds = userOrgAccessRepository.findAllByIdUserId(u.getUserId()).stream()
+            .map(access -> access.getId().getOrgId())
+            .toList();
         return new UserDto(
             u.getUserId(),
             u.getEmail(),
@@ -152,7 +213,8 @@ public class UserManagementService {
             u.getSubscriptionStatus(),
             u.getSubscriptionStartAt(),
             u.getSubscriptionExpiresAt(),
-            u.isActive()
+            u.isActive(),
+            orgIds
         );
     }
 
@@ -168,7 +230,8 @@ public class UserManagementService {
         String subscriptionStatus,
         OffsetDateTime subscriptionStartAt,
         OffsetDateTime subscriptionExpiresAt,
-        boolean isActive
+        boolean isActive,
+        List<Long> orgIds
     ) {}
 
     public record CreateUserRequest(
@@ -195,7 +258,8 @@ public class UserManagementService {
         String subscriptionStatus,
 
         OffsetDateTime subscriptionStartAt,
-        OffsetDateTime subscriptionExpiresAt
+        OffsetDateTime subscriptionExpiresAt,
+        List<Long> orgIds
     ) {}
 
     public record UpdateUserRequest(
@@ -213,6 +277,7 @@ public class UserManagementService {
         Boolean isActive,
 
         @Size(max = 100, message = "Password must not exceed 100 characters")
-        String newPassword
+        String newPassword,
+        List<Long> orgIds
     ) {}
 }

@@ -41,6 +41,12 @@ public class AuthorizationService {
             .orElse(null);
     }
 
+    public String getUserId() {
+        return getCurrentUser()
+            .map(DemoDataService.AuthenticatedUser::id)
+            .orElse(null);
+    }
+
     public boolean hasAction(String actionCode) {
         if (isSuperAdmin()) {
             return true;
@@ -59,6 +65,15 @@ public class AuthorizationService {
             .orElse(false);
     }
 
+    public boolean hasOrgAccess(Long orgId) {
+        if (isSuperAdmin()) {
+            return true;
+        }
+        return getCurrentUser()
+            .map(u -> u.allowedOrgIds() != null && u.allowedOrgIds().contains(orgId))
+            .orElse(false);
+    }
+
     public void requireAction(String actionCode) {
         if (!hasAction(actionCode)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
@@ -68,6 +83,15 @@ public class AuthorizationService {
     public void requireAnyAction(String... actionCodes) {
         if (!hasAnyAction(actionCodes)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+    }
+
+    public void requireOrgAccess(Long orgId) {
+        if (orgId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orgId is required");
+        }
+        if (!hasOrgAccess(orgId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: no access to organization " + orgId);
         }
     }
 
