@@ -233,13 +233,15 @@ export default function Roles() {
                     </span>
                   </td>
                   {canManageRoles && (
-                    <td style={{ display: 'flex', gap: '8px' }}>
-                      <button className="secondary-button" onClick={() => openEditModal(r)}>
-                        Edit
-                      </button>
-                      <button className="secondary-button" style={{ color: 'var(--danger-color, red)' }} onClick={() => handleDeleteClick(r)}>
-                        Delete
-                      </button>
+                    <td>
+                      <div className="table-row-actions">
+                        <button type="button" className="secondary-button" onClick={() => openEditModal(r)}>
+                          Edit
+                        </button>
+                        <button type="button" className="secondary-button danger" onClick={() => handleDeleteClick(r)}>
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -369,14 +371,14 @@ export default function Roles() {
       )}
 
       {deleteRoleModalOpen && roleToDelete && (
-        <div className="modal-overlay" onClick={() => setDeleteRoleModalOpen(false)}>
+        <div className="modal-overlay" onClick={() => !deletingRole && setDeleteRoleModalOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Delete Role: {roleToDelete.name}</h3>
-              <button type="button" className="modal-close" onClick={() => setDeleteRoleModalOpen(false)}>✕</button>
+              <button type="button" className="modal-close" onClick={() => setDeleteRoleModalOpen(false)} disabled={deletingRole}>✕</button>
             </div>
-            <div style={{ padding: '16px' }}>
-              <p>Are you sure you want to delete this role?</p>
+            <div className="modal-body">
+              <p>Are you sure you want to delete this role? This action cannot be undone.</p>
               <div className="field" style={{ marginTop: '16px' }}>
                 <label>If this role is assigned to users, select a new role to reassign them to:</label>
                 <select value={reassignToRoleId} onChange={(e) => setReassignToRoleId(e.target.value)}>
@@ -398,9 +400,9 @@ export default function Roles() {
               </div>
             </div>
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={() => setDeleteRoleModalOpen(false)}>Cancel</button>
-              <button type="button" className="primary-button" style={{ background: 'var(--danger-color, #dc3545)', borderColor: 'var(--danger-color, #dc3545)' }} onClick={handleConfirmDelete} disabled={deletingRole}>
-                {deletingRole ? 'Deleting...' : 'Confirm Delete'}
+              <button type="button" className="secondary-button" onClick={() => setDeleteRoleModalOpen(false)} disabled={deletingRole}>Cancel</button>
+              <button type="button" className="primary-button danger" onClick={handleConfirmDelete} disabled={deletingRole}>
+                {deletingRole ? 'Deleting…' : 'Confirm Delete'}
               </button>
             </div>
           </div>

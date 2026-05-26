@@ -100,6 +100,7 @@
 		- If the role is in use and no reassignment role is selected, the backend returns `409 Conflict` and the error is shown inline in the modal.
 		- When a reassignment role is selected, the request is `DELETE /roles/{roleId}?reassignToRoleId={newRoleId}`.
 		- Built-in system roles (`SUPERADMIN`, `CLIENT_ADMIN`, `OPERATOR`) show an error and skip the modal entirely — deletion is blocked client-side before the request is made.
+	- **Table row actions**: Edit/Delete buttons in list tables must live inside a `.table-row-actions` wrapper within the `<td>` (never apply flex directly on the cell). Destructive row actions use `.secondary-button.danger`; modal confirm buttons use `.primary-button.danger`.
 - User management page must support User CRUD (list, create, read, update, delete), role assignment, and organization access assignment.
 	- **Users list data loading**: Initial page load must not depend on `GET /orgs` (requires `ORGS_MANAGE`). Users with only `USERS_MANAGE` should still load the user list; organization name labels are optional and omitted when org listing is forbidden.
 	- **Organization access picker in user form**: The organization multi-select is only rendered when the caller has `ORGS_MANAGE` or is SuperAdmin. For users without that permission the picker is hidden, but the form still carries the user's existing `orgIds` pre-loaded from the server and sends them unchanged on save — preserving existing org access without exposing the picker.

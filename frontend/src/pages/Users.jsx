@@ -40,6 +40,10 @@ export default function Users() {
   const [formError, setFormError] = useState(null)
   const [saving, setSaving] = useState(false)
 
+  const [deleteUserModalOpen, setDeleteUserModalOpen] = useState(false)
+  const [userToDelete, setUserToDelete] = useState(null)
+  const [deletingUser, setDeletingUser] = useState(false)
+
   useEffect(() => {
     loadAll()
   }, [])
@@ -174,14 +178,25 @@ export default function Users() {
     }
   }
 
-  async function handleDelete(u) {
-    if (!window.confirm(`Are you sure you want to delete user ${u.fullName}?`)) return
+  function handleDeleteClick(u) {
+    setUserToDelete(u)
+    setDeleteUserModalOpen(true)
+  }
+
+  async function handleConfirmDelete() {
+    if (!userToDelete) return
     try {
-      await usersApi.remove(u.userId)
+      setDeletingUser(true)
+      setError(null)
+      await usersApi.remove(userToDelete.userId)
+      setDeleteUserModalOpen(false)
+      setUserToDelete(null)
       setSuccessMsg('User deleted successfully')
-      loadAll()
+      await loadAll()
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data || 'Delete failed')
+    } finally {
+      setDeletingUser(false)
     }
   }
 
@@ -248,19 +263,26 @@ export default function Users() {
                     </span>
                   </td>
                   {canManageUsers && (
-                    <td style={{ display: 'flex', gap: '8px' }}>
-                      <button className="secondary-button" onClick={() => openEditModal(u)}>
-                        Edit
-                      </button>
-                      {String(u.userId) !== String(currentUser?.id) ? (
-                        <button className="secondary-button" style={{ color: 'var(--danger-color, red)' }} onClick={() => handleDelete(u)}>
-                          Delete
+                    <td>
+                      <div className="table-row-actions">
+                        <button type="button" className="secondary-button" onClick={() => openEditModal(u)}>
+                          Edit
                         </button>
-                      ) : (
-                        <button className="secondary-button" disabled title="Cannot delete your own account" style={{ opacity: 0.5, cursor: 'not-allowed' }}>
-                          Delete
-                        </button>
-                      )}
+                        {String(u.userId) !== String(currentUser?.id) ? (
+                          <button type="button" className="secondary-button danger" onClick={() => handleDeleteClick(u)}>
+                            Delete
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="secondary-button danger"
+                            disabled
+                            title="Cannot delete your own account"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -416,6 +438,31 @@ export default function Users() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteUserModalOpen && userToDelete && (
+        <div className="modal-overlay" onClick={() => !deletingUser && setDeleteUserModalOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Delete User: {userToDelete.fullName}</h3>
+              <button type="button" className="modal-close" onClick={() => setDeleteUserModalOpen(false)} disabled={deletingUser}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>
+                Are you sure you want to delete <strong>{userToDelete.fullName}</strong> ({userToDelete.email})?
+                This will deactivate the account and cannot be undone from this screen.
+              </p>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={() => setDeleteUserModalOpen(false)} disabled={deletingUser}>
+                Cancel
+              </button>
+              <button type="button" className="primary-button danger" onClick={handleConfirmDelete} disabled={deletingUser}>
+                {deletingUser ? 'Deleting…' : 'Confirm Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
