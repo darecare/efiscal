@@ -3,6 +3,8 @@ import { rolesApi, actionsApi, clientsApi } from '../services/api'
 import AppShell from '../components/AppShell'
 import { useAuth } from '../contexts/AuthContext'
 
+const IMMUTABLE_ROLE_CODES = ['SUPERADMIN', 'CLIENT_ADMIN', 'OPERATOR']
+
 export default function Roles() {
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
@@ -115,8 +117,8 @@ export default function Roles() {
   }
 
   function handleDeleteClick(role) {
-    if (role.roleCode === 'SUPERADMIN') {
-      setError('Cannot delete SUPERADMIN role')
+    if (IMMUTABLE_ROLE_CODES.includes(role.roleCode)) {
+      setError(`Cannot delete built-in system role ${role.roleCode}`)
       return
     }
     if (!role.clientId && !isSuperAdmin) {
@@ -380,7 +382,12 @@ export default function Roles() {
                 <select value={reassignToRoleId} onChange={(e) => setReassignToRoleId(e.target.value)}>
                   <option value="">— Skip Reassign —</option>
                   {roles
-                    .filter(r => r.roleId !== roleToDelete.roleId && (r.clientId === roleToDelete.clientId || !r.clientId))
+                    .filter(r =>
+                      r.roleId !== roleToDelete.roleId
+                      && r.isActive !== false
+                      && (r.clientId === roleToDelete.clientId || !r.clientId)
+                      && (roleToDelete.clientId != null || r.clientId == null)
+                    )
                     .map(r => (
                       <option key={r.roleId} value={r.roleId}>{r.name}</option>
                   ))}

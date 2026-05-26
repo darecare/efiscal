@@ -192,29 +192,73 @@ Subscription enforcement:
 
 ### 7.1 Authorization Model (Action-Based RBAC)
 - Role Definition is data-driven and managed by admin users.
-- Permissions are assigned as module actions (for example: MERCHANTPRO_FETCH_ORDERS, FISCAL_CREATE_BILL).
+- Permissions are assigned as module actions (for example: USERS_MANAGE, FISCAL_CREATE_BILL).
 - Endpoint protection must validate required action code, not only role name.
-- `AuthorizationService` (`com.efiscal.backend.security`) centralizes action checks for controllers.
+- `AuthorizationService` (`com.efiscal.backend.security`) centralizes action and organization checks for controllers.
 - `RolePermissionService` resolves effective action codes from `role_action_access` + `action_catalog` at login.
+- **SuperAdmin Role Bypass:** The system bypasses all action-based checks if the user's role code strictly equals `SUPERADMIN`. SuperAdmins do not need to have actions explicitly mapped to their roles in the database.
 
 ### 7.2 Scope Enforcement (Client + Organization)
 - User must belong to active client context.
-- User must have organization access for active org.
+- User must have explicit organization access for active org, mapped via `user_orgaccess` and loaded as `allowedOrgIds` in the user session.
+- Business endpoints (e.g. fetching orders, issuing or retrying fiscal bills, managing connection credentials) enforce organization scope by calling `authorizationService.requireOrgAccess(orgId)`.
 - Final authorization decision:
-  1. user role has required action
-  2. user has access to active organization
-  3. organization belongs to active client context
-  4. normal user subscription is active and not expired
+  1. User role has required action OR is `SUPERADMIN`.
+  2. User has access to active organization (`allowedOrgIds` contains `orgId`) OR is `SUPERADMIN`.
+  3. Organization belongs to active client context.
+  4. Normal user subscription is active and not expired.
 
-### 7.3 Dynamic Action Catalog
-- New module functions register new action codes in database catalog.
-- Role-to-action assignments are updated via data/admin UI.
-- Authorization engine must not require code redesign for each new action.
+### 7.3 Canonical Action Catalog & Endpoint Mappings
+The system defines the following canonical action codes (inserted during migrations and seeded on startup):
+
+| Module Code | Action Code | Name | Description |
+| :--- | :--- | :--- | :--- |
+| `FISCAL` | `FISCAL_CREATE_BILL` | Create Fiscal Bill | Allows submitting new fiscal bills manually or from orders |
+| `FISCAL` | `FISCAL_RETRY_BILL` | Retry Fiscal Bill | Allows retrying failed fiscal bills |
+| `FISCAL` | `FISCAL_VIEW_BILLS` | View Fiscal Bills | Allows listing and retrieving details of fiscal bills |
+| `MERCHANTPRO` | `MERCHANTPRO_FETCH_ORDERS` | Fetch Orders | Allows syncing orders from MerchantPro API |
+| `SYSTEM` | `USERS_MANAGE` | Manage Users | Allows CRUD operations on user accounts |
+| `SYSTEM` | `ROLES_MANAGE` | Manage Roles | Allows CRUD operations on custom client roles |
+| `SYSTEM` | `ORGS_MANAGE` | Manage Organizations | Allows managing organizations, API connections, and templates |
+
+#### Endpoint → Required Action Mapping
+
+*   **Role Endpoints (`/api/v1/roles`):**
+    *   `GET /roles` -> requires `ROLES_MANAGE` or `USERS_MANAGE`
+    *   `POST`, `PUT`, `DELETE /roles` -> requires `ROLES_MANAGE`
+    *   *Security validation constraint:* Non-superadmins can only create/update roles with permissions that they themselves possess (`RoleManagementService.validateRoleActions`).
+*   **User Endpoints (`/api/v1/users`):**
+    *   `GET`, `POST`, `PUT`, `DELETE /users` -> requires `USERS_MANAGE`
+*   **Organization and Connection Endpoints:**
+    *   `/api/v1/orgs` (except `/my-access`) -> requires `ORGS_MANAGE`
+    *   `/api/v1/apiconn` -> requires `ORGS_MANAGE`
+    *   `/api/v1/apitemplate` -> requires `ORGS_MANAGE`
+*   **Sync Endpoints (`/api/v1/merchantpro/orders`):**
+    *   `GET /merchantpro/orders` -> requires `MERCHANTPRO_FETCH_ORDERS` and organization access validation.
+*   **Fiscalization Endpoints (`/api/v1/fiscalbill`):**
+    *   `GET /fiscalbill`, `GET /fiscalbill/{id}`, `GET /fiscalbill/{id}/details` -> requires `FISCAL_VIEW_BILLS` and organization access validation.
+    *   `POST /from-order`, `POST /manual`, `POST /{id}/copy`, `POST /{id}/refund` -> requires `FISCAL_CREATE_BILL` and organization access validation.
+    *   `POST /{id}/retry` -> requires `FISCAL_RETRY_BILL` and organization access validation.
 
 ### 7.4 Bootstrap SuperAdmin
 - Initial deployment must create one bootstrap SuperAdmin account.
 - Bootstrap SuperAdmin has global privileges across all clients and organizations.
 - Bootstrap provisioning should be implemented through startup seed/migration process and forced password change policy on first login.
+
+### 7.5 Role and User Deletion Safety Constraints
+- **User Management & Soft Deletion**:
+  - User CRUD endpoints (`POST`, `PUT`, `DELETE` on `/users`) enforce client scope validation. Non-superadmins cannot create or edit users outside their own `client_id`.
+  - User deletion uses soft-deletion (setting `deleted_at` timestamp). Repository/Query layers must filter out soft-deleted users.
+  - Self-deletion is strictly blocked in `UserManagementService.deleteUser` and returns `400 Bad Request`.
+- **Role Deletion & Reassignment**:
+  - Global roles (where `client_id` is null) are deletable only by SuperAdmin (custom global roles only; built-ins are immutable).
+  - Built-in system roles (`SUPERADMIN`, `CLIENT_ADMIN`, `OPERATOR`) are immutable and cannot be deleted (`RoleEntity.isImmutableSystemRole`).
+  - Deleting custom roles checks user associations:
+    - If the role is assigned to one or more active users, deletion requires the `reassignToRoleId` parameter.
+    - If `reassignToRoleId` is not provided and the role is in use, the backend returns a `409 Conflict`.
+    - Reassignment target must be active, must differ from the deleted role, and must respect scope: client-scoped roles reassign within the same client or to global; global roles reassign only to global.
+    - Bulk reassignment to `SUPERADMIN` is allowed only for SuperAdmin callers.
+    - Role reassignment and deletion run in one `@Transactional` boundary in `RoleManagementService.deleteRole`.
 
 ## 8. Data and Transaction Rules
 - Use @Transactional at application service boundaries.

@@ -41,11 +41,16 @@ Provider reference documentation:
   "accessToken": "jwt",
   "expiresInSeconds": 1800,
   "user": {
-    "id": "uuid",
-    "role": "ADMIN",
-    "subscriptionActive": true,
-    "subscriptionStartAt": "2026-01-01T00:00:00Z",
-    "subscriptionExpiresAt": "2026-12-31T23:59:59Z"
+    "id": "1000",
+    "email": "ops@acme.rs",
+    "fullName": "Acme Operations",
+    "roleName": "CLIENT_ADMIN",
+    "clientId": 1001,
+    "clientName": "Acme Retail",
+    "subscriptionStatus": "ACTIVE",
+    "subscriptionExpiresAt": "2026-11-23",
+    "actions": ["ROLES_MANAGE", "USERS_MANAGE", "FISCAL_CREATE_BILL"],
+    "allowedOrgIds": [1002, 1003]
   }
 }
 ```
@@ -55,6 +60,7 @@ Subscription behavior:
 - Normal users must have active, non-expired subscription to receive valid access.
 - Expired subscription returns `403` with code `SUBSCRIPTION_EXPIRED`.
 - Bootstrap SuperAdmin is exempt from subscription expiration validation.
+- **Note:** The `subscriptionExpiresAt` field in the authentication/session responses is formatted as a date-only string (`YYYY-MM-DD`) due to the service implementation (`DemoDataService`), whereas standard user management endpoints return a full ISO-8601 UTC timestamp (`YYYY-MM-DDTHH:mm:ssZ`).
 
 ### POST /auth/refresh
 - Description: Refresh short-lived access token (if implemented).
@@ -165,6 +171,8 @@ Subscription behavior:
 
 ### GET /roles
 - Description: List roles for active client scope.
+- Query:
+  - `includeInactive` (boolean, default `false`): when `true`, inactive roles are included in the response.
 - 200 Response:
 ```json
 [
@@ -174,7 +182,8 @@ Subscription behavior:
     "name": "Restricted Operator",
     "description": "Standard operational access",
     "clientId": 1001,
-    "actionIds": [1002, 1003]
+    "actionIds": [1002, 1003],
+    "isActive": true
   }
 ]
 ```
@@ -229,6 +238,22 @@ Subscription behavior:
 - 200 Response: updated role object including `actionIds`.
 - Errors: `400`, `401`, `403`, `404`, `500`
 
+### DELETE /roles/{roleId}
+- Description: Delete a custom/client-scoped role.
+- Parameters:
+  - `reassignToRoleId`: Query parameter (optional). Role ID to reassign active users to if the role is currently in use.
+- Notes:
+  - Global roles (where `clientId` is null) can only be deleted by SuperAdmin.
+  - Immutable built-in system roles (`SUPERADMIN`, `CLIENT_ADMIN`, `OPERATOR`) cannot be deleted (returns `400`).
+  - If the role is in use by active users and `reassignToRoleId` is not provided, returns `409 Conflict`.
+  - When `reassignToRoleId` is provided:
+    - Target role must be active and must not equal the role being deleted (`400`).
+    - Client-scoped roles may only be reassigned to another role in the same client scope or to a global role (`403` if cross-client).
+    - Global roles may only be reassigned to another global role (`400` if target is client-scoped).
+    - Reassigning users to `SUPERADMIN` requires SuperAdmin caller (`403`).
+- 204 Response: No Content
+- Errors: `400`, `401`, `403`, `404`, `409`, `500`
+
 ### GET /actions
 - Description: List available module actions (permission catalog).
 - Query: optional `module` filter (e.g. `?module=FISCAL`).
@@ -246,45 +271,80 @@ Subscription behavior:
 ```
 - Errors: `401`, `403`, `500`
 
-### PUT /users/{userId}/role
-- Description: Assign role to user.
-- Errors: `400`, `401`, `403`, `404`, `500`
+### GET /users
+- Description: List users for the active client scope. For SuperAdmin, lists all users across all clients.
+- 200 Response:
+```json
+[
+  {
+    "userId": 1000,
+    "email": "ops@acme.rs",
+    "fullName": "Acme Operations",
+    "roleCode": "CLIENT_ADMIN",
+    "roleName": "Client Administrator",
+    "roleId": 1002,
+    "clientId": 1001,
+    "clientName": "Acme Retail",
+    "subscriptionStatus": "ACTIVE",
+    "subscriptionStartAt": "2026-01-01T00:00:00Z",
+    "subscriptionExpiresAt": "2026-12-31T23:59:59Z",
+    "isActive": true,
+    "orgIds": [1002, 1003]
+  }
+]
+```
+- Errors: `401`, `403`, `500`
 
-### PUT /users/{userId}/organizations
-- Description: Assign organization access scope to user.
-- Errors: `400`, `401`, `403`, `404`, `500`
+### GET /users/{userId}
+- Description: Get detailed user profile by user ID.
+- 200 Response: Single user object matching the shape above.
+- Errors: `401`, `403`, `404`, `500`
 
-### PUT /users/{userId}/subscription
-- Description: Set or update normal user subscription validity window and status.
+### POST /users
+- Description: Create a new user under the client scope.
 - Request:
 ```json
 {
-  "subscriptionStatus": "ACTIVE",
-  "subscriptionStartAt": "2026-01-01T00:00:00Z",
-  "subscriptionExpiresAt": "2026-12-31T23:59:59Z"
-}
-```
-- Notes:
-  - Allowed statuses: `ACTIVE`, `EXPIRED`, `SUSPENDED`.
-  - `subscriptionStartAt` and `subscriptionExpiresAt` are required for normal users.
-  - This endpoint is restricted to authorized admin/superadmin roles.
-- Errors: `400`, `401`, `403`, `404`, `409`, `500`
-
-### GET /users/{userId}/subscription-status
-- Description: Get computed subscription status for user access validation.
-- 200 Response:
-```json
-{
-  "userId": "uuid",
+  "email": "newuser@example.com",
+  "password": "Password123!",
+  "fullName": "New User",
+  "clientId": 1001,
+  "roleId": 1002,
   "subscriptionStatus": "ACTIVE",
   "subscriptionStartAt": "2026-01-01T00:00:00Z",
   "subscriptionExpiresAt": "2026-12-31T23:59:59Z",
-  "isAccessAllowed": true
+  "orgIds": [1002, 1003]
 }
 ```
+- 201 Response: Created user object matching the shape above.
+- Errors: `400`, `401`, `403`, `409` (email in use), `500`
+
+### PUT /users/{userId}
+- Description: Update user details (including status, password, client, role, and subscription details).
+- Request:
+```json
+{
+  "fullName": "Updated Name",
+  "roleId": 1003,
+  "clientId": 1001,
+  "subscriptionStatus": "ACTIVE",
+  "subscriptionStartAt": "2026-01-01T00:00:00Z",
+  "subscriptionExpiresAt": "2026-12-31T23:59:59Z",
+  "isActive": true,
+  "newPassword": "NewPassword123!",
+  "orgIds": [1002, 1003]
+}
+```
+- 200 Response: Updated user object.
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### DELETE /users/{userId}
+- Description: Soft-delete a user (sets `deletedAt` to current timestamp).
 - Notes:
-  - For bootstrap superadmin, `isAccessAllowed` is true independent of subscription dates.
-- Errors: `401`, `403`, `404`, `500`
+  - Non-superadmins can only delete users belonging to their own client scope.
+  - Users cannot delete their own account.
+- 204 Response: No Content
+- Errors: `400` (self-deletion), `401`, `403` (client scope mismatch), `404`, `500`
 
 ## 6. Error Model
 All non-2xx responses should follow:

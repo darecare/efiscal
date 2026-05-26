@@ -15,5 +15,8 @@ public interface AppUserRepository extends JpaRepository<AppUserEntity, Long> {
 
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query("UPDATE AppUserEntity u SET u.role = :newRole WHERE u.role.roleId = :oldRoleId AND u.deletedAt IS NULL")
-    int updateRoleForUsers(Long oldRoleId, com.efiscal.backend.model.RoleEntity newRole);
+    int updateRoleForUsers(
+        @org.springframework.data.repository.query.Param("oldRoleId") Long oldRoleId,
+        @org.springframework.data.repository.query.Param("newRole") com.efiscal.backend.model.RoleEntity newRole
+    );
 }

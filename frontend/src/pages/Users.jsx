@@ -22,6 +22,7 @@ export default function Users() {
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
   const canManageUsers = currentUser?.actions?.includes('USERS_MANAGE') || isSuperAdmin
+  const canListOrgs = isSuperAdmin || currentUser?.actions?.includes('ORGS_MANAGE')
 
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
@@ -44,14 +45,14 @@ export default function Users() {
   }, [])
 
   useEffect(() => {
-    if (form.clientId) {
+    if (form.clientId && canListOrgs) {
       orgsApi.list(form.clientId)
         .then(setClientOrgs)
         .catch(() => setClientOrgs([]))
     } else {
       setClientOrgs([])
     }
-  }, [form.clientId])
+  }, [form.clientId, canListOrgs])
 
   useEffect(() => {
     if (successMsg) {
@@ -68,7 +69,7 @@ export default function Users() {
         usersApi.list(),
         rolesApi.list(),
         isSuperAdmin ? clientsApi.list() : Promise.resolve([]),
-        orgsApi.list(),
+        canListOrgs ? orgsApi.list().catch(() => []) : Promise.resolve([]),
       ])
       setUsers(usersData)
       setRoles(rolesData)

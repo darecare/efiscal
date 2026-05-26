@@ -121,6 +121,7 @@ public class UserManagementService {
             access.setActive(true);
             userOrgAccessRepository.save(access);
         }
+    }
 
     @Transactional
     public UserDto updateUser(Long userId, UpdateUserRequest req, Long callerClientId, boolean isSuperAdmin) {

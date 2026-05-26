@@ -2,6 +2,7 @@ package com.efiscal.backend.model;
 
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
+import java.util.Set;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -9,6 +10,18 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Table(name = "role")
 public class RoleEntity {
     public static final String ROLE_SUPERADMIN = "SUPERADMIN";
+    public static final String ROLE_CLIENT_ADMIN = "CLIENT_ADMIN";
+    public static final String ROLE_OPERATOR = "OPERATOR";
+
+    private static final Set<String> IMMUTABLE_SYSTEM_ROLE_CODES = Set.of(
+        ROLE_SUPERADMIN,
+        ROLE_CLIENT_ADMIN,
+        ROLE_OPERATOR
+    );
+
+    public static boolean isImmutableSystemRole(String roleCode) {
+        return roleCode != null && IMMUTABLE_SYSTEM_ROLE_CODES.contains(roleCode);
+    }
 
 
     @Id
