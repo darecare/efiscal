@@ -12,6 +12,9 @@
   --color-text-muted:    #5a6578;
   --color-border:        #e2e6ed;
   --color-focus-ring:    rgba(91, 103, 176, 0.28);
+  --color-danger:        #b91c1c;
+  --color-danger-dark:   #991b1b;
+  --color-danger-bg:     #fde8e8;
 
   color-scheme: light;
   font-family: 'Roboto', sans-serif;
@@ -443,6 +446,23 @@ select.form-input {
   background: #e4e7f5;
 }
 
+.secondary-button.danger {
+  color: var(--color-danger);
+}
+
+.secondary-button.danger:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}
+
+.primary-button.danger {
+  background: var(--color-danger);
+  color: white;
+}
+
+.primary-button.danger:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(185, 28, 28, 0.35);
+}
+
 /* ─── Pagination ───────────────────────────────────── */
 .pagination {
   display: flex;
@@ -608,6 +628,20 @@ select.form-input {
   text-align: left;
   padding: 12px 10px;
   border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.table-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-row-actions .secondary-button {
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .table-card th {
@@ -822,6 +856,14 @@ select.form-input {
 
 .modal-close:hover {
   background: #eef0f9;
+}
+
+.modal-body {
+  margin-bottom: 4px;
+}
+
+.modal-body p {
+  margin: 0;
 }
 
 .modal-actions {

@@ -3,6 +3,8 @@ import { rolesApi, actionsApi, clientsApi } from '../services/api'
 import AppShell from '../components/AppShell'
 import { useAuth } from '../contexts/AuthContext'
 
+const IMMUTABLE_ROLE_CODES = ['SUPERADMIN', 'CLIENT_ADMIN', 'OPERATOR']
+
 export default function Roles() {
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
@@ -18,6 +20,11 @@ export default function Roles() {
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('add')
   const [editRoleId, setEditRoleId] = useState(null)
+  
+  const [deleteRoleModalOpen, setDeleteRoleModalOpen] = useState(false)
+  const [roleToDelete, setRoleToDelete] = useState(null)
+  const [reassignToRoleId, setReassignToRoleId] = useState('')
+  const [deletingRole, setDeletingRole] = useState(false)
   const [form, setForm] = useState({
     roleCode: '',
     name: '',
@@ -106,6 +113,34 @@ export default function Roles() {
       fetchData(showInactive)
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save role')
+    }
+  }
+
+  function handleDeleteClick(role) {
+    if (IMMUTABLE_ROLE_CODES.includes(role.roleCode)) {
+      setError(`Cannot delete built-in system role ${role.roleCode}`)
+      return
+    }
+    if (!role.clientId && !isSuperAdmin) {
+      setError('Only superadmins can delete global roles')
+      return
+    }
+    setRoleToDelete(role)
+    setReassignToRoleId('')
+    setDeleteRoleModalOpen(true)
+  }
+
+  async function handleConfirmDelete() {
+    try {
+      setDeletingRole(true)
+      setError('')
+      await rolesApi.remove(roleToDelete.roleId, reassignToRoleId ? Number(reassignToRoleId) : undefined)
+      setDeleteRoleModalOpen(false)
+      fetchData(showInactive)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete role')
+    } finally {
+      setDeletingRole(false)
     }
   }
 
@@ -199,9 +234,14 @@ export default function Roles() {
                   </td>
                   {canManageRoles && (
                     <td>
-                      <button className="secondary-button" onClick={() => openEditModal(r)}>
-                        Edit
-                      </button>
+                      <div className="table-row-actions">
+                        <button type="button" className="secondary-button" onClick={() => openEditModal(r)}>
+                          Edit
+                        </button>
+                        <button type="button" className="secondary-button danger" onClick={() => handleDeleteClick(r)}>
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -326,6 +366,45 @@ export default function Roles() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteRoleModalOpen && roleToDelete && (
+        <div className="modal-overlay" onClick={() => !deletingRole && setDeleteRoleModalOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Delete Role: {roleToDelete.name}</h3>
+              <button type="button" className="modal-close" onClick={() => setDeleteRoleModalOpen(false)} disabled={deletingRole}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>Are you sure you want to delete this role? This action cannot be undone.</p>
+              <div className="field" style={{ marginTop: '16px' }}>
+                <label>If this role is assigned to users, select a new role to reassign them to:</label>
+                <select value={reassignToRoleId} onChange={(e) => setReassignToRoleId(e.target.value)}>
+                  <option value="">— Skip Reassign —</option>
+                  {roles
+                    .filter(r =>
+                      r.roleId !== roleToDelete.roleId
+                      && r.isActive !== false
+                      && (r.clientId === roleToDelete.clientId || !r.clientId)
+                      && (roleToDelete.clientId != null || r.clientId == null)
+                    )
+                    .map(r => (
+                      <option key={r.roleId} value={r.roleId}>{r.name}</option>
+                  ))}
+                </select>
+                <p className="muted" style={{ fontSize: '0.8rem', marginTop: '4px' }}>
+                  If users are assigned and you skip reassigning, the deletion will fail.
+                </p>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={() => setDeleteRoleModalOpen(false)} disabled={deletingRole}>Cancel</button>
+              <button type="button" className="primary-button danger" onClick={handleConfirmDelete} disabled={deletingRole}>
+                {deletingRole ? 'Deleting…' : 'Confirm Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -139,6 +139,64 @@ public class RoleManagementService {
         return toDto(role);
     }
 
+    @Transactional
+    public void deleteRole(Long roleId, Long reassignToRoleId, Long callerClientId, boolean superAdmin) {
+        RoleEntity role = findRoleForCaller(roleId, callerClientId, superAdmin);
+
+        if (role.getClient() == null && !superAdmin) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only superadmin can delete global roles");
+        }
+
+        if (RoleEntity.isImmutableSystemRole(role.getRoleCode())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot delete immutable system role");
+        }
+
+        long userCount = appUserRepository.countByRoleRoleIdAndDeletedAtIsNull(roleId);
+        if (userCount > 0) {
+            if (reassignToRoleId == null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Role is in use by " + userCount + " users. Provide a role to reassign them to.");
+            }
+            RoleEntity newRole = roleRepository.findById(reassignToRoleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Reassignment role not found"));
+            validateReassignmentRole(role, newRole, callerClientId, superAdmin);
+            appUserRepository.updateRoleForUsers(roleId, newRole);
+        }
+
+        roleActionAccessRepository.deleteByRoleId(role.getRoleId());
+        roleRepository.delete(role);
+    }
+
+    private void validateReassignmentRole(RoleEntity fromRole, RoleEntity toRole, Long callerClientId, boolean superAdmin) {
+        if (fromRole.getRoleId().equals(toRole.getRoleId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot reassign users to the same role being deleted");
+        }
+        if (!toRole.isActive()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reassignment target role must be active");
+        }
+        if (RoleEntity.ROLE_SUPERADMIN.equals(toRole.getRoleCode()) && !superAdmin) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only superadmin can reassign users to SUPERADMIN role");
+        }
+        Long fromClientId = fromRole.getClient() != null ? fromRole.getClient().getClientId() : null;
+        Long toClientId = toRole.getClient() != null ? toRole.getClient().getClientId() : null;
+        if (fromClientId != null) {
+            // client-scoped role: target must be same client OR global; never a different client
+            if (toClientId != null && !toClientId.equals(fromClientId)) {
+                throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Reassignment role must belong to the same client as the role being deleted"
+                );
+            }
+        } else {
+            // global role: target must also be global
+            if (toClientId != null) {
+                throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Users on a global role must be reassigned to another global role"
+                );
+            }
+        }
+    }
+
     private List<String> getFreshCallerActions(String callerUserId, boolean superAdmin, List<String> sessionActions) {
         if (superAdmin) {
             return List.of();

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import AppShell from '../components/AppShell'
-import { usersApi, rolesApi, clientsApi } from '../services/api'
+import { usersApi, rolesApi, clientsApi, orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const SUBSCRIPTION_STATUSES = ['ACTIVE', 'EXPIRED', 'SUSPENDED']
@@ -15,16 +15,20 @@ const emptyForm = {
   subscriptionExpiresAt: '',
   isActive: true,
   newPassword: '',
+  orgIds: [],
 }
 
 export default function Users() {
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
   const canManageUsers = currentUser?.actions?.includes('USERS_MANAGE') || isSuperAdmin
+  const canListOrgs = isSuperAdmin || currentUser?.actions?.includes('ORGS_MANAGE')
 
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
   const [clients, setClients] = useState([])
+  const [allOrgs, setAllOrgs] = useState([])
+  const [clientOrgs, setClientOrgs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [successMsg, setSuccessMsg] = useState(null)
@@ -36,9 +40,23 @@ export default function Users() {
   const [formError, setFormError] = useState(null)
   const [saving, setSaving] = useState(false)
 
+  const [deleteUserModalOpen, setDeleteUserModalOpen] = useState(false)
+  const [userToDelete, setUserToDelete] = useState(null)
+  const [deletingUser, setDeletingUser] = useState(false)
+
   useEffect(() => {
     loadAll()
   }, [])
+
+  useEffect(() => {
+    if (form.clientId && canListOrgs) {
+      orgsApi.list(form.clientId)
+        .then(setClientOrgs)
+        .catch(() => setClientOrgs([]))
+    } else {
+      setClientOrgs([])
+    }
+  }, [form.clientId, canListOrgs])
 
   useEffect(() => {
     if (successMsg) {
@@ -51,14 +69,16 @@ export default function Users() {
     try {
       setLoading(true)
       setError(null)
-      const [usersData, rolesData, clientsData] = await Promise.all([
+      const [usersData, rolesData, clientsData, orgsData] = await Promise.all([
         usersApi.list(),
         rolesApi.list(),
         isSuperAdmin ? clientsApi.list() : Promise.resolve([]),
+        canListOrgs ? orgsApi.list().catch(() => []) : Promise.resolve([]),
       ])
       setUsers(usersData)
       setRoles(rolesData)
       setClients(clientsData)
+      setAllOrgs(orgsData)
     } catch (err) {
       setError('Failed to load users')
     } finally {
@@ -88,6 +108,7 @@ export default function Users() {
       subscriptionExpiresAt: u.subscriptionExpiresAt ? u.subscriptionExpiresAt.slice(0, 10) : '',
       isActive: u.isActive,
       newPassword: '',
+      orgIds: u.orgIds || [],
     })
     setFormError(null)
     setModalMode('edit')
@@ -131,6 +152,7 @@ export default function Users() {
           subscriptionStatus: form.subscriptionStatus,
           subscriptionStartAt: form.subscriptionStartAt ? new Date(form.subscriptionStartAt).toISOString() : null,
           subscriptionExpiresAt: form.subscriptionExpiresAt ? new Date(form.subscriptionExpiresAt).toISOString() : null,
+          orgIds: form.orgIds,
         })
         setSuccessMsg('User created successfully')
       } else {
@@ -143,6 +165,7 @@ export default function Users() {
           subscriptionExpiresAt: form.subscriptionExpiresAt ? new Date(form.subscriptionExpiresAt).toISOString() : null,
           isActive: form.isActive,
           newPassword: form.newPassword || null,
+          orgIds: form.orgIds,
         })
         setSuccessMsg('User updated successfully')
       }
@@ -152,6 +175,28 @@ export default function Users() {
       setFormError(err.response?.data?.message || err.response?.data || 'Operation failed')
     } finally {
       setSaving(false)
+    }
+  }
+
+  function handleDeleteClick(u) {
+    setUserToDelete(u)
+    setDeleteUserModalOpen(true)
+  }
+
+  async function handleConfirmDelete() {
+    if (!userToDelete) return
+    try {
+      setDeletingUser(true)
+      setError(null)
+      await usersApi.remove(userToDelete.userId)
+      setDeleteUserModalOpen(false)
+      setUserToDelete(null)
+      setSuccessMsg('User deleted successfully')
+      await loadAll()
+    } catch (err) {
+      setError(err.response?.data?.message || err.response?.data || 'Delete failed')
+    } finally {
+      setDeletingUser(false)
     }
   }
 
@@ -195,7 +240,17 @@ export default function Users() {
                 <tr key={u.userId}>
                   <td>{u.fullName}</td>
                   <td>{u.email}</td>
-                  <td>{u.clientName}</td>
+                  <td>
+                    <div>{u.clientName}</div>
+                    {u.orgIds && u.orgIds.length > 0 && (
+                      <div className="muted" style={{ fontSize: '0.75rem', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {u.orgIds.map(oid => {
+                          const o = allOrgs.find(org => org.orgId === oid)
+                          return o ? <span key={oid} className="action-tag" style={{ fontSize: '0.7rem', padding: '2px 4px' }}>{o.name}</span> : null
+                        })}
+                      </div>
+                    )}
+                  </td>
                   <td>{u.roleName}</td>
                   <td>
                     <span className={`status-chip ${(u.subscriptionStatus || '').toLowerCase()}`}>
@@ -209,9 +264,25 @@ export default function Users() {
                   </td>
                   {canManageUsers && (
                     <td>
-                      <button className="secondary-button" onClick={() => openEditModal(u)}>
-                        Edit
-                      </button>
+                      <div className="table-row-actions">
+                        <button type="button" className="secondary-button" onClick={() => openEditModal(u)}>
+                          Edit
+                        </button>
+                        {String(u.userId) !== String(currentUser?.id) ? (
+                          <button type="button" className="secondary-button danger" onClick={() => handleDeleteClick(u)}>
+                            Delete
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="secondary-button danger"
+                            disabled
+                            title="Cannot delete your own account"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -292,6 +363,36 @@ export default function Users() {
                     )}
                   </select>
                 </div>
+                <div className="field" style={{ gridColumn: '1 / -1' }}>
+                  <label>Organization Access</label>
+                  {clientOrgs.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px', marginTop: '6px' }}>
+                      {clientOrgs.map((org) => (
+                        <label key={org.orgId} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={form.orgIds.includes(org.orgId)}
+                            onChange={(e) => {
+                              const val = org.orgId
+                              setForm(prev => {
+                                const isChecked = prev.orgIds.includes(val)
+                                return {
+                                  ...prev,
+                                  orgIds: isChecked
+                                    ? prev.orgIds.filter(id => id !== val)
+                                    : [...prev.orgIds, val]
+                                }
+                              })
+                            }}
+                          />
+                          <span style={{ fontSize: '0.9rem' }}>{org.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted" style={{ fontSize: '0.85rem', marginTop: '4px' }}>No organizations found for this client.</p>
+                  )}
+                </div>
                 <div className="field">
                   <label>Subscription Status</label>
                   <select value={form.subscriptionStatus} onChange={(e) => handleChange('subscriptionStatus', e.target.value)}>
@@ -337,6 +438,31 @@ export default function Users() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteUserModalOpen && userToDelete && (
+        <div className="modal-overlay" onClick={() => !deletingUser && setDeleteUserModalOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Delete User: {userToDelete.fullName}</h3>
+              <button type="button" className="modal-close" onClick={() => setDeleteUserModalOpen(false)} disabled={deletingUser}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>
+                Are you sure you want to delete <strong>{userToDelete.fullName}</strong> ({userToDelete.email})?
+                This will deactivate the account and cannot be undone from this screen.
+              </p>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={() => setDeleteUserModalOpen(false)} disabled={deletingUser}>
+                Cancel
+              </button>
+              <button type="button" className="primary-button danger" onClick={handleConfirmDelete} disabled={deletingUser}>
+                {deletingUser ? 'Deleting…' : 'Confirm Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

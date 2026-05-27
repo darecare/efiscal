@@ -17,7 +17,7 @@ Middleware platform for automated fiscalization of online orders. React frontend
 - Follow `.cursor/rules/` for backend, frontend, and integration patterns
 - Use `PRODUCT_REQUIREMENTS.md` and `FISCAL_BILL_MODULE_SPEC.md` when implementing or changing features
 - Use `API_CONTRACT.md` for endpoint contracts and error formats
-- After making changes, review and update the relevant documentation so it stays in sync with the codebase
+- After making changes, review and update the relevant documentation (API_CONTRACT, BACKEND_STRUCTURE, README, DATA_MODEL, etc.) so it stays in sync with the codebase
 
 ## Stack
 

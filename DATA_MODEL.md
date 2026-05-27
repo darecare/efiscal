@@ -90,6 +90,13 @@ Represents reusable access profile definitions per client.
 
 UNIQUE constraint: `(coalesce(client_id, 0), role_code)`
 
+Rules:
+- Custom roles are hard-deleted.
+- Deletion of a role is blocked if it is in use by active (non-soft-deleted) users, unless a valid replacement `reassignToRoleId` is provided to migrate users within compatible scope (same client or global, per role type).
+- Built-in global roles (`SUPERADMIN`, `CLIENT_ADMIN`, `OPERATOR` with `client_id` NULL) are immutable and cannot be deleted.
+- Other global custom roles (if any) are deletable only by SuperAdmin.
+- Reassignment target role must be active; cannot equal the role being deleted.
+
 
 ### 2.5 User organization access
 table name: user_orgaccess

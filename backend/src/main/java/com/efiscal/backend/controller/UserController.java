@@ -66,4 +66,16 @@ public class UserController {
             )
         );
     }
+
+    @DeleteMapping("/{userId}")
+    public ResponseEntity<?> deleteUser(@PathVariable Long userId) {
+        authorizationService.requireAction("USERS_MANAGE");
+        userManagementService.deleteUser(
+            userId,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin(),
+            authorizationService.getUserId()
+        );
+        return ResponseEntity.noContent().build();
+    }
 }

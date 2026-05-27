@@ -87,10 +87,10 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 
 ### 6.5 Role and Access Management
 1. SuperAdmin/Admin opens Role Definition page.
-2. Admin creates or updates a role.
+2. Admin creates, updates, or deletes a role. Deleting a role that is in use by active users requires reassigning those users to another active role.
 3. Admin assigns allowed actions to role (for example Fetch Orders, Create Fiscal Bill).
-4. Admin assigns user to role and grants organization access.
-5. System enforces access by role action permissions plus client/organization scope.
+4. Admin manages users, including creating, updating (assigning roles and selecting allowed organizations), and soft-deleting user profiles.
+5. System enforces access by role action permissions plus client/organization scope. Users are prevented from self-deleting their own accounts.
 
 ## 7. Functional Requirements
 - FR-001: System must authenticate users and protect all non-public endpoints.
@@ -138,12 +138,13 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - [ ] Account page keeps Kliklak_Dashboard baseline layout and interaction style while allowing additional eFiscal-specific fields.
 - [ ] Users page keeps Kliklak_Dashboard baseline layout and interaction style for list and maintenance actions.
 - [ ] Orders page implements three structural sections aligned with Kliklak_Dashboard reference: Fetch Filters section, Actions Bar section, and Summary Table view grouped by order.
-- [ ] Admin can create/update roles and assign action permissions on a dedicated Role Definition page.
+- [ ] Admin can create, update, or delete roles, and assign action permissions on a dedicated Role Definition page. Role deletion requires reassignment of active users.
 - [ ] User can execute only actions granted by role and only within assigned client/organization scope.
 - [ ] New module actions can be added to permission catalog and assigned to roles without backend authorization code redesign.
 - [ ] Initial deployment creates exactly one bootstrap SuperAdmin account with global client/organization access and full permission scope.
 - [ ] Normal user with active subscription can log in and use authorized features.
 - [ ] Normal user with expired subscription is denied access with clear error message.
+- [ ] Admin can manage users (list, create, update, and soft-delete), while blocking self-deletion of active user accounts.
 
 ## 10. Open Questions
 - OQ-001: [question] — Owner: [name] — Due: [date]
