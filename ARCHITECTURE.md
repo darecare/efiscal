@@ -95,3 +95,6 @@ Backend enforcement rules:
 • System validates user has organization access and role permission for requested action.
 • System validates subscription is active and not expired for normal users.
 • Denied permissions return authorization error with standard API error model.
+• User deletion uses a soft-deletion mechanism (updating a `deleted_at` timestamp). Repository/Query layers filter out soft-deleted records.
+• Self-deletion of accounts is strictly prohibited.
+• Deleting custom/client roles that are currently in use by active users requires an explicit user reassignment target within the same client scope, executed within a single transaction. Global and built-in system roles are protected from deletion by non-superadmins or entirely immutable.

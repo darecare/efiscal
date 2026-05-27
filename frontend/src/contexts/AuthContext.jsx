@@ -7,6 +7,8 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [notification, setNotification] = useState(null)
+  const [notificationTimeoutId, setNotificationTimeoutId] = useState(null)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -23,6 +25,26 @@ export function AuthProvider({ children }) {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  const showNotification = (message, type = 'success') => {
+    if (notificationTimeoutId) {
+      clearTimeout(notificationTimeoutId)
+    }
+    setNotification({ message, type })
+    const id = setTimeout(() => {
+      setNotification(null)
+      setNotificationTimeoutId(null)
+    }, 4000)
+    setNotificationTimeoutId(id)
+  }
+
+  const clearNotification = () => {
+    if (notificationTimeoutId) {
+      clearTimeout(notificationTimeoutId)
+      setNotificationTimeoutId(null)
+    }
+    setNotification(null)
+  }
 
   async function login(email, password) {
     try {
@@ -43,7 +65,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, error, login, logout, notification, showNotification, clearNotification }}>
       {children}
     </AuthContext.Provider>
   )

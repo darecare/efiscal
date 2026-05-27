@@ -1,5 +1,10 @@
 package com.efiscal.backend.service;
 
+import com.efiscal.backend.model.AppUserEntity;
+import com.efiscal.backend.repository.AppUserRepository;
+import com.efiscal.backend.repository.ClientRepository;
+import com.efiscal.backend.repository.UserOrgAccessRepository;
+import com.efiscal.backend.security.RolePermissionService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -11,11 +16,16 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class DemoDataService {
 
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final BCryptPasswordEncoder passwordEncoder;
+    private final AppUserRepository appUserRepository;
+    private final ClientRepository clientRepository;
+    private final RolePermissionService rolePermissionService;
+    private final UserOrgAccessRepository userOrgAccessRepository;
     private final Map<String, UserAccount> usersByEmail = new ConcurrentHashMap<>();
     private final Map<String, AuthenticatedUser> sessionsByToken = new ConcurrentHashMap<>();
     private final Map<String, FiscalBillView> fiscalBillsById = new ConcurrentHashMap<>();
@@ -24,14 +34,25 @@ public class DemoDataService {
     private final List<ApiConnectionView> apiConnections;
     private final List<ApiTemplateView> apiTemplates;
     private final List<OrderView> orders;
+ 
+    public DemoDataService(
+        AppUserRepository appUserRepository,
+        ClientRepository clientRepository,
+        RolePermissionService rolePermissionService,
+        UserOrgAccessRepository userOrgAccessRepository
+    ) {
+        this.passwordEncoder = new BCryptPasswordEncoder();
+        this.appUserRepository = appUserRepository;
+        this.clientRepository = clientRepository;
+        this.rolePermissionService = rolePermissionService;
+        this.userOrgAccessRepository = userOrgAccessRepository;
 
-    public DemoDataService() {
         UserAccount superAdmin = new UserAccount(
             UUID.randomUUID().toString(),
             "admin@efiscal.local",
             passwordEncoder.encode("Admin123!"),
             "System Superadmin",
-            "SUPERADMIN",
+            com.efiscal.backend.model.RoleEntity.ROLE_SUPERADMIN,
             "Global",
             "ACTIVE",
             null);
@@ -71,7 +92,45 @@ public class DemoDataService {
                         new OrderLineView("P5", "Mouse Pad XL", "SKU-MP-05", "2", "4000.00", "20", "VAT"))));
     }
 
+    @Transactional
     public LoginResult login(String email, String password) {
+        var dbUser = appUserRepository.findByEmail(email);
+        if (dbUser.isPresent()) {
+            AppUserEntity user = dbUser.get();
+            if (!user.isActive() || user.getDeletedAt() != null) {
+                return null;
+            }
+            if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+                return null;
+            }
+            String roleName = user.getRole().getRoleCode();
+            String subscriptionStatus = user.getSubscriptionStatus();
+            String subscriptionExpiresAt = formatSubscriptionExpiry(user.getSubscriptionExpiresAt());
+            if (!isAccessAllowed(roleName, subscriptionStatus, subscriptionExpiresAt)) {
+                return LoginResult.subscriptionExpired();
+            }
+            Long clientId = user.getClient() != null ? user.getClient().getClientId() : null;
+            String clientName = user.getClient() != null ? user.getClient().getName() : null;
+            List<String> actions = rolePermissionService.resolveActionCodes(user.getRole());
+            List<Long> allowedOrgIds = userOrgAccessRepository.findAllByIdUserId(user.getUserId()).stream()
+                .map(access -> access.getId().getOrgId())
+                .toList();
+            AuthenticatedUser authenticatedUser = new AuthenticatedUser(
+                String.valueOf(user.getUserId()),
+                user.getEmail(),
+                user.getFullName(),
+                roleName,
+                clientId,
+                clientName,
+                subscriptionStatus,
+                subscriptionExpiresAt,
+                actions,
+                allowedOrgIds);
+            String token = UUID.randomUUID().toString();
+            sessionsByToken.put(token, authenticatedUser);
+            return new LoginResult(token, authenticatedUser);
+        }
+ 
         UserAccount account = usersByEmail.get(email);
         if (account == null || !passwordEncoder.matches(password, account.passwordHash())) {
             return null;
@@ -79,41 +138,103 @@ public class DemoDataService {
         if (!isAccessAllowed(account.roleName(), account.subscriptionStatus(), account.subscriptionExpiresAt())) {
             return LoginResult.subscriptionExpired();
         }
+        Long clientId = clientRepository.findByNameIgnoreCase(account.clientName())
+            .map(c -> c.getClientId())
+            .orElse(null);
+        List<String> actions = rolePermissionService.resolveActionCodes(account.roleName(), clientId);
+        List<Long> allowedOrgIds = List.of();
         AuthenticatedUser authenticatedUser = new AuthenticatedUser(
             account.id(),
             account.email(),
             account.fullName(),
             account.roleName(),
+            clientId,
             account.clientName(),
             account.subscriptionStatus(),
-            account.subscriptionExpiresAt());
+            account.subscriptionExpiresAt(),
+            actions,
+            allowedOrgIds);
         String token = UUID.randomUUID().toString();
         sessionsByToken.put(token, authenticatedUser);
         return new LoginResult(token, authenticatedUser);
     }
 
+    private static String formatSubscriptionExpiry(OffsetDateTime expiresAt) {
+        if (expiresAt == null) {
+            return null;
+        }
+        return expiresAt.toLocalDate().toString();
+    }
+
+    @Transactional(readOnly = true)
     public AuthenticatedUser findByToken(String token) {
         AuthenticatedUser user = sessionsByToken.get(token);
         if (user == null) {
             return null;
         }
-        if (isAccessAllowed(user.roleName(), user.subscriptionStatus(), user.subscriptionExpiresAt())) {
-            return user;
+        try {
+            Long userId = Long.parseLong(user.id());
+            AppUserEntity dbUser = appUserRepository.findById(userId).orElse(null);
+            if (dbUser == null || !dbUser.isActive() || dbUser.getDeletedAt() != null) {
+                sessionsByToken.remove(token);
+                return null;
+            }
+            String roleName = dbUser.getRole().getRoleCode();
+            String subscriptionStatus = dbUser.getSubscriptionStatus();
+            String subscriptionExpiresAt = formatSubscriptionExpiry(dbUser.getSubscriptionExpiresAt());
+            if (!isAccessAllowed(roleName, subscriptionStatus, subscriptionExpiresAt)) {
+                sessionsByToken.remove(token);
+                return null;
+            }
+            Long clientId = dbUser.getClient() != null ? dbUser.getClient().getClientId() : null;
+            String clientName = dbUser.getClient() != null ? dbUser.getClient().getName() : null;
+            List<String> actions = rolePermissionService.resolveActionCodes(dbUser.getRole());
+            List<Long> allowedOrgIds = userOrgAccessRepository.findAllByIdUserId(dbUser.getUserId()).stream()
+                .map(access -> access.getId().getOrgId())
+                .toList();
+            AuthenticatedUser updatedUser = new AuthenticatedUser(
+                user.id(),
+                dbUser.getEmail(),
+                dbUser.getFullName(),
+                roleName,
+                clientId,
+                clientName,
+                subscriptionStatus,
+                subscriptionExpiresAt,
+                actions,
+                allowedOrgIds
+            );
+            sessionsByToken.put(token, updatedUser);
+            return updatedUser;
+        } catch (NumberFormatException e) {
+            if (isAccessAllowed(user.roleName(), user.subscriptionStatus(), user.subscriptionExpiresAt())) {
+                return user;
+            }
+            sessionsByToken.remove(token);
+            return null;
         }
-        sessionsByToken.remove(token);
-        return null;
     }
 
     public List<AuthenticatedUser> listUsers() {
         return usersByEmail.values().stream()
-            .map(account -> new AuthenticatedUser(
-                account.id(),
-                account.email(),
-                account.fullName(),
-                account.roleName(),
-                account.clientName(),
-                account.subscriptionStatus(),
-                account.subscriptionExpiresAt()))
+            .map(account -> {
+                Long clientId = clientRepository.findByNameIgnoreCase(account.clientName())
+                    .map(c -> c.getClientId())
+                    .orElse(null);
+                List<String> actions = rolePermissionService.resolveActionCodes(account.roleName(), clientId);
+                List<Long> allowedOrgIds = List.of();
+                return new AuthenticatedUser(
+                    account.id(),
+                    account.email(),
+                    account.fullName(),
+                    account.roleName(),
+                    clientId,
+                    account.clientName(),
+                    account.subscriptionStatus(),
+                    account.subscriptionExpiresAt(),
+                    actions,
+                    allowedOrgIds);
+            })
             .toList();
     }
 
@@ -200,7 +321,7 @@ public class DemoDataService {
     }
 
     private boolean isAccessAllowed(String roleName, String subscriptionStatus, String subscriptionExpiresAt) {
-        if ("SUPERADMIN".equals(roleName)) {
+        if (com.efiscal.backend.model.RoleEntity.ROLE_SUPERADMIN.equals(roleName)) {
             return true;
         }
         if (!"ACTIVE".equalsIgnoreCase(subscriptionStatus)) {
@@ -238,12 +359,20 @@ public class DemoDataService {
         String email,
         String fullName,
         String roleName,
+        Long clientId,
         String clientName,
         String subscriptionStatus,
-        String subscriptionExpiresAt) {
+        String subscriptionExpiresAt,
+        List<String> actions,
+        List<Long> allowedOrgIds) {
 
         public List<SimpleGrantedAuthority> authorities() {
-            return List.of(new SimpleGrantedAuthority("ROLE_" + roleName));
+            List<SimpleGrantedAuthority> auths = new java.util.ArrayList<>();
+            auths.add(new SimpleGrantedAuthority("ROLE_" + roleName));
+            if (actions != null) {
+                actions.forEach(a -> auths.add(new SimpleGrantedAuthority("ACTION_" + a)));
+            }
+            return auths;
         }
     }
 

@@ -6,6 +6,7 @@ import com.efiscal.backend.model.OrgEntity;
 import com.efiscal.backend.repository.ApiConnRepository;
 import com.efiscal.backend.repository.ApiTemplateRepository;
 import com.efiscal.backend.repository.OrgRepository;
+import com.efiscal.backend.security.AuthorizationService;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -19,31 +20,44 @@ public class ApiConnService {
     private final ApiConnRepository apiConnRepository;
     private final ApiTemplateRepository apiTemplateRepository;
     private final OrgRepository orgRepository;
+    private final AuthorizationService authorizationService;
 
     public ApiConnService(ApiConnRepository apiConnRepository,
                           ApiTemplateRepository apiTemplateRepository,
-                          OrgRepository orgRepository) {
+                          OrgRepository orgRepository,
+                          AuthorizationService authorizationService) {
         this.apiConnRepository = apiConnRepository;
         this.apiTemplateRepository = apiTemplateRepository;
         this.orgRepository = orgRepository;
+        this.authorizationService = authorizationService;
     }
 
     @Transactional(readOnly = true)
-    public List<ApiConnDto> listConnections(Long orgId) {
-        List<ApiConnEntity> list = orgId != null
-            ? apiConnRepository.findAllByOrgOrgIdAndDeletedAtIsNull(orgId)
-            : apiConnRepository.findAllByDeletedAtIsNull();
-        return list.stream().map(this::toConnDto).toList();
+    public List<ApiConnDto> listConnections(Long orgId, Long callerClientId, boolean isSuperAdmin) {
+        if (orgId != null) {
+            authorizationService.requireOrgAccess(orgId);
+            return apiConnRepository.findAllByOrgOrgIdAndDeletedAtIsNull(orgId).stream()
+                .map(this::toConnDto).toList();
+        } else {
+            List<ApiConnEntity> list = isSuperAdmin
+                ? apiConnRepository.findAllByDeletedAtIsNull()
+                : apiConnRepository.findAllByOrgClientClientIdAndDeletedAtIsNull(callerClientId);
+            return list.stream().map(this::toConnDto).toList();
+        }
     }
 
     @Transactional(readOnly = true)
-    public List<ApiTemplateDto> listTemplates(Long apiconnId) {
+    public List<ApiTemplateDto> listTemplates(Long apiconnId, Long callerClientId, boolean isSuperAdmin) {
+        ApiConnEntity conn = apiConnRepository.findById(apiconnId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Connection not found"));
+        authorizationService.requireOrgAccess(conn.getOrg().getOrgId());
         return apiTemplateRepository.findAllByApiConnApiconnId(apiconnId)
             .stream().map(this::toTemplateDto).toList();
     }
 
     @Transactional
-    public ApiConnDto createConnection(ApiConnRequest req) {
+    public ApiConnDto createConnection(ApiConnRequest req, Long callerClientId, boolean isSuperAdmin) {
+        authorizationService.requireOrgAccess(req.orgId());
         OrgEntity org = orgRepository.findById(req.orgId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Org not found"));
         ApiConnEntity e = new ApiConnEntity();
@@ -62,10 +76,12 @@ public class ApiConnService {
     }
 
     @Transactional
-    public ApiConnDto updateConnection(Long apiconnId, ApiConnRequest req) {
+    public ApiConnDto updateConnection(Long apiconnId, ApiConnRequest req, Long callerClientId, boolean isSuperAdmin) {
         ApiConnEntity e = apiConnRepository.findById(apiconnId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Connection not found"));
+        authorizationService.requireOrgAccess(e.getOrg().getOrgId());
         if (req.orgId() != null) {
+            authorizationService.requireOrgAccess(req.orgId());
             OrgEntity org = orgRepository.findById(req.orgId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Org not found"));
             e.setOrg(org);
@@ -84,9 +100,10 @@ public class ApiConnService {
     }
 
     @Transactional
-    public ApiTemplateDto createTemplate(ApiTemplateRequest req) {
+    public ApiTemplateDto createTemplate(ApiTemplateRequest req, Long callerClientId, boolean isSuperAdmin) {
         ApiConnEntity conn = apiConnRepository.findById(req.apiconnId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Connection not found"));
+        authorizationService.requireOrgAccess(conn.getOrg().getOrgId());
         ApiTemplateEntity t = new ApiTemplateEntity();
         t.setApiConn(conn);
         t.setOperationKey(req.operationKey());
@@ -98,9 +115,10 @@ public class ApiConnService {
     }
 
     @Transactional
-    public ApiTemplateDto updateTemplate(Long apitemplateId, ApiTemplateRequest req) {
+    public ApiTemplateDto updateTemplate(Long apitemplateId, ApiTemplateRequest req, Long callerClientId, boolean isSuperAdmin) {
         ApiTemplateEntity t = apiTemplateRepository.findById(apitemplateId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Template not found"));
+        authorizationService.requireOrgAccess(t.getApiConn().getOrg().getOrgId());
         if (req.operationKey() != null) t.setOperationKey(req.operationKey());
         if (req.httpMethod() != null) t.setHttpMethod(req.httpMethod());
         if (req.contentType() != null) t.setContentType(req.contentType());

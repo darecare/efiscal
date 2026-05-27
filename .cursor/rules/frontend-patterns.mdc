@@ -1,0 +1,30 @@
+---
+description: React frontend patterns (auth, API client, routing)
+globs: frontend/src/**/*.{jsx,tsx,js,ts}
+alwaysApply: false
+---
+
+# Frontend Patterns
+
+## Structure
+- Pages in `frontend/src/pages/`
+- Components in `frontend/src/components/`
+- Auth in `frontend/src/contexts/AuthContext.jsx`
+- API client in `frontend/src/services/api.js`
+
+## Auth Flow
+- JWT stored in localStorage after login
+- Axios interceptor adds `Authorization: Bearer <token>` to requests
+- ProtectedRoute wraps pages requiring auth
+- UI elements should reflect RBAC and subscription limits where appropriate
+
+## API Client
+- Base URL is proxied via Vite in development (`/api`)
+- Centralized Axios instance in `api.js`
+- Handles 401 (redirect to login) and 403 (show access denied)
+
+## UI Conventions
+- Adapt baseline design patterns from `Kliklak_Dashboard` reference (Account, Users, Orders sections)
+- Use modal dialogs for critical actions/errors
+- Loading spinners during API calls
+- Data views (like Orders and Fiscal Bills) should clearly present related status details and action bars

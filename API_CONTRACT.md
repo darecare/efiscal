@@ -41,11 +41,16 @@ Provider reference documentation:
   "accessToken": "jwt",
   "expiresInSeconds": 1800,
   "user": {
-    "id": "uuid",
-    "role": "ADMIN",
-    "subscriptionActive": true,
-    "subscriptionStartAt": "2026-01-01T00:00:00Z",
-    "subscriptionExpiresAt": "2026-12-31T23:59:59Z"
+    "id": "1000",
+    "email": "ops@acme.rs",
+    "fullName": "Acme Operations",
+    "roleName": "CLIENT_ADMIN",
+    "clientId": 1001,
+    "clientName": "Acme Retail",
+    "subscriptionStatus": "ACTIVE",
+    "subscriptionExpiresAt": "2026-11-23",
+    "actions": ["ROLES_MANAGE", "USERS_MANAGE", "FISCAL_CREATE_BILL"],
+    "allowedOrgIds": [1002, 1003]
   }
 }
 ```
@@ -55,6 +60,7 @@ Subscription behavior:
 - Normal users must have active, non-expired subscription to receive valid access.
 - Expired subscription returns `403` with code `SUBSCRIPTION_EXPIRED`.
 - Bootstrap SuperAdmin is exempt from subscription expiration validation.
+- **Note:** The `subscriptionExpiresAt` field in the authentication/session responses is formatted as a date-only string (`YYYY-MM-DD`) due to the service implementation (`DemoDataService`), whereas standard user management endpoints return a full ISO-8601 UTC timestamp (`YYYY-MM-DDTHH:mm:ssZ`).
 
 ### POST /auth/refresh
 - Description: Refresh short-lived access token (if implemented).
@@ -70,7 +76,7 @@ Subscription behavior:
 - Request:
 ```json
 {
-  "OrderId": "string",
+  "orderId": "string",
   "customer": {
     "name": "string"
   },
@@ -109,6 +115,21 @@ Subscription behavior:
   "updatedAt": "2026-03-24T10:05:00Z"
 }
 ```
+
+### GET /fiscalbill/{id}/details
+- Description: Get detailed bill data including tax and payment rows.
+- 200 Response: [bill object with items, taxes, and payments]
+
+### POST /fiscalbill/from-order
+- Description: Create fiscal bill from an existing shop order.
+- Request: same as POST /fiscalbill but specifically for order-linked flows.
+
+### POST /fiscalbill/manual
+- Description: Create fiscal bill from manual input.
+- Request: [manual entry payload]
+
+### GET /fiscalbill/status
+- Description: Get overall fiscal status summary for an organization.
 - Errors: `401`, `404`, `500`
 
 ### POST /fiscalbill/{id}/retry
@@ -126,28 +147,16 @@ Subscription behavior:
 
 ## 5. MerchantPro Sync Endpoints
 
-### POST /merchantpro/orders
-- Description: Pull/import orders from MerchantPro API (backend-to-MerchantPro integration).
-- Request:
-```json
-{
-  "filters": {
-    "created_after": "2026-04-01",
-    "shipping_status": "awaiting"
-  },
-  "paging": {
-    "limit": 100,
-    "start": 0
-  },
-  "additionalFilters": {
-    "payment_status": "paid",
-    "payment_method_code": "wire"
-  }
-}
-```
+### GET /merchantpro/orders
+- Description: Pull/import orders from MerchantPro API.
+- Parameters:
+  - orgId: (required)
+  - createdAfter: (ISO date)
+  - shippingStatus: (string)
+  - start: (offset, default 0)
+  - limit: (default 100)
 - Notes:
-  - `filters.created_after` and `filters.shipping_status` are required MVP filter fields.
-  - `additionalFilters` is an extensible map for new provider query parameters.
+  - `createdAfter` and `shippingStatus` are the primary MVP filter fields.
   - Backend resolves and validates allowed filter keys, then maps to provider URL query parameters.
 - 202 Response:
 ```json
@@ -162,76 +171,180 @@ Subscription behavior:
 
 ### GET /roles
 - Description: List roles for active client scope.
-- 200 Response: role list with metadata.
+- Query:
+  - `includeInactive` (boolean, default `false`): when `true`, inactive roles are included in the response.
+- 200 Response:
+```json
+[
+  {
+    "roleId": 1000,
+    "roleCode": "RESTRICTED_OPERATOR",
+    "name": "Restricted Operator",
+    "description": "Standard operational access",
+    "clientId": 1001,
+    "actionIds": [1002, 1003],
+    "isActive": true
+  }
+]
+```
 - Errors: `401`, `403`, `500`
 
 ### POST /roles
-- Description: Create new role.
-- Request includes role name/code and active flag.
-- 201 Response: created role object.
+- Description: Create a new custom or global role with assigned actions.
+- Request:
+```json
+{
+  "roleCode": "CASHIER_ROLE",
+  "name": "Cashier",
+  "description": "Handles daily sales operations",
+  "clientId": 1001,
+  "actionIds": [1000, 1001]
+}
+```
+- 201 Response:
+```json
+{
+  "roleId": 1004,
+  "roleCode": "CASHIER_ROLE",
+  "name": "Cashier",
+  "description": "Handles daily sales operations",
+  "clientId": 1001,
+  "actionIds": [1000, 1001]
+}
+```
 - Errors: `400`, `401`, `403`, `409`, `500`
 
 ### PUT /roles/{roleId}
-- Description: Update role metadata.
+- Description: Update role metadata (name, description, active flag).
+- Request:
+```json
+{
+  "name": "Updated Role Name",
+  "description": "Updated description",
+  "isActive": true
+}
+```
+- 200 Response: updated role object (same shape as GET /roles items).
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### PUT /roles/{roleId}/actions
+- Description: Replace all action assignments for a role.
+- Request:
+```json
+{
+  "actionIds": [1000, 1001, 1002]
+}
+```
+- 200 Response: updated role object including `actionIds`.
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### DELETE /roles/{roleId}
+- Description: Delete a custom/client-scoped role.
+- Parameters:
+  - `reassignToRoleId`: Query parameter (optional). Role ID to reassign active users to if the role is currently in use.
+- Notes:
+  - Global roles (where `clientId` is null) can only be deleted by SuperAdmin.
+  - Immutable built-in system roles (`SUPERADMIN`, `CLIENT_ADMIN`, `OPERATOR`) cannot be deleted (returns `400`).
+  - If the role is in use by active users and `reassignToRoleId` is not provided, returns `409 Conflict`.
+  - When `reassignToRoleId` is provided:
+    - Target role must be active and must not equal the role being deleted (`400`).
+    - Client-scoped roles may only be reassigned to another role in the same client scope or to a global role (`403` if cross-client).
+    - Global roles may only be reassigned to another global role (`400` if target is client-scoped).
+    - Reassigning users to `SUPERADMIN` requires SuperAdmin caller (`403`).
+- 204 Response: No Content
 - Errors: `400`, `401`, `403`, `404`, `409`, `500`
 
 ### GET /actions
 - Description: List available module actions (permission catalog).
-- Query examples: `module=MERCHANTPRO`, `module=FISCAL`.
-- Errors: `401`, `403`, `500`
-
-### PUT /roles/{roleId}/actions
-- Description: Replace or update role action assignments.
-- Request:
-```json
-{
-  "actions": [
-    "MERCHANTPRO_FETCH_ORDERS",
-    "FISCAL_CREATE_BILL"
-  ]
-}
-```
-- Errors: `400`, `401`, `403`, `404`, `500`
-
-### PUT /users/{userId}/role
-- Description: Assign role to user.
-- Errors: `400`, `401`, `403`, `404`, `500`
-
-### PUT /users/{userId}/organizations
-- Description: Assign organization access scope to user.
-- Errors: `400`, `401`, `403`, `404`, `500`
-
-### PUT /users/{userId}/subscription
-- Description: Set or update normal user subscription validity window and status.
-- Request:
-```json
-{
-  "subscriptionStatus": "ACTIVE",
-  "subscriptionStartAt": "2026-01-01T00:00:00Z",
-  "subscriptionExpiresAt": "2026-12-31T23:59:59Z"
-}
-```
-- Notes:
-  - Allowed statuses: `ACTIVE`, `EXPIRED`, `SUSPENDED`.
-  - `subscriptionStartAt` and `subscriptionExpiresAt` are required for normal users.
-  - This endpoint is restricted to authorized admin/superadmin roles.
-- Errors: `400`, `401`, `403`, `404`, `409`, `500`
-
-### GET /users/{userId}/subscription-status
-- Description: Get computed subscription status for user access validation.
+- Query: optional `module` filter (e.g. `?module=FISCAL`).
 - 200 Response:
 ```json
+[
+  {
+    "actionId": 1000,
+    "moduleCode": "FISCAL",
+    "actionCode": "FISCAL_CREATE_BILL",
+    "name": "Create Fiscal Bill",
+    "description": "Allows submitting new fiscal bills"
+  }
+]
+```
+- Errors: `401`, `403`, `500`
+
+### GET /users
+- Description: List users for the active client scope. For SuperAdmin, lists all users across all clients.
+- 200 Response:
+```json
+[
+  {
+    "userId": 1000,
+    "email": "ops@acme.rs",
+    "fullName": "Acme Operations",
+    "roleCode": "CLIENT_ADMIN",
+    "roleName": "Client Administrator",
+    "roleId": 1002,
+    "clientId": 1001,
+    "clientName": "Acme Retail",
+    "subscriptionStatus": "ACTIVE",
+    "subscriptionStartAt": "2026-01-01T00:00:00Z",
+    "subscriptionExpiresAt": "2026-12-31T23:59:59Z",
+    "isActive": true,
+    "orgIds": [1002, 1003]
+  }
+]
+```
+- Errors: `401`, `403`, `500`
+
+### GET /users/{userId}
+- Description: Get detailed user profile by user ID.
+- 200 Response: Single user object matching the shape above.
+- Errors: `401`, `403`, `404`, `500`
+
+### POST /users
+- Description: Create a new user under the client scope.
+- Request:
+```json
 {
-  "userId": "uuid",
+  "email": "newuser@example.com",
+  "password": "Password123!",
+  "fullName": "New User",
+  "clientId": 1001,
+  "roleId": 1002,
   "subscriptionStatus": "ACTIVE",
   "subscriptionStartAt": "2026-01-01T00:00:00Z",
   "subscriptionExpiresAt": "2026-12-31T23:59:59Z",
-  "isAccessAllowed": true
+  "orgIds": [1002, 1003]
 }
 ```
+- 201 Response: Created user object matching the shape above.
+- Errors: `400`, `401`, `403`, `409` (email in use), `500`
+
+### PUT /users/{userId}
+- Description: Update user details (including status, password, client, role, and subscription details).
+- Request:
+```json
+{
+  "fullName": "Updated Name",
+  "roleId": 1003,
+  "clientId": 1001,
+  "subscriptionStatus": "ACTIVE",
+  "subscriptionStartAt": "2026-01-01T00:00:00Z",
+  "subscriptionExpiresAt": "2026-12-31T23:59:59Z",
+  "isActive": true,
+  "newPassword": "NewPassword123!",
+  "orgIds": [1002, 1003]
+}
+```
+- 200 Response: Updated user object.
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### DELETE /users/{userId}
+- Description: Soft-delete a user (sets `deletedAt` to current timestamp).
 - Notes:
-  - For bootstrap superadmin, `isAccessAllowed` is true independent of subscription dates.
-- Errors: `401`, `403`, `404`, `500`
+  - Non-superadmins can only delete users belonging to their own client scope.
+  - Users cannot delete their own account.
+- 204 Response: No Content
+- Errors: `400` (self-deletion), `401`, `403` (client scope mismatch), `404`, `500`
 
 ## 6. Error Model
 All non-2xx responses should follow:

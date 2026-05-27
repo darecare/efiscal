@@ -23,3 +23,15 @@ frontend/package-lock.json
 # Local environment overrides
 .env.local
 *.env.local
+
+# Maven local cache
+backend/.m2/
+
+# Local H2 database files
+backend/data/
+
+# Eclipse IDE files
+.project
+.classpath
+.settings/
+bin/

@@ -1,6 +1,6 @@
 -- Role table
 CREATE TABLE role (
-    role_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    role_id     UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     role_code   VARCHAR(100) NOT NULL,
     name        VARCHAR(120) NOT NULL,
     description VARCHAR(255),
@@ -12,7 +12,7 @@ CREATE TABLE role (
 
 -- Client table
 CREATE TABLE client (
-    client_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id  UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     name       VARCHAR(255) NOT NULL,
     status     VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
     currency   VARCHAR(10) NOT NULL DEFAULT 'RSD',
@@ -24,7 +24,7 @@ CREATE TABLE client (
 
 -- Organization table
 CREATE TABLE org (
-    org_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id     UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     client_id  UUID NOT NULL,
     name       VARCHAR(255) NOT NULL,
     tax_id     VARCHAR(50),
@@ -41,7 +41,7 @@ CREATE INDEX idx_org_client_id ON org (client_id);
 
 -- Users table  (not named "user" to avoid reserved-word conflicts)
 CREATE TABLE users (
-    user_id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id                  UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     client_id                UUID NOT NULL,
     email                    VARCHAR(255) NOT NULL,
     password_hash            VARCHAR(255) NOT NULL,

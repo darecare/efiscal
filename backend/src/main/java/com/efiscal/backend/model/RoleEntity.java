@@ -2,20 +2,39 @@ package com.efiscal.backend.model;
 
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
+import java.util.Set;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
 @Table(name = "role")
 public class RoleEntity {
+    public static final String ROLE_SUPERADMIN = "SUPERADMIN";
+    public static final String ROLE_CLIENT_ADMIN = "CLIENT_ADMIN";
+    public static final String ROLE_OPERATOR = "OPERATOR";
+
+    private static final Set<String> IMMUTABLE_SYSTEM_ROLE_CODES = Set.of(
+        ROLE_SUPERADMIN,
+        ROLE_CLIENT_ADMIN,
+        ROLE_OPERATOR
+    );
+
+    public static boolean isImmutableSystemRole(String roleCode) {
+        return roleCode != null && IMMUTABLE_SYSTEM_ROLE_CODES.contains(roleCode);
+    }
+
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "role_id", nullable = false, updatable = false)
     private Long roleId;
 
-    @Column(name = "role_code", nullable = false, unique = true, length = 100)
+    @Column(name = "role_code", nullable = false, length = 100)
     private String roleCode;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "client_id")
+    private ClientEntity client;
 
     @Column(name = "name", nullable = false, length = 120)
     private String name;
@@ -38,6 +57,8 @@ public class RoleEntity {
     public void setRoleId(Long roleId) { this.roleId = roleId; }
     public String getRoleCode() { return roleCode; }
     public void setRoleCode(String roleCode) { this.roleCode = roleCode; }
+    public ClientEntity getClient() { return client; }
+    public void setClient(ClientEntity client) { this.client = client; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getDescription() { return description; }

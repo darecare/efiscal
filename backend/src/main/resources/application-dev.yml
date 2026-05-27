@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/efiscal
+    username: efiscal
+    password: efiscal
+  devtools:
+    restart:
+      enabled: true
