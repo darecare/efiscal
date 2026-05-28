@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
+import { useTranslation, Trans } from 'react-i18next'
 import AppShell from '../components/AppShell'
 import { fiscalBillApi, orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function GetStatus() {
+  const { t } = useTranslation()
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
 
@@ -20,7 +22,7 @@ export default function GetStatus() {
 
   async function handleGetStatus() {
     if (!selectedOrgId) {
-      setError('Please select an organization.')
+      setError(t('getStatus.selectOrgRequired'))
       return
     }
     setLoading(true)
@@ -30,7 +32,7 @@ export default function GetStatus() {
       const data = await fiscalBillApi.getStatus(Number(selectedOrgId))
       setResult(data)
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data || err?.message || 'Failed to get status.'
+      const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('getStatus.loadFailed')
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setLoading(false)
@@ -45,19 +47,19 @@ export default function GetStatus() {
         className="form-input"
         style={{ minWidth: '200px' }}
       >
-        <option value="">Select organization...</option>
+        <option value="">{t('getStatus.selectOrg')}</option>
         {orgs.map((org) => (
           <option key={org.orgId} value={org.orgId}>{org.name}</option>
         ))}
       </select>
       <button className="primary-button" onClick={handleGetStatus} disabled={loading}>
-        {loading ? 'Loading...' : 'Get Status'}
+        {loading ? t('common.loading') : t('getStatus.getStatus')}
       </button>
     </div>
   )
 
   return (
-    <AppShell title="Get Status" subtitle="Tax Authority V-SDC status" actions={topActions}>
+    <AppShell title={t('getStatus.title')} subtitle={t('getStatus.subtitle')} actions={topActions}>
       {error && (
         <div className="error-banner" style={{ marginBottom: '1rem' }}>
           {error}
@@ -66,9 +68,8 @@ export default function GetStatus() {
 
       {result && (
         <div>
-          {/* Summary row */}
           <div className="card" style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ marginBottom: '0.75rem' }}>Response Status: 200 OK</h3>
+            <h3 style={{ marginBottom: '0.75rem' }}>{t('getStatus.responseStatus')}</h3>
             <table className="data-table">
               <tbody>
                 {Object.entries(result)
@@ -76,7 +77,7 @@ export default function GetStatus() {
                   .map(([key, value]) => (
                     <tr key={key}>
                       <td style={{ fontWeight: 500, width: '200px' }}>{key}</td>
-                      <td>{value !== null && value !== undefined ? String(value) : '—'}</td>
+                      <td>{value !== null && value !== undefined ? String(value) : t('common.dash')}</td>
                     </tr>
                   ))}
                 {result.supportedLanguages && (
@@ -89,29 +90,28 @@ export default function GetStatus() {
             </table>
           </div>
 
-          {/* Current Tax Rates */}
           {result.currentTaxRates && (
             <div className="card" style={{ marginBottom: '1.5rem' }}>
               <h3 style={{ marginBottom: '0.5rem' }}>
-                Current Tax Rates
-                {result.currentTaxRates.validFrom ? ` — valid from ${result.currentTaxRates.validFrom}` : ''}
-                {result.currentTaxRates.groupId !== undefined ? ` (Group ${result.currentTaxRates.groupId})` : ''}
+                {t('getStatus.currentTaxRates')}
+                {result.currentTaxRates.validFrom ? ` — ${t('getStatus.validFrom', { date: result.currentTaxRates.validFrom })}` : ''}
+                {result.currentTaxRates.groupId !== undefined ? ` (${t('getStatus.group', { id: result.currentTaxRates.groupId })})` : ''}
               </h3>
-              <TaxCategoriesTable categories={result.currentTaxRates.taxCategories} />
+              <TaxCategoriesTable categories={result.currentTaxRates.taxCategories} t={t} />
             </div>
           )}
 
-          {/* All Tax Rates */}
           {result.allTaxRates && result.allTaxRates.length > 0 && (
             <div className="card">
-              <h3 style={{ marginBottom: '0.75rem' }}>All Tax Rate Groups</h3>
+              <h3 style={{ marginBottom: '0.75rem' }}>{t('getStatus.allTaxRateGroups')}</h3>
               {result.allTaxRates.map((group, idx) => (
                 <div key={idx} style={{ marginBottom: '1.25rem' }}>
                   <h4 style={{ marginBottom: '0.4rem' }}>
-                    Group {group.groupId}
-                    {group.validFrom ? ` — valid from ${group.validFrom}` : ''}
+                    {group.validFrom
+                      ? t('getStatus.groupWithValidFrom', { id: group.groupId, date: group.validFrom })
+                      : t('getStatus.group', { id: group.groupId })}
                   </h4>
-                  <TaxCategoriesTable categories={group.taxCategories} />
+                  <TaxCategoriesTable categories={group.taxCategories} t={t} />
                 </div>
               ))}
             </div>
@@ -121,23 +121,25 @@ export default function GetStatus() {
 
       {!result && !error && !loading && (
         <div className="empty-state">
-          <p>Select an organization and click <strong>Get Status</strong> to retrieve Tax Authority SDC status.</p>
+          <p>
+            <Trans i18nKey="getStatus.emptyHint" components={{ strong: <strong /> }} />
+          </p>
         </div>
       )}
     </AppShell>
   )
 }
 
-function TaxCategoriesTable({ categories }) {
-  if (!categories || categories.length === 0) return <p>No tax categories.</p>
+function TaxCategoriesTable({ categories, t }) {
+  if (!categories || categories.length === 0) return <p>{t('getStatus.noTaxCategories')}</p>
   return (
     <table className="data-table">
       <thead>
         <tr>
-          <th>Category Name</th>
-          <th>Category Type</th>
-          <th>Order</th>
-          <th>Tax Rates (Label / Rate %)</th>
+          <th>{t('getStatus.categoryName')}</th>
+          <th>{t('getStatus.categoryType')}</th>
+          <th>{t('getStatus.order')}</th>
+          <th>{t('getStatus.taxRatesCol')}</th>
         </tr>
       </thead>
       <tbody>
@@ -151,8 +153,8 @@ function TaxCategoriesTable({ categories }) {
                 <table style={{ borderCollapse: 'collapse', width: '100%' }}>
                   <thead>
                     <tr>
-                      <th style={{ padding: '2px 8px', textAlign: 'left', fontSize: '0.8rem', fontWeight: 600 }}>Label</th>
-                      <th style={{ padding: '2px 8px', textAlign: 'right', fontSize: '0.8rem', fontWeight: 600 }}>Rate %</th>
+                      <th style={{ padding: '2px 8px', textAlign: 'left', fontSize: '0.8rem', fontWeight: 600 }}>{t('getStatus.label')}</th>
+                      <th style={{ padding: '2px 8px', textAlign: 'right', fontSize: '0.8rem', fontWeight: 600 }}>{t('getStatus.ratePercent')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -164,7 +166,7 @@ function TaxCategoriesTable({ categories }) {
                     ))}
                   </tbody>
                 </table>
-              ) : '—'}
+              ) : t('common.dash')}
             </td>
           </tr>
         ))}

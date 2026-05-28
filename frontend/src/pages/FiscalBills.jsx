@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18n from 'i18next'
 import AppShell from '../components/AppShell'
 import { fiscalBillApi, orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -6,39 +8,12 @@ import { DateRangePicker } from 'react-date-range'
 import 'react-date-range/dist/styles.css'
 import 'react-date-range/dist/theme/default.css'
 
-const PAYMENT_TYPE_LABELS = {
-  0: 'Other',
-  1: 'Cash',
-  2: 'Card',
-  3: 'Check',
-  4: 'Wire Transfer',
-  5: 'Voucher',
-  6: 'Mobile Money',
-}
-
-const INVOICE_TYPE_OPTIONS = [
-  { value: 0, label: 'Normal' },
-  { value: 2, label: 'Copy' },
-  { value: 4, label: 'Advance' },
-]
-
-const INVOICE_TYPE_LABELS = {
-  0: 'Normal',
-  2: 'Copy',
-  4: 'Advance',
-}
-
-const TRANSACTION_TYPE_OPTIONS = [
-  { value: 0, label: 'Sale' },
-  { value: 1, label: 'Refund' },
-]
-
-const TRANSACTION_TYPE_LABELS = {
-  0: 'Sale',
-  1: 'Refund',
-}
+const INVOICE_TYPE_VALUES = [0, 2, 4]
+const TRANSACTION_TYPE_VALUES = [0, 1]
+const PAYMENT_TYPE_VALUES = [0, 1, 2, 3, 4, 5, 6]
 
 export default function FiscalBills() {
+  const { t } = useTranslation()
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
 
@@ -112,7 +87,7 @@ export default function FiscalBills() {
   async function handleLoadFiscalBills(e) {
     if (e) e.preventDefault()
     if (!selectedOrgId) {
-      setError('Please select an organization.')
+      setError(t('fiscalBills.selectOrgRequired'))
       return
     }
 
@@ -127,7 +102,7 @@ export default function FiscalBills() {
       const data = await fiscalBillApi.list(Number(selectedOrgId))
       setFiscalBills(data)
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data || err?.message || 'Failed to load fiscal bills.'
+      const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('fiscalBills.loadFailed')
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
       setFiscalBills([])
     } finally {
@@ -189,7 +164,7 @@ export default function FiscalBills() {
   const tablePageCount = Math.max(1, Math.ceil(filteredBills.length / PAGE_SIZE))
   const pagedBills = filteredBills.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE)
 
-  const selectedDateRangeLabel = formatDateRangeLabel(dateRange[0].startDate, dateRange[0].endDate)
+  const selectedDateRangeLabel = formatDateRangeLabel(dateRange[0].startDate, dateRange[0].endDate, t)
 
   function handleDateRangeChange(ranges) {
     setDateRange([ranges.selection])
@@ -213,7 +188,7 @@ export default function FiscalBills() {
       const data = await fiscalBillApi.details(fiscalbillId)
       setDetails(data)
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data || err?.message || 'Failed to load fiscal bill details.'
+      const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('fiscalBills.loadDetailsFailed')
       setDetailsError(typeof msg === 'string' ? msg : JSON.stringify(msg))
       setDetails(null)
     } finally {
@@ -246,10 +221,10 @@ export default function FiscalBills() {
     try {
       const idempotencyKey = createIdempotencyKey()
       const created = await fiscalBillApi.createCopy(fiscalBillId, idempotencyKey)
-      setSuccessMsg(`Copy created successfully (ID: ${created.fiscalbillId})`)
+      setSuccessMsg(t('fiscalBills.copyCreatedToast', { id: created.fiscalbillId }))
       await handleLoadFiscalBills()
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data?.lastError || err?.response?.data || err?.message || 'Failed to create copy fiscal bill.'
+      const msg = err?.response?.data?.message || err?.response?.data?.lastError || err?.response?.data || err?.message || t('fiscalBills.copyFailed')
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setCopyingBillIds((prev) => ({ ...prev, [fiscalBillId]: false }))
@@ -264,10 +239,10 @@ export default function FiscalBills() {
     try {
       const idempotencyKey = createIdempotencyKey()
       const created = await fiscalBillApi.createRefund(fiscalBillId, idempotencyKey)
-      setSuccessMsg(`Refund created successfully (ID: ${created.fiscalbillId})`)
+      setSuccessMsg(t('fiscalBills.refundCreatedToast', { id: created.fiscalbillId }))
       await handleLoadFiscalBills()
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data?.lastError || err?.response?.data || err?.message || 'Failed to create refund fiscal bill.'
+      const msg = err?.response?.data?.message || err?.response?.data?.lastError || err?.response?.data || err?.message || t('fiscalBills.refundFailed')
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setRefundingBillIds((prev) => ({ ...prev, [fiscalBillId]: false }))
@@ -332,27 +307,27 @@ export default function FiscalBills() {
   }
 
   return (
-    <AppShell title="Fiscal Bills" subtitle="Browse fiscal bills, tax rows, and payment rows">
+    <AppShell title={t('fiscalBills.title')} subtitle={t('fiscalBills.subtitle')}>
       {successMsg ? <div className="success-banner" style={{ marginBottom: '1rem' }}>{successMsg}</div> : null}
       {error ? <div className="error-banner" style={{ marginBottom: '1rem' }}>{error}</div> : null}
 
       <form className="filters-panel" onSubmit={handleLoadFiscalBills} style={{ marginBottom: '1rem' }}>
         <div className="filter-grid">
           <label className="field">
-            <span>Organization</span>
+            <span>{t('common.organization')}</span>
             <select
               value={selectedOrgId}
               onChange={(e) => setSelectedOrgId(e.target.value)}
               required
             >
-              <option value="">— Select organization —</option>
+              <option value="">{t('common.selectOrgPlaceholder')}</option>
               {orgs.map((org) => (
                 <option key={org.orgId} value={org.orgId}>{org.name}</option>
               ))}
             </select>
           </label>
           <label className="field fiscal-date-range-field" ref={dateRangeFieldRef}>
-            <span>TA Date Range</span>
+            <span>{t('fiscalBills.taDateRange')}</span>
             <button
               type="button"
               className="secondary-button fiscal-date-range-trigger"
@@ -371,59 +346,59 @@ export default function FiscalBills() {
                   months={1}
                 />
                 <div className="fiscal-date-range-actions">
-                  <button type="button" className="secondary-button" onClick={clearDateRange}>Clear</button>
-                  <button type="button" className="primary-button" onClick={() => setIsDatePickerOpen(false)}>Apply</button>
+                  <button type="button" className="secondary-button" onClick={clearDateRange}>{t('common.clear')}</button>
+                  <button type="button" className="primary-button" onClick={() => setIsDatePickerOpen(false)}>{t('common.apply')}</button>
                 </div>
               </div>
             )}
           </label>
           <label className="field">
-            <span>TA Invoice No</span>
+            <span>{t('fiscalBills.taInvoiceNo')}</span>
             <input
               type="text"
-              placeholder="e.g. A9ZA2WRE-..."
+              placeholder={t('fiscalBills.taInvoiceNoPlaceholder')}
               value={filterInvoiceNo}
               onChange={(e) => setFilterInvoiceNo(e.target.value)}
             />
           </label>
           <label className="field">
-            <span>Order ID</span>
+            <span>{t('fiscalBills.orderId')}</span>
             <input
               type="text"
-              placeholder="Search by order ID..."
+              placeholder={t('fiscalBills.orderIdPlaceholder')}
               value={filterOrderId}
               onChange={(e) => setFilterOrderId(e.target.value)}
             />
           </label>
           <label className="field">
-            <span>Invoice Type</span>
+            <span>{t('fiscalBills.invoiceType')}</span>
             <select
               value={filterInvoiceType}
               onChange={(e) => setFilterInvoiceType(e.target.value)}
             >
-              <option value="">— All types —</option>
-              {INVOICE_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+              <option value="">{t('common.selectAllTypesPlaceholder')}</option>
+              {INVOICE_TYPE_VALUES.map((v) => (
+                <option key={v} value={v}>{t(`fiscalBills.invoiceTypes.${v}`)}</option>
               ))}
             </select>
           </label>
           <label className="field">
-            <span>Transaction Type</span>
+            <span>{t('fiscalBills.transactionType')}</span>
             <select
               value={filterTransactionType}
               onChange={(e) => setFilterTransactionType(e.target.value)}
             >
-              <option value="">— All —</option>
-              {TRANSACTION_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+              <option value="">{t('common.selectAllPlaceholder')}</option>
+              {TRANSACTION_TYPE_VALUES.map((v) => (
+                <option key={v} value={v}>{t(`fiscalBills.transactionTypes.${v}`)}</option>
               ))}
             </select>
           </label>
           <label className="field">
-            <span>Customer Name</span>
+            <span>{t('fiscalBills.customerName')}</span>
             <input
               type="text"
-              placeholder="Search by name..."
+              placeholder={t('fiscalBills.customerNamePlaceholder')}
               value={filterCustomerName}
               onChange={(e) => setFilterCustomerName(e.target.value)}
             />
@@ -431,25 +406,27 @@ export default function FiscalBills() {
         </div>
         <div className="inline-actions">
           <button className="primary-button" type="submit" disabled={loading}>
-            {loading ? 'Loading...' : 'Load Fiscal Bills'}
+            {loading ? t('common.loading') : t('fiscalBills.loadFiscalBills')}
           </button>
           {hasFetched && (
             <span className="badge">
-              {filteredBills.length}{filteredBills.length !== fiscalBills.length ? ` of ${fiscalBills.length}` : ''} records
+              {filteredBills.length !== fiscalBills.length
+                ? t('fiscalBills.recordsBadgeFiltered', { shown: filteredBills.length, total: fiscalBills.length })
+                : t('common.counts.records', { count: filteredBills.length })}
             </span>
           )}
         </div>
       </form>
 
       <div className="card" style={{ marginBottom: '1rem' }}>
-        <h3 style={{ marginBottom: '0.75rem' }}>Fiscal Bill List</h3>
+        <h3 style={{ marginBottom: '0.75rem' }}>{t('fiscalBills.listTitle')}</h3>
         {!hasFetched ? (
           <div className="empty-state">
-            <p>Select an organization and load fiscal bills.</p>
+            <p>{t('fiscalBills.selectOrgPrompt')}</p>
           </div>
         ) : filteredBills.length === 0 ? (
           <div className="empty-state">
-            <p>{fiscalBills.length === 0 ? 'No fiscal bills found for the selected organization.' : 'No fiscal bills match the current filters.'}</p>
+            <p>{fiscalBills.length === 0 ? t('fiscalBills.noBillsForOrg') : t('fiscalBills.noBillsMatchFilters')}</p>
           </div>
         ) : (
           <>
@@ -461,10 +438,10 @@ export default function FiscalBills() {
                 onClick={() => setTablePage((p) => Math.max(1, p - 1))}
                 disabled={tablePage === 1}
               >
-                &lsaquo; Prev
+                {t('common.prev')}
               </button>
               <span className="pagination-info">
-                Page {tablePage} of {tablePageCount} &mdash; {filteredBills.length} records
+                {t('common.paginationInfo', { current: tablePage, total: tablePageCount, records: filteredBills.length })}
               </span>
               <button
                 type="button"
@@ -472,45 +449,45 @@ export default function FiscalBills() {
                 onClick={() => setTablePage((p) => Math.min(tablePageCount, p + 1))}
                 disabled={tablePage >= tablePageCount}
               >
-                Next &rsaquo;
+                {t('common.next')}
               </button>
             </div>
           )}
           <table className="data-table fiscal-bills-table">
             <thead>
               <tr>
-                <th>Order ID</th>
-                <th>Status</th>
-                <th>Customer</th>
-                <th>Invoice Type</th>
-                <th>Transaction Type</th>
-                <th>TA Invoice No</th>
-                <th>Total</th>
-                <th>Created</th>
-                <th>Action</th>
+                <th>{t('fiscalBills.orderId')}</th>
+                <th>{t('common.status')}</th>
+                <th>{t('orders.customer')}</th>
+                <th>{t('fiscalBills.invoiceType')}</th>
+                <th>{t('fiscalBills.transactionType')}</th>
+                <th>{t('fiscalBills.taInvoiceNo')}</th>
+                <th>{t('orders.total')}</th>
+                <th>{t('common.created')}</th>
+                <th>{t('fiscalBills.action')}</th>
               </tr>
             </thead>
             <tbody>
               {pagedBills.map((bill) => (
                 <tr key={bill.fiscalbillId}>
-                  <td>{bill.orderId || '—'}</td>
+                  <td>{bill.orderId || t('common.dash')}</td>
                   <td>{bill.status}</td>
-                  <td>{bill.customerName || '—'}</td>
-                  <td>{INVOICE_TYPE_LABELS[bill.invoiceType] || bill.invoiceType || '—'}</td>
-                  <td>{TRANSACTION_TYPE_LABELS[bill.transactionType] || bill.transactionType || '—'}</td>
-                  <td>{bill.sdcInvoiceNumber || '—'}</td>
-                  <td className="cell-right">{bill.totalAmount ?? '—'}</td>
+                  <td>{bill.customerName || t('common.dash')}</td>
+                  <td>{t(`fiscalBills.invoiceTypes.${bill.invoiceType}`, { defaultValue: bill.invoiceType ?? t('common.dash') })}</td>
+                  <td>{t(`fiscalBills.transactionTypes.${bill.transactionType}`, { defaultValue: bill.transactionType ?? t('common.dash') })}</td>
+                  <td>{bill.sdcInvoiceNumber || t('common.dash')}</td>
+                  <td className="cell-right">{bill.totalAmount ?? t('common.dash')}</td>
                   <td>{formatDateTime(bill.createdAt)}</td>
                   <td>
                     <details className="action-dropdown">
-                      <summary className="secondary-button">Actions</summary>
+                      <summary className="secondary-button">{t('common.actions')}</summary>
                       <div className="action-dropdown-menu">
                         <button
                           type="button"
                           className="secondary-button"
                           onClick={() => openDetailsModal(bill.fiscalbillId)}
                         >
-                          View details
+                          {t('fiscalBills.viewDetails')}
                         </button>
                         {(bill.invoiceType === 0 || bill.invoiceType === 4) && (
                           <button
@@ -519,7 +496,7 @@ export default function FiscalBills() {
                             onClick={() => openCopyConfirm(bill)}
                             disabled={Boolean(copyingBillIds[bill.fiscalbillId])}
                           >
-                            {copyingBillIds[bill.fiscalbillId] ? 'Creating Copy...' : 'Create Copy'}
+                            {copyingBillIds[bill.fiscalbillId] ? t('fiscalBills.creatingCopy') : t('fiscalBills.createCopy')}
                           </button>
                         )}
                         {canCreateRefund(bill) && (
@@ -529,7 +506,7 @@ export default function FiscalBills() {
                             onClick={() => openRefundConfirm(bill)}
                             disabled={Boolean(refundingBillIds[bill.fiscalbillId])}
                           >
-                            {refundingBillIds[bill.fiscalbillId] ? 'Creating Refund...' : 'Create Refund'}
+                            {refundingBillIds[bill.fiscalbillId] ? t('fiscalBills.creatingRefund') : t('fiscalBills.createRefund')}
                           </button>
                         )}
                       </div>
@@ -547,10 +524,10 @@ export default function FiscalBills() {
                 onClick={() => setTablePage((p) => Math.max(1, p - 1))}
                 disabled={tablePage === 1}
               >
-                &lsaquo; Prev
+                {t('common.prev')}
               </button>
               <span className="pagination-info">
-                Page {tablePage} of {tablePageCount} &mdash; {filteredBills.length} records
+                {t('common.paginationInfo', { current: tablePage, total: tablePageCount, records: filteredBills.length })}
               </span>
               <button
                 type="button"
@@ -558,7 +535,7 @@ export default function FiscalBills() {
                 onClick={() => setTablePage((p) => Math.min(tablePageCount, p + 1))}
                 disabled={tablePage >= tablePageCount}
               >
-                Next &rsaquo;
+                {t('common.next')}
               </button>
             </div>
           )}
@@ -570,35 +547,35 @@ export default function FiscalBills() {
         <div className="fiscalbills-modal-overlay" onClick={closeDetailsModal}>
           <div className="fiscalbills-modal" onClick={(e) => e.stopPropagation()}>
             <div className="fiscalbills-modal-header">
-              <h3 style={{ margin: 0 }}>Fiscal Bill Details</h3>
-              <button type="button" className="secondary-button" onClick={closeDetailsModal}>Close</button>
+              <h3 style={{ margin: 0 }}>{t('fiscalBills.detailsTitle')}</h3>
+              <button type="button" className="secondary-button" onClick={closeDetailsModal}>{t('common.close')}</button>
             </div>
 
             {detailsError ? <div className="error-banner" style={{ marginBottom: '1rem' }}>{detailsError}</div> : null}
-            {detailsLoading ? <p>Loading details...</p> : null}
+            {detailsLoading ? <p>{t('fiscalBills.loadingDetails')}</p> : null}
 
             {!detailsLoading && details?.fiscalBill && (
               <>
                 <div className="fiscalbills-summary-grid">
-                  <div><strong>Fiscal Bill ID:</strong> {details.fiscalBill.fiscalbillId}</div>
-                  <div><strong>Status:</strong> {details.fiscalBill.status}</div>
-                  <div><strong>Order ID:</strong> {details.fiscalBill.orderId || '—'}</div>
-                  <div><strong>TA Invoice No:</strong> {details.fiscalBill.sdcInvoiceNumber || '—'}</div>
-                  <div><strong>Created:</strong> {formatDateTime(details.fiscalBill.createdAt)}</div>
-                  <div><strong>Updated:</strong> {formatDateTime(details.fiscalBill.updatedAt)}</div>
+                  <div><strong>{t('fiscalBills.fiscalBillId')}</strong> {details.fiscalBill.fiscalbillId}</div>
+                  <div><strong>{t('account.statusLabel')}:</strong> {details.fiscalBill.status}</div>
+                  <div><strong>{t('fiscalBills.orderId')}</strong> {details.fiscalBill.orderId || t('common.dash')}</div>
+                  <div><strong>{t('fiscalBills.taInvoiceNoLabel')}:</strong> {details.fiscalBill.sdcInvoiceNumber || t('common.dash')}</div>
+                  <div><strong>{t('common.created')}</strong> {formatDateTime(details.fiscalBill.createdAt)}</div>
+                  <div><strong>{t('fiscalBills.updated')}</strong> {formatDateTime(details.fiscalBill.updatedAt)}</div>
                   <div className="fiscalbills-link-row">
-                    <strong>Verification Link:</strong>
+                    <strong>{t('fiscalBills.verificationLink')}</strong>
                     {details.fiscalBill.efiscalLink ? (
                       <a
                         href={details.fiscalBill.efiscalLink}
                         target="_blank"
                         rel="noreferrer"
                         className="icon-link"
-                        title="Open verification link"
+                        title={t('fiscalBills.openVerificationLink')}
                       >
                         <span className="external-link-icon" aria-hidden="true"></span>
                       </a>
-                    ) : ' —'}
+                    ) : ` ${t('common.dash')}`}
                   </div>
                 </div>
 
@@ -606,7 +583,7 @@ export default function FiscalBills() {
                   <div className="fiscalbills-qr-wrap">
                     <img
                       src={toQrImageSrc(details.fiscalBill.efiscalQr, details.fiscalBill.efiscalLink)}
-                      alt="Fiscal bill QR"
+                      alt={t('fiscalBills.qrAlt')}
                       className="fiscalbills-qr-image"
                     />
                   </div>
@@ -618,21 +595,21 @@ export default function FiscalBills() {
                     onClick={() => setActiveTab('tax')}
                     type="button"
                   >
-                    Tax Items
+                    {t('fiscalBills.taxItems')}
                   </button>
                   <button
                     className={activeTab === 'lines' ? 'primary-button' : 'secondary-button'}
                     onClick={() => setActiveTab('lines')}
                     type="button"
                   >
-                    Line Items
+                    {t('fiscalBills.lineItems')}
                   </button>
                   <button
                     className={activeTab === 'payment' ? 'primary-button' : 'secondary-button'}
                     onClick={() => setActiveTab('payment')}
                     type="button"
                   >
-                    Payment Items
+                    {t('fiscalBills.paymentItems')}
                   </button>
                 </div>
 
@@ -640,25 +617,25 @@ export default function FiscalBills() {
                   <table className="data-table fiscal-bills-table">
                     <thead>
                       <tr>
-                        <th>Tax Label</th>
-                        <th>Category</th>
-                        <th>Category Type</th>
-                        <th>Rate</th>
-                        <th>Amount</th>
+                        <th>{t('fiscalBills.taxLabel')}</th>
+                        <th>{t('fiscalBills.category')}</th>
+                        <th>{t('fiscalBills.categoryType')}</th>
+                        <th>{t('fiscalBills.rate')}</th>
+                        <th>{t('fiscalBills.amount')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {details.taxItems.length === 0 ? (
                         <tr>
-                          <td colSpan="5">No tax items stored for this fiscal bill.</td>
+                          <td colSpan="5">{t('fiscalBills.noTaxItems')}</td>
                         </tr>
                       ) : details.taxItems.map((item) => (
                         <tr key={item.fiscalbilltaxId}>
-                          <td>{item.taxLabel || '—'}</td>
-                          <td>{item.categoryName || '—'}</td>
-                          <td>{item.categoryType ?? '—'}</td>
-                          <td className="cell-right">{item.rate ?? '—'}</td>
-                          <td className="cell-right">{item.amount ?? '—'}</td>
+                          <td>{item.taxLabel || t('common.dash')}</td>
+                          <td>{item.categoryName || t('common.dash')}</td>
+                          <td>{item.categoryType ?? t('common.dash')}</td>
+                          <td className="cell-right">{item.rate ?? t('common.dash')}</td>
+                          <td className="cell-right">{item.amount ?? t('common.dash')}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -667,31 +644,31 @@ export default function FiscalBills() {
                   <table className="data-table fiscal-bills-table">
                     <thead>
                       <tr>
-                        <th>Name</th>
-                        <th>Qty</th>
-                        <th>Unit Price</th>
-                        <th>Total</th>
-                        <th>Tax Label</th>
-                        <th>GTIN</th>
-                        <th>Product ID</th>
-                        <th>SKU</th>
+                        <th>{t('common.name')}</th>
+                        <th>{t('orders.qty')}</th>
+                        <th>{t('orders.unitPrice')}</th>
+                        <th>{t('orders.total')}</th>
+                        <th>{t('fiscalBills.taxLabel')}</th>
+                        <th>{t('fiscalBills.gtin')}</th>
+                        <th>{t('fiscalBills.productId')}</th>
+                        <th>{t('orders.sku')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {details.lineItems.length === 0 ? (
                         <tr>
-                          <td colSpan="8">No line items stored for this fiscal bill.</td>
+                          <td colSpan="8">{t('fiscalBills.noLineItems')}</td>
                         </tr>
                       ) : details.lineItems.map((item) => (
                         <tr key={item.fiscalbilllineId}>
-                          <td>{item.name || '—'}</td>
-                          <td className="cell-right">{item.quantity ?? '—'}</td>
-                          <td className="cell-right">{item.unitPrice ?? '—'}</td>
-                          <td className="cell-right">{item.totalAmount ?? '—'}</td>
-                          <td>{item.taxLabel || '—'}</td>
-                          <td>{item.gtin || '—'}</td>
-                          <td>{item.productId || '—'}</td>
-                          <td>{item.sku || '—'}</td>
+                          <td>{item.name || t('common.dash')}</td>
+                          <td className="cell-right">{item.quantity ?? t('common.dash')}</td>
+                          <td className="cell-right">{item.unitPrice ?? t('common.dash')}</td>
+                          <td className="cell-right">{item.totalAmount ?? t('common.dash')}</td>
+                          <td>{item.taxLabel || t('common.dash')}</td>
+                          <td>{item.gtin || t('common.dash')}</td>
+                          <td>{item.productId || t('common.dash')}</td>
+                          <td>{item.sku || t('common.dash')}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -700,19 +677,19 @@ export default function FiscalBills() {
                   <table className="data-table fiscal-bills-table">
                     <thead>
                       <tr>
-                        <th>Payment Type</th>
-                        <th>Amount</th>
+                        <th>{t('fiscalBills.paymentType')}</th>
+                        <th>{t('fiscalBills.amount')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {details.payments.length === 0 ? (
                         <tr>
-                          <td colSpan="2">No payment rows stored for this fiscal bill.</td>
+                          <td colSpan="2">{t('fiscalBills.noPaymentRows')}</td>
                         </tr>
                       ) : details.payments.map((payment) => (
                         <tr key={payment.fiscalbillpayId}>
-                          <td>{PAYMENT_TYPE_LABELS[payment.paymentType] || payment.paymentType}</td>
-                          <td className="cell-right">{payment.amount ?? '—'}</td>
+                          <td>{t(`fiscalBills.paymentTypes.${payment.paymentType}`, { defaultValue: payment.paymentType })}</td>
+                          <td className="cell-right">{payment.amount ?? t('common.dash')}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -728,26 +705,26 @@ export default function FiscalBills() {
         <div className="modal-overlay" onClick={closeCopyConfirm}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Confirm Create Copy</h3>
+              <h3>{t('fiscalBills.confirmCopyTitle')}</h3>
               <button type="button" className="modal-close" onClick={closeCopyConfirm}>×</button>
             </div>
             <p style={{ marginTop: 0 }}>
-              Create a Copy fiscal bill for this document?
+              {t('fiscalBills.confirmCopyBody')}
             </p>
             <p>
-              <strong>Order ID:</strong> {copyConfirmBill.orderId || '—'}<br />
-              <strong>TA Invoice No:</strong> {copyConfirmBill.sdcInvoiceNumber || '—'}<br />
-              <strong>Transaction Type:</strong> {TRANSACTION_TYPE_LABELS[copyConfirmBill.transactionType] || copyConfirmBill.transactionType || '—'}
+              <strong>{t('fiscalBills.orderId')}</strong> {copyConfirmBill.orderId || t('common.dash')}<br />
+              <strong>{t('fiscalBills.taInvoiceNoLabel')}:</strong> {copyConfirmBill.sdcInvoiceNumber || t('common.dash')}<br />
+              <strong>{t('fiscalBills.transactionType')}</strong> {t(`fiscalBills.transactionTypes.${copyConfirmBill.transactionType}`, { defaultValue: copyConfirmBill.transactionType ?? t('common.dash') })}
             </p>
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={closeCopyConfirm}>Cancel</button>
+              <button type="button" className="secondary-button" onClick={closeCopyConfirm}>{t('common.cancel')}</button>
               <button
                 type="button"
                 className="primary-button"
                 onClick={confirmCreateCopy}
                 disabled={Boolean(copyingBillIds[copyConfirmBill.fiscalbillId])}
               >
-                Confirm Create Copy
+                {t('fiscalBills.confirmCreateCopy')}
               </button>
             </div>
           </div>
@@ -758,16 +735,16 @@ export default function FiscalBills() {
         <div className="modal-overlay" onClick={() => setRefundAlreadyExistsBill(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Cannot Create Refund</h3>
+              <h3>{t('fiscalBills.cannotRefundTitle')}</h3>
               <button type="button" className="modal-close" onClick={() => setRefundAlreadyExistsBill(null)}>×</button>
             </div>
-            <p style={{ marginTop: 0 }}>Fiscal bill already has issued refund.</p>
+            <p style={{ marginTop: 0 }}>{t('fiscalBills.refundAlreadyExists')}</p>
             <p>
-              <strong>Order ID:</strong> {refundAlreadyExistsBill.orderId || '—'}<br />
-              <strong>TA Invoice No:</strong> {refundAlreadyExistsBill.sdcInvoiceNumber || '—'}
+              <strong>{t('fiscalBills.orderId')}</strong> {refundAlreadyExistsBill.orderId || t('common.dash')}<br />
+              <strong>{t('fiscalBills.taInvoiceNoLabel')}:</strong> {refundAlreadyExistsBill.sdcInvoiceNumber || t('common.dash')}
             </p>
             <div className="modal-actions">
-              <button type="button" className="primary-button" onClick={() => setRefundAlreadyExistsBill(null)}>OK</button>
+              <button type="button" className="primary-button" onClick={() => setRefundAlreadyExistsBill(null)}>{t('common.ok')}</button>
             </div>
           </div>
         </div>
@@ -777,27 +754,27 @@ export default function FiscalBills() {
         <div className="modal-overlay" onClick={closeRefundConfirm}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Confirm Create Refund</h3>
+              <h3>{t('fiscalBills.confirmRefundTitle')}</h3>
               <button type="button" className="modal-close" onClick={closeRefundConfirm}>×</button>
             </div>
             <p style={{ marginTop: 0 }}>
-              Create a Refund fiscal bill for this document?
+              {t('fiscalBills.confirmRefundBody')}
             </p>
             <p>
-              <strong>Order ID:</strong> {refundConfirmBill.orderId || '—'}<br />
-              <strong>TA Invoice No:</strong> {refundConfirmBill.sdcInvoiceNumber || '—'}<br />
-              <strong>Invoice Type:</strong> {INVOICE_TYPE_LABELS[refundConfirmBill.invoiceType] || refundConfirmBill.invoiceType || '—'}<br />
-              <strong>Transaction Type:</strong> {TRANSACTION_TYPE_LABELS[refundConfirmBill.transactionType] || refundConfirmBill.transactionType || '—'}
+              <strong>{t('fiscalBills.orderId')}</strong> {refundConfirmBill.orderId || t('common.dash')}<br />
+              <strong>{t('fiscalBills.taInvoiceNoLabel')}:</strong> {refundConfirmBill.sdcInvoiceNumber || t('common.dash')}<br />
+              <strong>{t('fiscalBills.invoiceType')}</strong> {t(`fiscalBills.invoiceTypes.${refundConfirmBill.invoiceType}`, { defaultValue: refundConfirmBill.invoiceType ?? t('common.dash') })}<br />
+              <strong>{t('fiscalBills.transactionType')}</strong> {t(`fiscalBills.transactionTypes.${refundConfirmBill.transactionType}`, { defaultValue: refundConfirmBill.transactionType ?? t('common.dash') })}
             </p>
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={closeRefundConfirm}>Cancel</button>
+              <button type="button" className="secondary-button" onClick={closeRefundConfirm}>{t('common.cancel')}</button>
               <button
                 type="button"
                 className="primary-button"
                 onClick={confirmCreateRefund}
                 disabled={Boolean(refundingBillIds[refundConfirmBill.fiscalbillId])}
               >
-                Confirm Create Refund
+                {t('fiscalBills.confirmCreateRefund')}
               </button>
             </div>
           </div>
@@ -807,11 +784,11 @@ export default function FiscalBills() {
   )
 }
 
-function formatDateRangeLabel(startDate, endDate) {
-  if (!startDate && !endDate) return 'Select date range'
-  if (startDate && !endDate) return `${formatDateOnly(startDate)} - ...`
-  if (!startDate && endDate) return `... - ${formatDateOnly(endDate)}`
-  return `${formatDateOnly(startDate)} - ${formatDateOnly(endDate)}`
+function formatDateRangeLabel(startDate, endDate, t) {
+  if (!startDate && !endDate) return t('fiscalBills.dateRange.empty')
+  if (startDate && !endDate) return t('fiscalBills.dateRange.openEnd', { start: formatDateOnly(startDate) })
+  if (!startDate && endDate) return t('fiscalBills.dateRange.openStart', { end: formatDateOnly(endDate) })
+  return t('fiscalBills.dateRange.range', { start: formatDateOnly(startDate), end: formatDateOnly(endDate) })
 }
 
 function formatDateOnly(value) {
@@ -823,7 +800,7 @@ function formatDateOnly(value) {
 }
 
 function formatDateTime(value) {
-  if (!value) return '—'
+  if (!value) return i18n.t('common.dash')
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   const pad = (n) => String(n).padStart(2, '0')

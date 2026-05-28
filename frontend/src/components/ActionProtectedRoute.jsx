@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { hasAction, hasAnyAction, isSuperAdmin } from '../utils/permissions'
 
@@ -10,6 +11,7 @@ export default function ActionProtectedRoute({
   requireSuperAdmin = false,
   fallback = '/account',
 }) {
+  const { t } = useTranslation()
   const { user, loading, showNotification } = useAuth()
 
   const allowed = !loading && user && (
@@ -20,12 +22,12 @@ export default function ActionProtectedRoute({
 
   useEffect(() => {
     if (!loading && user && !allowed) {
-      showNotification('You do not have permission to access this page.', 'error')
+      showNotification(t('common.permissionDenied'), 'error')
     }
-  }, [loading, user, allowed, showNotification])
+  }, [loading, user, allowed, showNotification, t])
 
   if (loading) {
-    return <div className="center-state">Loading...</div>
+    return <div className="center-state">{t('common.loading')}</div>
   }
 
   if (!user) {

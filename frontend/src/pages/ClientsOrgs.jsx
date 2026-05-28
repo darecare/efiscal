@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
 import { clientsOrgsApi } from '../services/api'
 
 export default function ClientsOrgs() {
+  const { t } = useTranslation()
   const [items, setItems] = useState([])
 
   useEffect(() => {
@@ -10,15 +12,15 @@ export default function ClientsOrgs() {
   }, [])
 
   return (
-    <AppShell title="Clients and Organizations" subtitle="Tenant structure and organization access boundaries.">
+    <AppShell title={t('clientsOrgs.title')} subtitle={t('clientsOrgs.subtitle')}>
       <section className="table-card">
         <table>
           <thead>
             <tr>
-              <th>Client</th>
-              <th>Organization</th>
-              <th>Status</th>
-              <th>Default Currency</th>
+              <th>{t('common.client')}</th>
+              <th>{t('clientsOrgs.organization')}</th>
+              <th>{t('common.status')}</th>
+              <th>{t('clientsOrgs.defaultCurrency')}</th>
             </tr>
           </thead>
           <tbody>

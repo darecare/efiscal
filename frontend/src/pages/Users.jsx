@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useTranslation, Trans } from 'react-i18next'
 import AppShell from '../components/AppShell'
 import { usersApi, rolesApi, clientsApi, orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -19,6 +20,7 @@ const emptyForm = {
 }
 
 export default function Users() {
+  const { t } = useTranslation()
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
   const canManageUsers = currentUser?.actions?.includes('USERS_MANAGE') || isSuperAdmin
@@ -60,8 +62,8 @@ export default function Users() {
 
   useEffect(() => {
     if (successMsg) {
-      const t = setTimeout(() => setSuccessMsg(null), 4000)
-      return () => clearTimeout(t)
+      const timer = setTimeout(() => setSuccessMsg(null), 4000)
+      return () => clearTimeout(timer)
     }
   }, [successMsg])
 
@@ -79,8 +81,8 @@ export default function Users() {
       setRoles(rolesData)
       setClients(clientsData)
       setAllOrgs(orgsData)
-    } catch (err) {
-      setError('Failed to load users')
+    } catch {
+      setError(t('users.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -129,15 +131,15 @@ export default function Users() {
     e.preventDefault()
     setFormError(null)
     if (!form.fullName.trim()) {
-      setFormError('Full name is required')
+      setFormError(t('users.fullNameRequired'))
       return
     }
     if (modalMode === 'add' && !form.email.trim()) {
-      setFormError('Email is required')
+      setFormError(t('users.emailRequired'))
       return
     }
     if (modalMode === 'add' && !form.newPassword) {
-      setFormError('Password is required for new users')
+      setFormError(t('users.passwordRequired'))
       return
     }
     try {
@@ -154,7 +156,7 @@ export default function Users() {
           subscriptionExpiresAt: form.subscriptionExpiresAt ? new Date(form.subscriptionExpiresAt).toISOString() : null,
           orgIds: form.orgIds,
         })
-        setSuccessMsg('User created successfully')
+        setSuccessMsg(t('users.createdSuccess'))
       } else {
         await usersApi.update(editUserId, {
           fullName: form.fullName.trim(),
@@ -167,12 +169,12 @@ export default function Users() {
           newPassword: form.newPassword || null,
           orgIds: form.orgIds,
         })
-        setSuccessMsg('User updated successfully')
+        setSuccessMsg(t('users.updatedSuccess'))
       }
       closeModal()
       await loadAll()
     } catch (err) {
-      setFormError(err.response?.data?.message || err.response?.data || 'Operation failed')
+      setFormError(err.response?.data?.message || err.response?.data || t('common.operationFailed'))
     } finally {
       setSaving(false)
     }
@@ -191,10 +193,10 @@ export default function Users() {
       await usersApi.remove(userToDelete.userId)
       setDeleteUserModalOpen(false)
       setUserToDelete(null)
-      setSuccessMsg('User deleted successfully')
+      setSuccessMsg(t('users.deletedSuccess'))
       await loadAll()
     } catch (err) {
-      setError(err.response?.data?.message || err.response?.data || 'Delete failed')
+      setError(err.response?.data?.message || err.response?.data || t('users.deleteFailed'))
     } finally {
       setDeletingUser(false)
     }
@@ -202,12 +204,12 @@ export default function Users() {
 
   return (
     <AppShell
-      title="Users"
-      subtitle="User accounts with role and subscription management."
+      title={t('users.title')}
+      subtitle={t('users.subtitle')}
       actions={
         canManageUsers && (
           <button className="primary-button" onClick={openAddModal}>
-            Add User
+            {t('users.addUser')}
           </button>
         )
       }
@@ -216,23 +218,23 @@ export default function Users() {
       {error && <div className="error-banner">{error}</div>}
 
       <section className="action-bar card">
-        <span className="badge">{users.length} users</span>
+        <span className="badge">{t('common.counts.users', { count: users.length })}</span>
       </section>
 
       <section className="table-card">
         {loading ? (
-          <p className="muted">Loading…</p>
+          <p className="muted">{t('common.loadingDots')}</p>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Client</th>
-                <th>Role</th>
-                <th>Subscription</th>
-                <th>Active</th>
-                {canManageUsers && <th>Actions</th>}
+                <th>{t('common.name')}</th>
+                <th>{t('common.email')}</th>
+                <th>{t('common.client')}</th>
+                <th>{t('common.role')}</th>
+                <th>{t('account.subscription')}</th>
+                <th>{t('common.active')}</th>
+                {canManageUsers && <th>{t('common.actions')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -259,27 +261,27 @@ export default function Users() {
                   </td>
                   <td>
                     <span className={`status-chip ${u.isActive ? 'active' : 'inactive'}`}>
-                      {u.isActive ? 'Active' : 'Inactive'}
+                      {u.isActive ? t('common.active') : t('common.inactive')}
                     </span>
                   </td>
                   {canManageUsers && (
                     <td>
                       <div className="table-row-actions">
                         <button type="button" className="secondary-button" onClick={() => openEditModal(u)}>
-                          Edit
+                          {t('common.edit')}
                         </button>
                         {String(u.userId) !== String(currentUser?.id) ? (
                           <button type="button" className="secondary-button danger" onClick={() => handleDeleteClick(u)}>
-                            Delete
+                            {t('common.delete')}
                           </button>
                         ) : (
                           <button
                             type="button"
                             className="secondary-button danger"
                             disabled
-                            title="Cannot delete your own account"
+                            title={t('users.cannotDeleteSelfTitle')}
                           >
-                            Delete
+                            {t('common.delete')}
                           </button>
                         )}
                       </div>
@@ -296,14 +298,14 @@ export default function Users() {
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{modalMode === 'add' ? 'Add User' : 'Edit User'}</h3>
+              <h3>{modalMode === 'add' ? t('users.addModalTitle') : t('users.editModalTitle')}</h3>
               <button className="modal-close" onClick={closeModal}>✕</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-grid">
                 {modalMode === 'add' && (
                   <div className="field">
-                    <label>Email *</label>
+                    <label>{t('users.emailLabel')} *</label>
                     <input
                       type="email"
                       value={form.email}
@@ -313,7 +315,7 @@ export default function Users() {
                   </div>
                 )}
                 <div className="field">
-                  <label>Full Name *</label>
+                  <label>{t('users.fullNameLabel')} *</label>
                   <input
                     value={form.fullName}
                     onChange={(e) => handleChange('fullName', e.target.value)}
@@ -321,7 +323,7 @@ export default function Users() {
                   />
                 </div>
                 <div className="field">
-                  <label>{modalMode === 'add' ? 'Password *' : 'New Password (leave blank to keep)'}</label>
+                  <label>{modalMode === 'add' ? `${t('users.passwordNewLabel')} *` : t('users.passwordEditLabel')}</label>
                   <input
                     type="password"
                     value={form.newPassword}
@@ -329,9 +331,9 @@ export default function Users() {
                   />
                 </div>
                 <div className="field">
-                  <label>Role</label>
+                  <label>{t('common.role')}</label>
                   <select value={form.roleId} onChange={(e) => handleChange('roleId', e.target.value)}>
-                    <option value="">— Select role —</option>
+                    <option value="">{t('common.selectRolePlaceholder')}</option>
                     {roles
                       .filter(r => {
                         if (r.roleCode === 'SUPERADMIN' && !isSuperAdmin) {
@@ -345,7 +347,7 @@ export default function Users() {
                   </select>
                 </div>
                 <div className="field">
-                  <label>Client</label>
+                  <label>{t('common.client')}</label>
                   <select
                     value={form.clientId}
                     onChange={(e) => handleChange('clientId', e.target.value)}
@@ -353,18 +355,18 @@ export default function Users() {
                   >
                     {isSuperAdmin ? (
                       <>
-                        <option value="">— Select client —</option>
+                        <option value="">{t('common.selectClientPlaceholder')}</option>
                         {clients.map((c) => (
                           <option key={c.clientId} value={c.clientId}>{c.name}</option>
                         ))}
                       </>
                     ) : (
-                      <option value={currentUser?.clientId || ''}>{currentUser?.clientName || 'My Client'}</option>
+                      <option value={currentUser?.clientId || ''}>{currentUser?.clientName || t('users.myClient')}</option>
                     )}
                   </select>
                 </div>
                 <div className="field" style={{ gridColumn: '1 / -1' }}>
-                  <label>Organization Access</label>
+                  <label>{t('users.organizationAccess')}</label>
                   {clientOrgs.length > 0 ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px', marginTop: '6px' }}>
                       {clientOrgs.map((org) => (
@@ -372,7 +374,7 @@ export default function Users() {
                           <input
                             type="checkbox"
                             checked={form.orgIds.includes(org.orgId)}
-                            onChange={(e) => {
+                            onChange={() => {
                               const val = org.orgId
                               setForm(prev => {
                                 const isChecked = prev.orgIds.includes(val)
@@ -390,11 +392,11 @@ export default function Users() {
                       ))}
                     </div>
                   ) : (
-                    <p className="muted" style={{ fontSize: '0.85rem', marginTop: '4px' }}>No organizations found for this client.</p>
+                    <p className="muted" style={{ fontSize: '0.85rem', marginTop: '4px' }}>{t('users.noOrgsForClient')}</p>
                   )}
                 </div>
                 <div className="field">
-                  <label>Subscription Status</label>
+                  <label>{t('users.subscriptionStatus')}</label>
                   <select value={form.subscriptionStatus} onChange={(e) => handleChange('subscriptionStatus', e.target.value)}>
                     {SUBSCRIPTION_STATUSES.map((s) => (
                       <option key={s} value={s}>{s}</option>
@@ -402,7 +404,7 @@ export default function Users() {
                   </select>
                 </div>
                 <div className="field">
-                  <label>Subscription Start</label>
+                  <label>{t('users.subscriptionStart')}</label>
                   <input
                     type="date"
                     value={form.subscriptionStartAt}
@@ -410,7 +412,7 @@ export default function Users() {
                   />
                 </div>
                 <div className="field">
-                  <label>Subscription Expires</label>
+                  <label>{t('users.subscriptionExpires')}</label>
                   <input
                     type="date"
                     value={form.subscriptionExpiresAt}
@@ -419,22 +421,22 @@ export default function Users() {
                 </div>
                 {modalMode === 'edit' && (
                   <div className="field">
-                    <label>Active</label>
+                    <label>{t('common.active')}</label>
                     <select
                       value={form.isActive ? 'true' : 'false'}
                       onChange={(e) => handleChange('isActive', e.target.value === 'true')}
                     >
-                      <option value="true">Active</option>
-                      <option value="false">Inactive</option>
+                      <option value="true">{t('common.active')}</option>
+                      <option value="false">{t('common.inactive')}</option>
                     </select>
                   </div>
                 )}
               </div>
               {formError && <p className="error-text" style={{ marginTop: 12 }}>{formError}</p>}
               <div className="modal-actions">
-                <button type="button" className="secondary-button" onClick={closeModal}>Cancel</button>
+                <button type="button" className="secondary-button" onClick={closeModal}>{t('common.cancel')}</button>
                 <button type="submit" className="primary-button" disabled={saving}>
-                  {saving ? 'Saving…' : modalMode === 'add' ? 'Create User' : 'Save Changes'}
+                  {saving ? t('common.saving') : modalMode === 'add' ? t('users.createUser') : t('common.saveChanges')}
                 </button>
               </div>
             </form>
@@ -446,21 +448,24 @@ export default function Users() {
         <div className="modal-overlay" onClick={() => !deletingUser && setDeleteUserModalOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Delete User: {userToDelete.fullName}</h3>
+              <h3>{t('users.deleteTitle', { name: userToDelete.fullName })}</h3>
               <button type="button" className="modal-close" onClick={() => setDeleteUserModalOpen(false)} disabled={deletingUser}>✕</button>
             </div>
             <div className="modal-body">
               <p>
-                Are you sure you want to delete <strong>{userToDelete.fullName}</strong> ({userToDelete.email})?
-                This will deactivate the account and cannot be undone from this screen.
+                <Trans
+                  i18nKey="users.deleteConfirm"
+                  values={{ name: userToDelete.fullName, email: userToDelete.email }}
+                  components={{ strong: <strong /> }}
+                />
               </p>
             </div>
             <div className="modal-actions">
               <button type="button" className="secondary-button" onClick={() => setDeleteUserModalOpen(false)} disabled={deletingUser}>
-                Cancel
+                {t('common.cancel')}
               </button>
               <button type="button" className="primary-button danger" onClick={handleConfirmDelete} disabled={deletingUser}>
-                {deletingUser ? 'Deleting…' : 'Confirm Delete'}
+                {deletingUser ? t('common.deleting') : t('common.confirmDelete')}
               </button>
             </div>
           </div>

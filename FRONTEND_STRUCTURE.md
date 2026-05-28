@@ -17,6 +17,15 @@
 - Keep footer in a separate reusable component file included on all main pages.
 - Footer content is TBD and will be finalized after MVP operations review.
 
+## 2A. Internationalization (i18n)
+
+- **Stack:** `i18next`, `react-i18next`, `i18next-browser-languagedetector`
+- **Init:** [`frontend/src/i18n/index.js`](frontend/src/i18n/index.js) — imported once in [`frontend/src/main.jsx`](frontend/src/main.jsx) before render
+- **Catalog:** [`frontend/src/locales/<lng>.json`](frontend/src/locales/en.json) — nested keys by feature (`common`, `nav`, `auth`, page namespaces). English ships as `en`; add sibling files (e.g. `sr.json`) and register in `i18n/index.js` for new languages
+- **Usage:** `useTranslation()` + `t('key')` in components; `i18next.t()` in non-React code (e.g. `AuthContext`). Use `count` for plurals (`common.counts.*_one` / `*_other`) and `{{var}}` for interpolation
+- **Language switcher:** Topbar `<select>` in [`AppShell`](frontend/src/components/AppShell.jsx); persists choice in `localStorage` key `efiscal_lang`
+- **Do not translate:** `className`, `id`, API paths, enum/code `value` attributes, object keys, `console` output, server error pass-through
+
 ## 3. Core ERP UI Patterns
 
 ### 3.1 App Shell Pattern

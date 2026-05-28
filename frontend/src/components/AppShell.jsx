@@ -1,46 +1,49 @@
 import React, { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { hasAction, hasAnyAction } from '../utils/permissions'
+import i18n from '../i18n'
 
 const getNavItems = (user) => {
   const can = (action) => hasAction(user, action)
 
   return [
-    { path: '/orders', label: 'Orders', show: can('MERCHANTPRO_FETCH_ORDERS') },
+    { path: '/orders', labelKey: 'nav.orders', show: can('MERCHANTPRO_FETCH_ORDERS') },
     {
-      label: 'Fiscal Bills',
+      labelKey: 'nav.fiscalBills',
       show: can('FISCAL_VIEW_BILLS') || can('FISCAL_CREATE_BILL'),
       children: [
-        { path: '/fiscal-bills', label: 'Fiscal Bills', show: can('FISCAL_VIEW_BILLS') },
-        { path: '/fiscal-bills/create', label: 'Create Fiscal Bill', show: can('FISCAL_CREATE_BILL') },
-        { path: '/fiscal-bills/get-status', label: 'Get Status', show: can('FISCAL_VIEW_BILLS') },
-        { path: '/taxes', label: 'Taxes', show: can('ORGS_MANAGE') },
+        { path: '/fiscal-bills', labelKey: 'nav.fiscalBills', show: can('FISCAL_VIEW_BILLS') },
+        { path: '/fiscal-bills/create', labelKey: 'nav.createFiscalBill', show: can('FISCAL_CREATE_BILL') },
+        { path: '/fiscal-bills/get-status', labelKey: 'nav.getStatus', show: can('FISCAL_VIEW_BILLS') },
+        { path: '/taxes', labelKey: 'nav.taxes', show: can('ORGS_MANAGE') },
       ],
     },
     {
-      label: 'Administration',
+      labelKey: 'nav.administration',
       show: hasAnyAction(user, ['USERS_MANAGE', 'ROLES_MANAGE', 'ORGS_MANAGE']) || user?.roleName === 'SUPERADMIN',
       children: [
-        { path: '/account', label: 'Account', show: true },
-        { path: '/users', label: 'User', show: can('USERS_MANAGE') },
-        { path: '/roles', label: 'Roles & Permissions', show: hasAnyAction(user, ['ROLES_MANAGE', 'USERS_MANAGE']) },
-        { path: '/organizations', label: 'Organization', show: can('ORGS_MANAGE') },
-        { path: '/clients', label: 'Client', show: user?.roleName === 'SUPERADMIN' },
+        { path: '/account', labelKey: 'nav.account', show: true },
+        { path: '/users', labelKey: 'nav.user', show: can('USERS_MANAGE') },
+        { path: '/roles', labelKey: 'nav.rolesPermissions', show: hasAnyAction(user, ['ROLES_MANAGE', 'USERS_MANAGE']) },
+        { path: '/organizations', labelKey: 'nav.organization', show: can('ORGS_MANAGE') },
+        { path: '/clients', labelKey: 'nav.client', show: user?.roleName === 'SUPERADMIN' },
       ],
     },
     {
-      label: 'Configuration',
+      labelKey: 'nav.configuration',
       show: can('ORGS_MANAGE'),
       children: [
-        { path: '/api-config', label: 'API Configuration', show: can('ORGS_MANAGE') },
-        { path: '/fiscal-bills/paytype-map', label: 'Payment Type Mapping', show: can('ORGS_MANAGE') },
+        { path: '/api-config', labelKey: 'nav.apiConfiguration', show: can('ORGS_MANAGE') },
+        { path: '/fiscal-bills/paytype-map', labelKey: 'nav.paymentTypeMapping', show: can('ORGS_MANAGE') },
       ],
     },
   ]
 }
 
 export default function AppShell({ title, subtitle, actions, children }) {
+  const { t } = useTranslation()
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -56,13 +59,15 @@ export default function AppShell({ title, subtitle, actions, children }) {
     const initial = {}
     filteredNavItems.forEach((item) => {
       if (item.children) {
-        initial[item.label] = item.children.some((c) => location.pathname.startsWith(c.path))
+        const label = t(item.labelKey)
+        initial[label] = item.children.some((c) => location.pathname.startsWith(c.path))
       }
     })
     return initial
   })
 
-  function toggleGroup(label) {
+  function toggleGroup(labelKey) {
+    const label = t(labelKey)
     setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }))
   }
 
@@ -71,32 +76,52 @@ export default function AppShell({ title, subtitle, actions, children }) {
     navigate('/login')
   }
 
+  const supportedLngs = (i18n.options.supportedLngs || ['en']).filter((lng) => lng !== 'cimode')
+
   return (
     <div className="app-shell">
       <header className="topbar">
         <div>
-          <h1>eFiscal</h1>
+          <h1>{t('nav.brand')}</h1>
           <p>{user?.email}</p>
         </div>
         <div className="topbar-actions">
+          <label className="language-switcher" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>{t('common.language')}</span>
+            <select
+              value={i18n.language?.split('-')[0] || 'en'}
+              onChange={(e) => i18n.changeLanguage(e.target.value)}
+              className="secondary-button"
+              style={{ padding: '4px 8px', fontSize: '0.85rem' }}
+              aria-label={t('common.language')}
+            >
+              {supportedLngs.map((lng) => (
+                <option key={lng} value={lng}>
+                  {t(`common.languages.${lng}`, { defaultValue: lng })}
+                </option>
+              ))}
+            </select>
+          </label>
           <span className="badge">{user?.roleName}</span>
-          <button className="secondary-button" onClick={handleLogout}>Logout</button>
+          <button className="secondary-button" onClick={handleLogout}>{t('nav.logout')}</button>
         </div>
       </header>
       <div className="shell-body">
         <aside className="sidebar">
           <nav>
             {filteredNavItems.map((item) => {
+              const groupLabel = t(item.labelKey)
               if (item.children) {
-                const isOpen = openGroups[item.label]
+                const isOpen = openGroups[groupLabel]
                 const isGroupActive = item.children.some((c) => location.pathname.startsWith(c.path))
                 return (
-                  <div key={item.label}>
+                  <div key={item.labelKey}>
                     <button
                       className={`nav-link nav-group-toggle${isGroupActive ? ' active' : ''}`}
-                      onClick={() => toggleGroup(item.label)}
+                      onClick={() => toggleGroup(item.labelKey)}
+                      aria-expanded={isOpen}
                     >
-                      <span>{item.label}</span>
+                      <span>{groupLabel}</span>
                       <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>{isOpen ? '▾' : '▸'}</span>
                     </button>
                     {isOpen && (
@@ -107,7 +132,7 @@ export default function AppShell({ title, subtitle, actions, children }) {
                             to={child.path}
                             className={location.pathname === child.path ? 'nav-link nav-sublink active' : 'nav-link nav-sublink'}
                           >
-                            {child.label}
+                            {t(child.labelKey)}
                           </Link>
                         ))}
                       </div>
@@ -117,7 +142,7 @@ export default function AppShell({ title, subtitle, actions, children }) {
               }
               return (
                 <Link key={item.path} to={item.path} className={location.pathname === item.path ? 'nav-link active' : 'nav-link'}>
-                  {item.label}
+                  {groupLabel}
                 </Link>
               )
             })}
