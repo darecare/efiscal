@@ -1,9 +1,78 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { hasAction, hasAnyAction } from '../utils/permissions'
 import i18n from '../i18n'
+
+function LanguageSwitcher() {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef(null)
+
+  const supportedLngs = (i18n.options.supportedLngs || ['en']).filter((lng) => lng !== 'cimode')
+  const currentLng = i18n.language?.split('-')[0] || 'en'
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onPointerDown = (e) => {
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false)
+    }
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  function selectLanguage(lng) {
+    i18n.changeLanguage(lng)
+    setOpen(false)
+  }
+
+  return (
+    <div className="language-switcher" ref={rootRef}>
+      <span className="language-switcher__label">{t('common.language')}</span>
+      <div className="language-switcher__control">
+        <button
+          type="button"
+          className="language-switcher__trigger"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-label={t('common.language')}
+        >
+          <span className="language-switcher__value">{t(`common.languages.${currentLng}`, { defaultValue: currentLng })}</span>
+          <span className="language-switcher__chevron" aria-hidden="true" />
+        </button>
+        {open && (
+          <ul className="language-switcher__menu" role="listbox" aria-label={t('common.language')}>
+            {supportedLngs.map((lng) => {
+              const isActive = lng === currentLng
+              return (
+                <li key={lng} role="presentation">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isActive}
+                    className={`language-switcher__option${isActive ? ' is-active' : ''}`}
+                    onClick={() => selectLanguage(lng)}
+                  >
+                    {t(`common.languages.${lng}`, { defaultValue: lng })}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
 
 const getNavItems = (user) => {
   const can = (action) => hasAction(user, action)
@@ -74,8 +143,6 @@ export default function AppShell({ title, subtitle, actions, children }) {
     navigate('/login')
   }
 
-  const supportedLngs = (i18n.options.supportedLngs || ['en']).filter((lng) => lng !== 'cimode')
-
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -84,22 +151,7 @@ export default function AppShell({ title, subtitle, actions, children }) {
           <p>{user?.email}</p>
         </div>
         <div className="topbar-actions">
-          <label className="language-switcher" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>{t('common.language')}</span>
-            <select
-              value={i18n.language?.split('-')[0] || 'en'}
-              onChange={(e) => i18n.changeLanguage(e.target.value)}
-              className="secondary-button"
-              style={{ padding: '4px 8px', fontSize: '0.85rem' }}
-              aria-label={t('common.language')}
-            >
-              {supportedLngs.map((lng) => (
-                <option key={lng} value={lng}>
-                  {t(`common.languages.${lng}`, { defaultValue: lng })}
-                </option>
-              ))}
-            </select>
-          </label>
+          <LanguageSwitcher />
           <span className="badge">{user?.roleName}</span>
           <button className="secondary-button" onClick={handleLogout}>{t('nav.logout')}</button>
         </div>

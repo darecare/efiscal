@@ -249,7 +249,7 @@ export default function Orders() {
     if (!fiscal?.fiscalbillId) return
     setBusyOrderIds((current) => ({ ...current, [order.id]: true }))
     try {
-      const retryResponse = await fiscalBillApi.retry(fiscal.fiscalbillId, createIdempotencyKey())
+      const retry = await fiscalBillApi.retry(fiscal.fiscalbillId, createIdempotencyKey())
       setFiscalByOrderId((current) => ({
         ...current,
         [order.id]: { ...current[order.id], status: retryResponse.status, lastError: null },

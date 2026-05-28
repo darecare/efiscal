@@ -118,6 +118,9 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
  - FR-018 system must provide issue of fiscal bill with multiple payment methods defined per one fiscal bill.
  - FR-019 System must have option to send email to customers, with mail template  defined and attachment with PDF document for fiscal bill.
  - FR-020 For each API call to Serbian Tax authority system will store log data in dedicated database log table.
+- FR-024: Web UI must support user-selectable display language. MVP languages: English (`en`) and Serbian (`sr`).
+- FR-025: All user-visible labels, messages, navigation text, and accessibility strings on protected pages must resolve through the frontend i18n catalog (no hardcoded UI copy in React components).
+- FR-026: Role and permission UI labels (module group names, action display names, permission tooltips) must be localizable by action code while backend permission codes remain unchanged.
 
 
 ## 8. Non-Functional Requirements (Product-Level)
@@ -126,6 +129,7 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - NFR-003: External API calls use timeout, retries with backoff, and circuit breaker.
 - NFR-004: Sensitive data is protected in transit and at rest.
 - NFR-005: Logs include correlation ID and exclude secrets/PII.
+- NFR-006: Frontend locale catalogs for supported languages stay key-synchronized; adding or changing UI copy updates every active language file in the same change set.
 
 ## 9. Acceptance Criteria (MVP)
 - [ ] User can log in and access protected pages.
@@ -145,6 +149,9 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - [ ] Normal user with active subscription can log in and use authorized features.
 - [ ] Normal user with expired subscription is denied access with clear error message.
 - [ ] Admin can manage users (list, create, update, and soft-delete), while blocking self-deletion of active user accounts.
+- [ ] User can switch UI language between English and Serbian; choice persists across sessions.
+- [ ] Primary navigation, forms, tables, modals, and permission-denied feedback appear in the selected language.
+- [ ] Role Definition page shows localized module/action labels keyed by permission codes.
 
 ## 10. Open Questions
 - OQ-001: [question] — Owner: [name] — Due: [date]
