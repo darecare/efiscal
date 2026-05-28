@@ -220,7 +220,30 @@
     "skipReassign": "— Skip Reassign —",
     "reassignHint": "If users are assigned and you skip reassigning, the deletion will fail.",
     "cannotDeleteBuiltIn": "Cannot delete built-in system role {{code}}",
-    "onlySuperAdminDeleteGlobal": "Only superadmins can delete global roles"
+    "onlySuperAdminDeleteGlobal": "Only superadmins can delete global roles",
+    "permissionModules": {
+      "FISCAL": "Fiscal",
+      "MERCHANTPRO": "MerchantPro",
+      "SYSTEM": "System"
+    },
+    "actionLabels": {
+      "FISCAL_CREATE_BILL": "Create Fiscal Bill",
+      "FISCAL_RETRY_BILL": "Retry Fiscal Bill",
+      "FISCAL_VIEW_BILLS": "View Fiscal Bills",
+      "MERCHANTPRO_FETCH_ORDERS": "Fetch Orders",
+      "USERS_MANAGE": "Manage Users",
+      "ROLES_MANAGE": "Manage Roles",
+      "ORGS_MANAGE": "Manage Organizations"
+    },
+    "permissionDescriptions": {
+      "FISCAL_CREATE_BILL": "Allows issuing new fiscal bills",
+      "FISCAL_RETRY_BILL": "Allows retrying failed fiscal bills",
+      "FISCAL_VIEW_BILLS": "Allows viewing fiscal bills list and details",
+      "MERCHANTPRO_FETCH_ORDERS": "Allows fetching orders from MerchantPro API",
+      "USERS_MANAGE": "Allows creating and editing users",
+      "ROLES_MANAGE": "Allows creating and editing roles",
+      "ORGS_MANAGE": "Allows managing organizations and API settings"
+    }
   },
   "apiConfig": {
     "title": "API Configuration",

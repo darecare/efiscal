@@ -215,8 +215,12 @@ export default function Roles() {
                         r.actionIds.map(id => {
                           const action = actions.find(a => a.actionId === id);
                           return action ? (
-                            <span key={id} className="action-tag" title={action.description}>
-                              {action.name}
+                            <span
+                              key={id}
+                              className="action-tag"
+                              title={t(`roles.permissionDescriptions.${action.actionCode}`, { defaultValue: action.description })}
+                            >
+                              {t(`roles.actionLabels.${action.actionCode}`, { defaultValue: action.name })}
                             </span>
                           ) : (
                             <span key={id} className="action-tag">
@@ -326,7 +330,9 @@ export default function Roles() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px', marginTop: '12px' }}>
                     {Object.entries(groupedActions).map(([module, moduleActions]) => (
                       <div key={module} style={{ background: '#f8f9fa', padding: '12px', borderRadius: '8px', border: '1px solid #eee' }}>
-                        <h4 style={{ margin: '0 0 12px 0', fontSize: '0.9rem' }}>{module}</h4>
+                        <h4 style={{ margin: '0 0 12px 0', fontSize: '0.9rem' }}>
+                          {t(`roles.permissionModules.${module}`, { defaultValue: module })}
+                        </h4>
                         {moduleActions.map((action) => {
                           const userHasPermission = isSuperAdmin || currentUser?.actions?.includes(action.actionCode);
                           return (
@@ -349,7 +355,8 @@ export default function Roles() {
                                 onChange={() => handleActionToggle(action.actionId)}
                               />
                               <span style={{ fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                {action.name} {!userHasPermission && <span title={t('roles.noPermissionHint')} style={{ cursor: 'help' }}>🔒</span>}
+                                {t(`roles.actionLabels.${action.actionCode}`, { defaultValue: action.name })}
+                                {!userHasPermission && <span title={t('roles.noPermissionHint')} style={{ cursor: 'help' }}>🔒</span>}
                               </span>
                             </label>
                           )

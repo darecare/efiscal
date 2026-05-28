@@ -229,7 +229,30 @@
     "skipReassign": "— Preskoči preusmeravanje —",
     "reassignHint": "Ako su korisnici dodeljeni i preskočite preusmeravanje, brisanje neće uspeti.",
     "cannotDeleteBuiltIn": "Ne možete obrisati ugrađenu sistemsku ulogu {{code}}",
-    "onlySuperAdminDeleteGlobal": "Samo superadmini mogu brisati globalne uloge"
+    "onlySuperAdminDeleteGlobal": "Samo superadmini mogu brisati globalne uloge",
+    "permissionModules": {
+      "FISCAL": "Fiskalno",
+      "MERCHANTPRO": "MerchantPro",
+      "SYSTEM": "Sistem"
+    },
+    "actionLabels": {
+      "FISCAL_CREATE_BILL": "Kreiraj fiskalni račun",
+      "FISCAL_RETRY_BILL": "Ponovi fiskalni račun",
+      "FISCAL_VIEW_BILLS": "Pregled fiskalnih računa",
+      "MERCHANTPRO_FETCH_ORDERS": "Preuzimanje porudžbina",
+      "USERS_MANAGE": "Upravljanje korisnicima",
+      "ROLES_MANAGE": "Upravljanje ulogama",
+      "ORGS_MANAGE": "Upravljanje organizacijama"
+    },
+    "permissionDescriptions": {
+      "FISCAL_CREATE_BILL": "Dozvoljava izdavanje novih fiskalnih računa",
+      "FISCAL_RETRY_BILL": "Dozvoljava ponovni pokušaj neuspešnih fiskalnih računa",
+      "FISCAL_VIEW_BILLS": "Dozvoljava pregled liste i detalja fiskalnih računa",
+      "MERCHANTPRO_FETCH_ORDERS": "Dozvoljava preuzimanje porudžbina sa MerchantPro API-ja",
+      "USERS_MANAGE": "Dozvoljava kreiranje i izmenu korisnika",
+      "ROLES_MANAGE": "Dozvoljava kreiranje i izmenu uloga",
+      "ORGS_MANAGE": "Dozvoljava upravljanje organizacijama i API podešavanjima"
+    }
   },
   "apiConfig": {
     "title": "API konfiguracija",
