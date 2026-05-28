@@ -5,6 +5,7 @@ import AppShell from '../components/AppShell'
 import { fiscalBillApi, orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { DateRangePicker } from 'react-date-range'
+import { enUS, srLatn } from 'date-fns/locale'
 import 'react-date-range/dist/styles.css'
 import 'react-date-range/dist/theme/default.css'
 
@@ -38,6 +39,10 @@ export default function FiscalBills() {
 
   const PAGE_SIZE = 50
   const [tablePage, setTablePage] = useState(1)
+  const datePickerLocale = useMemo(
+    () => (i18n.language?.toLowerCase().startsWith('sr') ? srLatn : enUS),
+    [i18n.language],
+  )
 
   // Filter states
   const [dateRange, setDateRange] = useState([
@@ -340,6 +345,7 @@ export default function FiscalBills() {
                 <DateRangePicker
                   onChange={handleDateRangeChange}
                   ranges={dateRange}
+                  locale={datePickerLocale}
                   moveRangeOnFirstSelection={false}
                   direction="horizontal"
                   showDateDisplay={false}
@@ -706,7 +712,7 @@ export default function FiscalBills() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{t('fiscalBills.confirmCopyTitle')}</h3>
-              <button type="button" className="modal-close" onClick={closeCopyConfirm}>×</button>
+              <button type="button" className="modal-close" onClick={closeCopyConfirm} aria-label={t('common.close')}>×</button>
             </div>
             <p style={{ marginTop: 0 }}>
               {t('fiscalBills.confirmCopyBody')}
@@ -736,7 +742,7 @@ export default function FiscalBills() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{t('fiscalBills.cannotRefundTitle')}</h3>
-              <button type="button" className="modal-close" onClick={() => setRefundAlreadyExistsBill(null)}>×</button>
+              <button type="button" className="modal-close" onClick={() => setRefundAlreadyExistsBill(null)} aria-label={t('common.close')}>×</button>
             </div>
             <p style={{ marginTop: 0 }}>{t('fiscalBills.refundAlreadyExists')}</p>
             <p>
@@ -755,7 +761,7 @@ export default function FiscalBills() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{t('fiscalBills.confirmRefundTitle')}</h3>
-              <button type="button" className="modal-close" onClick={closeRefundConfirm}>×</button>
+              <button type="button" className="modal-close" onClick={closeRefundConfirm} aria-label={t('common.close')}>×</button>
             </div>
             <p style={{ marginTop: 0 }}>
               {t('fiscalBills.confirmRefundBody')}

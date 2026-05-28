@@ -267,7 +267,7 @@ export default function Roles() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{modalMode === 'add' ? t('roles.addModalTitle') : t('roles.editModalTitle')}</h3>
-              <button type="button" className="modal-close" onClick={() => setShowModal(false)}>✕</button>
+              <button type="button" className="modal-close" onClick={() => setShowModal(false)} aria-label={t('common.close')}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-grid">
@@ -384,7 +384,7 @@ export default function Roles() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{t('roles.deleteTitle', { name: roleToDelete.name })}</h3>
-              <button type="button" className="modal-close" onClick={() => setDeleteRoleModalOpen(false)} disabled={deletingRole}>✕</button>
+              <button type="button" className="modal-close" onClick={() => setDeleteRoleModalOpen(false)} disabled={deletingRole} aria-label={t('common.close')}>×</button>
             </div>
             <div className="modal-body">
               <p>{t('roles.deleteConfirm')}</p>

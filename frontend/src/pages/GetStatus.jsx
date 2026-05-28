@@ -82,6 +82,7 @@ export default function GetStatus() {
                   ))}
                 {result.supportedLanguages && (
                   <tr>
+                    {/* eslint-disable-next-line i18next/no-literal-string */}
                     <td style={{ fontWeight: 500 }}>supportedLanguages</td>
                     <td>{result.supportedLanguages.join(', ')}</td>
                   </tr>

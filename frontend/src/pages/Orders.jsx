@@ -399,7 +399,7 @@ export default function Orders() {
                       </td>
                       <td>{order.externalOrderNo}</td>
                       <td>{order.customerName}</td>
-                      <td>{order.shippingStatus}</td>
+                      <td>{t(`orders.shippingStatusLabels.${order.shippingStatus}`, { defaultValue: order.shippingStatus })}</td>
                       <td>{order.totalAmount} RSD</td>
                       <td>
                         {lines.length > 0

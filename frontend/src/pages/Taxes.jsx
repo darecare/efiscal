@@ -335,7 +335,7 @@ export default function Taxes() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{taxMode === 'add' ? t('taxes.addTaxTitle') : t('taxes.editTaxTitle')}</h3>
-              <button className="modal-close" onClick={() => setTaxModal(false)}>x</button>
+              <button className="modal-close" onClick={() => setTaxModal(false)} aria-label={t('common.close')}>×</button>
             </div>
             <form onSubmit={submitTax}>
               <div className="form-grid">
@@ -408,7 +408,7 @@ export default function Taxes() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{categoryMode === 'add' ? t('taxes.addCategoryTitle') : t('taxes.editCategoryTitle')}</h3>
-              <button className="modal-close" onClick={() => setCategoryModal(false)}>x</button>
+              <button className="modal-close" onClick={() => setCategoryModal(false)} aria-label={t('common.close')}>×</button>
             </div>
             <form onSubmit={submitCategory}>
               <div className="form-grid">

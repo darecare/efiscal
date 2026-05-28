@@ -165,7 +165,7 @@ export default function Clients() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{modalMode === 'add' ? t('clients.addModalTitle') : t('clients.editModalTitle')}</h3>
-              <button className="modal-close" onClick={closeModal}>✕</button>
+              <button className="modal-close" onClick={closeModal} aria-label={t('common.close')}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-grid">

@@ -235,7 +235,7 @@ export default function Organizations() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{modalMode === 'add' ? t('organizations.addModalTitle') : t('organizations.editModalTitle')}</h3>
-              <button className="modal-close" onClick={closeModal}>✕</button>
+              <button className="modal-close" onClick={closeModal} aria-label={t('common.close')}>×</button>
             </div>
 
             {modalMode === 'edit' && (

@@ -299,7 +299,7 @@ export default function Users() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{modalMode === 'add' ? t('users.addModalTitle') : t('users.editModalTitle')}</h3>
-              <button className="modal-close" onClick={closeModal}>✕</button>
+              <button className="modal-close" onClick={closeModal} aria-label={t('common.close')}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-grid">
@@ -449,7 +449,7 @@ export default function Users() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{t('users.deleteTitle', { name: userToDelete.fullName })}</h3>
-              <button type="button" className="modal-close" onClick={() => setDeleteUserModalOpen(false)} disabled={deletingUser}>✕</button>
+              <button type="button" className="modal-close" onClick={() => setDeleteUserModalOpen(false)} disabled={deletingUser} aria-label={t('common.close')}>×</button>
             </div>
             <div className="modal-body">
               <p>

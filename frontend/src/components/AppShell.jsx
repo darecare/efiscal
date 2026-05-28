@@ -59,16 +59,14 @@ export default function AppShell({ title, subtitle, actions, children }) {
     const initial = {}
     filteredNavItems.forEach((item) => {
       if (item.children) {
-        const label = t(item.labelKey)
-        initial[label] = item.children.some((c) => location.pathname.startsWith(c.path))
+        initial[item.labelKey] = item.children.some((c) => location.pathname.startsWith(c.path))
       }
     })
     return initial
   })
 
   function toggleGroup(labelKey) {
-    const label = t(labelKey)
-    setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }))
+    setOpenGroups((prev) => ({ ...prev, [labelKey]: !prev[labelKey] }))
   }
 
   function handleLogout() {
@@ -112,7 +110,7 @@ export default function AppShell({ title, subtitle, actions, children }) {
             {filteredNavItems.map((item) => {
               const groupLabel = t(item.labelKey)
               if (item.children) {
-                const isOpen = openGroups[groupLabel]
+                const isOpen = openGroups[item.labelKey]
                 const isGroupActive = item.children.some((c) => location.pathname.startsWith(c.path))
                 return (
                   <div key={item.labelKey}>

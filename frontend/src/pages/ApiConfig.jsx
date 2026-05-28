@@ -323,7 +323,7 @@ export default function ApiConfig() {
           <div className="modal" style={{ maxWidth: 750, width: '100%' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{connMode === 'add' ? t('apiConfig.addConnTitle') : t('apiConfig.editConnTitle')}</h3>
-              <button className="modal-close" onClick={() => setConnModal(false)}>✕</button>
+              <button className="modal-close" onClick={() => setConnModal(false)} aria-label={t('common.close')}>×</button>
             </div>
             <form onSubmit={handleConnSubmit}>
               <div className="form-grid">
@@ -433,7 +433,7 @@ export default function ApiConfig() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{tplMode === 'add' ? t('apiConfig.addTplTitle') : t('apiConfig.editTplTitle')}</h3>
-              <button className="modal-close" onClick={() => setTplModal(false)}>✕</button>
+              <button className="modal-close" onClick={() => setTplModal(false)} aria-label={t('common.close')}>×</button>
             </div>
             <form onSubmit={handleTplSubmit}>
               <div className="form-grid">

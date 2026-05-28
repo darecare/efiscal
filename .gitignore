@@ -7,9 +7,6 @@ frontend/dist/
 # Node modules
 frontend/node_modules/
 
-# npm lock file (optional — remove this line if you want to track it)
-frontend/package-lock.json
-
 # IDE / OS artifacts
 .idea/
 *.iml

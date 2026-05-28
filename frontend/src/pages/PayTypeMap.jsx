@@ -19,7 +19,7 @@ export default function PayTypeMap() {
   const [selectedClientId, setSelectedClientId] = useState('')
   const [mappings, setMappings] = useState([])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const [errorKey, setErrorKey] = useState(null)
 
   const [editId, setEditId] = useState(null)
   const [showForm, setShowForm] = useState(false)
@@ -34,12 +34,12 @@ export default function PayTypeMap() {
   useEffect(() => {
     if (!selectedClientId) { setMappings([]); return }
     setLoading(true)
-    setError(null)
+    setErrorKey(null)
     paytypeMapApi.list(Number(selectedClientId))
       .then(setMappings)
-      .catch(() => setError(t('payTypeMap.loadFailed')))
+      .catch(() => setErrorKey('payTypeMap.loadFailed'))
       .finally(() => setLoading(false))
-  }, [selectedClientId, t])
+  }, [selectedClientId])
 
   function openAdd() {
     setEditId(null)
@@ -110,7 +110,7 @@ export default function PayTypeMap() {
       await paytypeMapApi.remove(mapping.paytypeMapId)
       setMappings(prev => prev.filter(m => m.paytypeMapId !== mapping.paytypeMapId))
     } catch {
-      setError(t('payTypeMap.deleteFailed'))
+      setErrorKey('payTypeMap.deleteFailed')
     }
   }
 
@@ -171,7 +171,7 @@ export default function PayTypeMap() {
         </div>
       )}
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {errorKey && <p style={{ color: 'red' }}>{t(errorKey)}</p>}
 
       {selectedClientId && !loading && (
         mappings.length === 0 ? (
