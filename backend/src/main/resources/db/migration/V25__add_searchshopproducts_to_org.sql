@@ -1,2 +1,0 @@
-ALTER TABLE org
-    ADD COLUMN is_searchshopproducts BOOLEAN NOT NULL DEFAULT FALSE;
