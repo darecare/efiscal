@@ -3,7 +3,15 @@ import AppShell from '../components/AppShell'
 import { orgsApi, clientsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
-const emptyForm = { clientId: '', name: '', taxId: '', status: 'ACTIVE', currency: 'RSD', isActive: true }
+const emptyForm = {
+  clientId: '',
+  name: '',
+  taxId: '',
+  status: 'ACTIVE',
+  currency: 'RSD',
+  isActive: true,
+  isSearchshopproducts: false,
+}
 const STATUS_OPTIONS = ['ACTIVE', 'SETUP', 'SUSPENDED', 'INACTIVE']
 const CURRENCY_OPTIONS = ['RSD', 'EUR', 'USD']
 const PAYMENT_TYPES = [
@@ -82,6 +90,7 @@ export default function Organizations() {
       status: o.status,
       currency: o.currency,
       isActive: o.isActive,
+      isSearchshopproducts: Boolean(o.isSearchshopproducts),
     })
     setFormError(null)
     setModalMode('edit')
@@ -308,6 +317,17 @@ export default function Organizations() {
                       </select>
                     </div>
                   )}
+                  <div className="field" style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <input
+                        type="checkbox"
+                        checked={form.isSearchshopproducts}
+                        onChange={(e) => handleChange('isSearchshopproducts', e.target.checked)}
+                      />
+                      <span>Search product data from shop</span>
+                    </label>
+                    <small className="muted">Search products directly from shop for manual creation of fiscal bill</small>
+                  </div>
                 </div>
               )}
               

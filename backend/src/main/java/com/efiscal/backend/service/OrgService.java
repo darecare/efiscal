@@ -80,6 +80,7 @@ public class OrgService {
         org.setStatus(req.status() != null ? req.status() : "ACTIVE");
         org.setCurrency(req.currency() != null ? req.currency() : "RSD");
         org.setActive(req.isActive() != null ? req.isActive() : true);
+        org.setSearchshopproducts(req.isSearchshopproducts() != null ? req.isSearchshopproducts() : false);
         return toDto(orgRepository.save(org));
     }
 
@@ -105,6 +106,7 @@ public class OrgService {
         if (req.status() != null) org.setStatus(req.status());
         if (req.currency() != null) org.setCurrency(req.currency());
         if (req.isActive() != null) org.setActive(req.isActive());
+        if (req.isSearchshopproducts() != null) org.setSearchshopproducts(req.isSearchshopproducts());
         return toDto(orgRepository.save(org));
     }
 
@@ -159,6 +161,7 @@ public class OrgService {
             o.getStatus(),
             o.getCurrency(),
             o.isActive(),
+            o.isSearchshopproducts(),
             o.getCreatedAt()
         );
     }
@@ -172,6 +175,7 @@ public class OrgService {
         String status,
         String currency,
         boolean isActive,
+        boolean isSearchshopproducts,
         OffsetDateTime createdAt
     ) {}
 
@@ -211,6 +215,7 @@ public class OrgService {
         @Size(max = 10, message = "Currency must not exceed 10 characters")
         String currency,
 
-        Boolean isActive
+        Boolean isActive,
+        Boolean isSearchshopproducts
     ) {}
 }
