@@ -33,6 +33,9 @@ public class OrgEntity {
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
+    @Column(name = "is_searchshopproducts", nullable = false)
+    private boolean isSearchshopproducts = false;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -58,6 +61,8 @@ public class OrgEntity {
     public void setCurrency(String currency) { this.currency = currency; }
     public boolean isActive() { return isActive; }
     public void setActive(boolean active) { isActive = active; }
+    public boolean isSearchshopproducts() { return isSearchshopproducts; }
+    public void setSearchshopproducts(boolean searchshopproducts) { isSearchshopproducts = searchshopproducts; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public OffsetDateTime getDeletedAt() { return deletedAt; }
