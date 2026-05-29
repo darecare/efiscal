@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
 import { orgsApi, clientsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -14,17 +15,10 @@ const emptyForm = {
 }
 const STATUS_OPTIONS = ['ACTIVE', 'SETUP', 'SUSPENDED', 'INACTIVE']
 const CURRENCY_OPTIONS = ['RSD', 'EUR', 'USD']
-const PAYMENT_TYPES = [
-  { value: 0, label: 'Other' },
-  { value: 1, label: 'Cash' },
-  { value: 2, label: 'Card' },
-  { value: 3, label: 'Check' },
-  { value: 4, label: 'Wire Transfer' },
-  { value: 5, label: 'Voucher' },
-  { value: 6, label: 'Mobile Money' },
-]
+const PAYMENT_TYPE_VALUES = [0, 1, 2, 3, 4, 5, 6]
 
 export default function Organizations() {
+  const { t } = useTranslation()
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
 
@@ -55,8 +49,8 @@ export default function Organizations() {
 
   useEffect(() => {
     if (successMsg) {
-      const t = setTimeout(() => setSuccessMsg(null), 4000)
-      return () => clearTimeout(t)
+      const timer = setTimeout(() => setSuccessMsg(null), 4000)
+      return () => clearTimeout(timer)
     }
   }, [successMsg])
 
@@ -66,7 +60,7 @@ export default function Organizations() {
       setError(null)
       setOrgs(await orgsApi.list(filterClientId || undefined))
     } catch {
-      setError('Failed to load organizations')
+      setError(t('organizations.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -126,11 +120,11 @@ export default function Organizations() {
     e.preventDefault()
     setFormError(null)
     if (!form.name.trim()) {
-      setFormError('Name is required')
+      setFormError(t('organizations.nameRequired'))
       return
     }
     if (!form.clientId) {
-      setFormError('Client is required')
+      setFormError(t('organizations.clientRequired'))
       return
     }
     try {
@@ -143,16 +137,16 @@ export default function Organizations() {
       }
       if (modalMode === 'add') {
         await orgsApi.create(payload)
-        setSuccessMsg('Organization created successfully')
+        setSuccessMsg(t('organizations.createdSuccess'))
       } else {
         await orgsApi.update(editOrgId, payload)
         await orgsApi.setPaymentTypes(editOrgId, paymentTypes)
-        setSuccessMsg('Organization updated successfully')
+        setSuccessMsg(t('organizations.updatedSuccess'))
       }
       closeModal()
       await loadOrgs()
     } catch (err) {
-      setFormError(err.response?.data?.message || err.response?.data || 'Operation failed')
+      setFormError(err.response?.data?.message || err.response?.data || t('common.operationFailed'))
     } finally {
       setSaving(false)
     }
@@ -160,12 +154,12 @@ export default function Organizations() {
 
   return (
     <AppShell
-      title="Organizations"
-      subtitle="Organizations linked to clients with access boundaries."
+      title={t('organizations.title')}
+      subtitle={t('organizations.subtitle')}
       actions={
         isSuperAdmin && (
           <button className="primary-button" onClick={openAddModal}>
-            Add Organization
+            {t('organizations.addOrganization')}
           </button>
         )
       }
@@ -176,9 +170,9 @@ export default function Organizations() {
       <section className="filters-panel">
         <div className="filter-grid">
           <div className="field">
-            <label>Filter by Client</label>
+            <label>{t('organizations.filterByClient')}</label>
             <select value={filterClientId} onChange={(e) => setFilterClientId(e.target.value)}>
-              <option value="">All Clients</option>
+              <option value="">{t('organizations.allClients')}</option>
               {clients.map((c) => (
                 <option key={c.clientId} value={c.clientId}>{c.name}</option>
               ))}
@@ -188,23 +182,23 @@ export default function Organizations() {
       </section>
 
       <section className="action-bar card" style={{ marginTop: 16 }}>
-        <span className="badge">{orgs.length} organizations</span>
+        <span className="badge">{t('common.counts.organizations', { count: orgs.length })}</span>
       </section>
 
       <section className="table-card">
         {loading ? (
-          <p className="muted">Loading…</p>
+          <p className="muted">{t('common.loadingDots')}</p>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Client</th>
-                <th>Tax ID (PIB)</th>
-                <th>Status</th>
-                <th>Currency</th>
-                <th>Active</th>
-                {isSuperAdmin && <th>Actions</th>}
+                <th>{t('common.name')}</th>
+                <th>{t('common.client')}</th>
+                <th>{t('organizations.taxId')}</th>
+                <th>{t('common.status')}</th>
+                <th>{t('common.currency')}</th>
+                <th>{t('common.active')}</th>
+                {isSuperAdmin && <th>{t('common.actions')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -212,20 +206,20 @@ export default function Organizations() {
                 <tr key={o.orgId}>
                   <td>{o.name}</td>
                   <td>{o.clientName}</td>
-                  <td>{o.taxId || '—'}</td>
+                  <td>{o.taxId || t('common.dash')}</td>
                   <td>
                     <span className={`status-chip ${(o.status || '').toLowerCase()}`}>{o.status}</span>
                   </td>
                   <td>{o.currency}</td>
                   <td>
                     <span className={`status-chip ${o.isActive ? 'active' : 'inactive'}`}>
-                      {o.isActive ? 'Active' : 'Inactive'}
+                      {o.isActive ? t('common.active') : t('common.inactive')}
                     </span>
                   </td>
                   {isSuperAdmin && (
                     <td>
                       <button className="secondary-button" onClick={() => openEditModal(o)}>
-                        Edit
+                        {t('common.edit')}
                       </button>
                     </td>
                   )}
@@ -240,41 +234,41 @@ export default function Organizations() {
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{modalMode === 'add' ? 'Add Organization' : 'Edit Organization'}</h3>
-              <button className="modal-close" onClick={closeModal}>✕</button>
+              <h3>{modalMode === 'add' ? t('organizations.addModalTitle') : t('organizations.editModalTitle')}</h3>
+              <button className="modal-close" onClick={closeModal} aria-label={t('common.close')}>×</button>
             </div>
-            
+
             {modalMode === 'edit' && (
               <div className="modal-tabs">
                 <button
                   className={`tab-button ${activeTab === 'main' ? 'active' : ''}`}
                   onClick={() => setActiveTab('main')}
                 >
-                  Main
+                  {t('common.main')}
                 </button>
                 <button
                   className={`tab-button ${activeTab === 'payment-types' ? 'active' : ''}`}
                   onClick={() => setActiveTab('payment-types')}
                 >
-                  Payment Types
+                  {t('organizations.paymentTypes')}
                 </button>
               </div>
             )}
-            
+
             <form onSubmit={handleSubmit}>
               {activeTab === 'main' && (
                 <div className="form-grid">
                   <div className="field">
-                    <label>Client *</label>
+                    <label>{t('organizations.clientLabel')} *</label>
                     <select value={form.clientId} onChange={(e) => handleChange('clientId', e.target.value)} required>
-                      <option value="">— Select client —</option>
+                      <option value="">{t('common.selectClientPlaceholder')}</option>
                       {clients.map((c) => (
                         <option key={c.clientId} value={c.clientId}>{c.name}</option>
                       ))}
                     </select>
                   </div>
                   <div className="field">
-                    <label>Organization Name *</label>
+                    <label>{t('organizations.orgNameLabel')} *</label>
                     <input
                       value={form.name}
                       onChange={(e) => handleChange('name', e.target.value)}
@@ -282,15 +276,15 @@ export default function Organizations() {
                     />
                   </div>
                   <div className="field">
-                    <label>Tax ID (PIB)</label>
+                    <label>{t('organizations.taxId')}</label>
                     <input
                       value={form.taxId}
                       onChange={(e) => handleChange('taxId', e.target.value)}
-                      placeholder="e.g. 101234567"
+                      placeholder={t('organizations.taxIdPlaceholder', { example: '101234567' })}
                     />
                   </div>
                   <div className="field">
-                    <label>Status</label>
+                    <label>{t('common.status')}</label>
                     <select value={form.status} onChange={(e) => handleChange('status', e.target.value)}>
                       {STATUS_OPTIONS.map((s) => (
                         <option key={s} value={s}>{s}</option>
@@ -298,7 +292,7 @@ export default function Organizations() {
                     </select>
                   </div>
                   <div className="field">
-                    <label>Currency</label>
+                    <label>{t('common.currency')}</label>
                     <select value={form.currency} onChange={(e) => handleChange('currency', e.target.value)}>
                       {CURRENCY_OPTIONS.map((c) => (
                         <option key={c} value={c}>{c}</option>
@@ -307,13 +301,13 @@ export default function Organizations() {
                   </div>
                   {modalMode === 'edit' && (
                     <div className="field">
-                      <label>Active</label>
+                      <label>{t('common.active')}</label>
                       <select
                         value={form.isActive ? 'true' : 'false'}
                         onChange={(e) => handleChange('isActive', e.target.value === 'true')}
                       >
-                        <option value="true">Active</option>
-                        <option value="false">Inactive</option>
+                        <option value="true">{t('common.active')}</option>
+                        <option value="false">{t('common.inactive')}</option>
                       </select>
                     </div>
                   )}
@@ -324,40 +318,40 @@ export default function Organizations() {
                         checked={form.isSearchshopproducts}
                         onChange={(e) => handleChange('isSearchshopproducts', e.target.checked)}
                       />
-                      <span>Search product data from shop</span>
+                      <span>{t('organizations.searchShopProductsLabel')}</span>
                     </label>
-                    <small className="muted">Search products directly from shop for manual creation of fiscal bill</small>
+                    <small className="muted">{t('organizations.searchShopProductsHelp')}</small>
                   </div>
                 </div>
               )}
-              
+
               {activeTab === 'payment-types' && (
                 <div style={{ padding: '20px' }}>
-                  <h4 style={{ marginBottom: '16px' }}>Allowed Payment Types</h4>
+                  <h4 style={{ marginBottom: '16px' }}>{t('organizations.allowedPaymentTypes')}</h4>
                   {paymentTypesLoading ? (
-                    <p className="muted">Loading…</p>
+                    <p className="muted">{t('common.loadingDots')}</p>
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                      {PAYMENT_TYPES.map((pt) => (
-                        <label key={pt.value} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      {PAYMENT_TYPE_VALUES.map((pt) => (
+                        <label key={pt} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                           <input
                             type="checkbox"
-                            checked={paymentTypes.includes(pt.value)}
-                            onChange={() => togglePaymentType(pt.value)}
+                            checked={paymentTypes.includes(pt)}
+                            onChange={() => togglePaymentType(pt)}
                           />
-                          <span>{pt.label}</span>
+                          <span>{t(`organizations.paymentTypeLabels.${pt}`)}</span>
                         </label>
                       ))}
                     </div>
                   )}
                 </div>
               )}
-              
+
               {formError && <p className="error-text" style={{ marginTop: 12, padding: '0 20px' }}>{formError}</p>}
               <div className="modal-actions">
-                <button type="button" className="secondary-button" onClick={closeModal}>Cancel</button>
+                <button type="button" className="secondary-button" onClick={closeModal}>{t('common.cancel')}</button>
                 <button type="submit" className="primary-button" disabled={saving}>
-                  {saving ? 'Saving…' : modalMode === 'add' ? 'Create Organization' : 'Save Changes'}
+                  {saving ? t('common.saving') : modalMode === 'add' ? t('organizations.createOrganization') : t('common.saveChanges')}
                 </button>
               </div>
             </form>

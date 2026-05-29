@@ -1,24 +1,15 @@
 import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
 import { fiscalBillApi, ordersApi, orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
-const INVOICE_TYPES = [
-  { value: 0, label: '0 – Normal' },
-  { value: 4, label: '4 – Advance' },
-]
-
+const INVOICE_TYPE_VALUES = [0, 4]
 const PAGE_SIZE_OPTIONS = [20, 50, 100]
-
-const SHIPPING_STATUSES = [
-  { value: 'awaiting', label: 'Awaiting' },
-  { value: 'in_process', label: 'Processing' },
-  { value: 'shipped', label: 'Shipped' },
-  { value: 'delivered', label: 'Delivered' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
+const SHIPPING_STATUS_VALUES = ['awaiting', 'in_process', 'shipped', 'delivered', 'cancelled']
 
 export default function Orders() {
+  const { t } = useTranslation()
   const { user: currentUser } = useAuth()
 
   const [orgs, setOrgs] = useState([])
@@ -93,7 +84,7 @@ export default function Orders() {
   }
 
   async function fetchPage(page) {
-    if (!selectedOrgId) { setError('Please select an organization first'); return }
+    if (!selectedOrgId) { setError(t('orders.selectOrgFirst')); return }
     setError(null)
     setLoading(true)
     setHasFetched(true)
@@ -117,9 +108,9 @@ export default function Orders() {
       if (status === 404 && msg) {
         setError(msg)
       } else if (status === 404) {
-        setError('No API configuration found for this organization. Please set up a MerchantPro connection in API Config.')
+        setError(t('orders.noApiConfig'))
       } else {
-        setError(msg || err.response?.data?.error || 'Failed to fetch orders')
+        setError(msg || err.response?.data?.error || t('orders.fetchFailed'))
       }
       setOrders([])
       setTotalRecords(0)
@@ -158,7 +149,7 @@ export default function Orders() {
     const ordersToSubmit = fiscalModal?.orders || []
     const selectedOrg = orgs.find(o => String(o.orgId) === String(selectedOrgId))
     if (!selectedOrg || !selectedOrg.clientId) {
-      setFiscalError('Selected organization has no associated client.')
+      setFiscalError(t('orders.noOrgClient'))
       return
     }
     const clientId = selectedOrg.clientId
@@ -232,7 +223,7 @@ export default function Orders() {
           lastError: created.lastError,
         }
       } catch (err) {
-        const msg = err?.response?.data?.message || err?.response?.data || err?.message || 'Fiscalization failed.'
+        const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('orders.fiscalFailed')
         nextFiscalState[order.id] = {
           status: 'ERROR',
           lastError: typeof msg === 'string' ? msg : JSON.stringify(msg),
@@ -245,7 +236,7 @@ export default function Orders() {
     setFiscalSubmitting(false)
 
     if (failures.length > 0) {
-      setFiscalError(`Failed for ${failures.length} order(s): ${failures.join(', ')}`)
+      setFiscalError(t('orders.fiscalFailedSummary', { count: failures.length, list: failures.join(', ') }))
       return
     }
 
@@ -258,7 +249,7 @@ export default function Orders() {
     if (!fiscal?.fiscalbillId) return
     setBusyOrderIds((current) => ({ ...current, [order.id]: true }))
     try {
-      const retryResponse = await fiscalBillApi.retry(fiscal.fiscalbillId, createIdempotencyKey())
+      const retry = await fiscalBillApi.retry(fiscal.fiscalbillId, createIdempotencyKey())
       setFiscalByOrderId((current) => ({
         ...current,
         [order.id]: { ...current[order.id], status: retryResponse.status, lastError: null },
@@ -266,7 +257,7 @@ export default function Orders() {
     } catch (err) {
       setFiscalByOrderId((current) => ({
         ...current,
-        [order.id]: { ...current[order.id], status: 'ERROR', lastError: err.response?.data?.message || 'Retry failed' },
+        [order.id]: { ...current[order.id], status: 'ERROR', lastError: err.response?.data?.message || t('orders.retryFailed') },
       }))
     } finally {
       setBusyOrderIds((current) => ({ ...current, [order.id]: false }))
@@ -275,26 +266,26 @@ export default function Orders() {
 
   return (
     <AppShell
-      title="MerchantPro Orders"
-      subtitle="Fetch orders via configured API connection and template."
+      title={t('orders.title')}
+      subtitle={t('orders.subtitle')}
     >
       <form className="filters-panel" onSubmit={handleFetch}>
         <div className="filter-grid">
           <label className="field">
-            <span>Organization</span>
+            <span>{t('orders.organization')}</span>
             <select
               value={selectedOrgId}
               onChange={(e) => setSelectedOrgId(e.target.value)}
               required
             >
-              <option value="">— Select organization —</option>
+              <option value="">{t('common.selectOrgPlaceholder')}</option>
               {orgs.map((o) => (
                 <option key={o.orgId} value={o.orgId}>{o.name}</option>
               ))}
             </select>
           </label>
           <label className="field">
-            <span>Date From</span>
+            <span>{t('orders.dateFrom')}</span>
             <input
               type="date"
               value={createdAfter}
@@ -302,32 +293,32 @@ export default function Orders() {
             />
           </label>
           <label className="field">
-            <span>Shipping Status</span>
+            <span>{t('orders.shippingStatus')}</span>
             <select
               value={shippingStatus}
               onChange={(e) => setShippingStatus(e.target.value)}
             >
-              <option value="">— All statuses —</option>
-              {SHIPPING_STATUSES.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
+              <option value="">{t('common.selectAllStatusesPlaceholder')}</option>
+              {SHIPPING_STATUS_VALUES.map((s) => (
+                <option key={s} value={s}>{t(`orders.shippingStatusLabels.${s}`)}</option>
               ))}
             </select>
           </label>
           <label className="field">
-            <span>Limit</span>
+            <span>{t('orders.limit')}</span>
             <select
               value={limit}
               onChange={(e) => setLimit(Number(e.target.value))}
             >
               {PAGE_SIZE_OPTIONS.map((n) => (
-                <option key={n} value={n}>{n} per page</option>
+                <option key={n} value={n}>{t('common.perPage', { count: n })}</option>
               ))}
             </select>
           </label>
         </div>
         <div className="inline-actions">
           <button className="primary-button" type="submit" disabled={loading}>
-            {loading ? 'Fetching…' : 'Fetch Orders'}
+            {loading ? t('orders.fetching') : t('orders.fetchOrders')}
           </button>
           {selectedOrderIds.size > 0 && (
             <button
@@ -335,10 +326,10 @@ export default function Orders() {
               className="primary-button"
               onClick={() => openFiscalModalForOrders(orders.filter((o) => selectedOrderIds.has(o.id)))}
             >
-              Fiscalize Selected ({selectedOrderIds.size})
+              {t('orders.fiscalizeSelected', { count: selectedOrderIds.size })}
             </button>
           )}
-          {hasFetched && <span className="badge">{totalRecords} records</span>}
+          {hasFetched && <span className="badge">{t('common.counts.records', { count: totalRecords })}</span>}
         </div>
       </form>
 
@@ -354,25 +345,25 @@ export default function Orders() {
                     type="checkbox"
                     checked={orders.length > 0 && orders.every((o) => selectedOrderIds.has(o.id))}
                     onChange={toggleSelectAllVisible}
-                    aria-label="Select all orders on page"
+                    aria-label={t('orders.selectAllAria')}
                   />
                 </th>
                 <th className="col-expand"></th>
-                <th>Order No</th>
-                <th>Customer</th>
-                <th>Status</th>
-                <th>Total</th>
-                <th>Lines</th>
-                <th>Created At</th>
-                <th>Fiscal Status</th>
-                <th>Actions</th>
+                <th>{t('orders.orderNo')}</th>
+                <th>{t('orders.customer')}</th>
+                <th>{t('common.status')}</th>
+                <th>{t('orders.total')}</th>
+                <th>{t('orders.lines')}</th>
+                <th>{t('orders.createdAt')}</th>
+                <th>{t('orders.fiscalStatus')}</th>
+                <th>{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {orders.length === 0 ? (
                 <tr>
                   <td colSpan={10} style={{ textAlign: 'center', opacity: 0.45, padding: '24px 0' }}>
-                    No orders found for the selected filters
+                    {t('orders.noOrdersFound')}
                   </td>
                 </tr>
               ) : orders.map((order) => {
@@ -390,7 +381,7 @@ export default function Orders() {
                           type="checkbox"
                           checked={selectedOrderIds.has(order.id)}
                           onChange={() => toggleOrderSelection(order.id)}
-                          aria-label={`Select order ${order.externalOrderNo}`}
+                          aria-label={t('orders.selectOrderAria', { orderNo: order.externalOrderNo })}
                         />
                       </td>
                       <td className="col-expand">
@@ -400,7 +391,7 @@ export default function Orders() {
                             className="expand-toggle"
                             onClick={(e) => { e.stopPropagation(); toggleExpand(order.id) }}
                             aria-expanded={isExpanded}
-                            aria-label={isExpanded ? 'Collapse order lines' : 'Expand order lines'}
+                            aria-label={isExpanded ? t('orders.collapseLines') : t('orders.expandLines')}
                           >
                             {isExpanded ? '▼' : '▶'}
                           </button>
@@ -408,12 +399,12 @@ export default function Orders() {
                       </td>
                       <td>{order.externalOrderNo}</td>
                       <td>{order.customerName}</td>
-                      <td>{order.shippingStatus}</td>
+                      <td>{t(`orders.shippingStatusLabels.${order.shippingStatus}`, { defaultValue: order.shippingStatus })}</td>
                       <td>{order.totalAmount} RSD</td>
                       <td>
                         {lines.length > 0
-                          ? <span className="lines-count">{lines.length} item{lines.length !== 1 ? 's' : ''}</span>
-                          : <span className="muted">—</span>}
+                          ? <span className="lines-count">{t('common.counts.items', { count: lines.length })}</span>
+                          : <span className="muted">{t('common.dash')}</span>}
                       </td>
                       <td>{order.createdAt}</td>
                       <td>
@@ -430,7 +421,7 @@ export default function Orders() {
                             onClick={() => openFiscalModal(order)}
                             disabled={busyOrderIds[order.id]}
                           >
-                            {busyOrderIds[order.id] ? 'Processing...' : 'Issue Fiscal Bill'}
+                            {busyOrderIds[order.id] ? t('common.processing') : t('orders.issueFiscalBill')}
                           </button>
                           <button
                             type="button"
@@ -438,7 +429,7 @@ export default function Orders() {
                             onClick={() => retryFiscalBill(order)}
                             disabled={busyOrderIds[order.id] || fiscalByOrderId[order.id]?.status !== 'FAILED'}
                           >
-                            Retry
+                            {t('common.retry')}
                           </button>
                         </div>
                       </td>
@@ -455,19 +446,19 @@ export default function Orders() {
                             </colgroup>
                             <thead>
                               <tr>
-                                <th>Product</th>
-                                <th>SKU</th>
-                                <th>Qty</th>
-                                <th>Unit Price</th>
+                                <th>{t('orders.product')}</th>
+                                <th>{t('orders.sku')}</th>
+                                <th>{t('orders.qty')}</th>
+                                <th>{t('orders.unitPrice')}</th>
                               </tr>
                             </thead>
                             <tbody>
                               {lines.map((line, idx) => (
                                 <tr key={line.productId || idx}>
-                                  <td>{line.productName || '—'}</td>
-                                  <td className="muted">{line.sku || '—'}</td>
-                                  <td>{line.quantity || '—'}</td>
-                                  <td>{line.unitPrice ? `${line.unitPrice} RSD` : '—'}</td>
+                                  <td>{line.productName || t('common.dash')}</td>
+                                  <td className="muted">{line.sku || t('common.dash')}</td>
+                                  <td>{line.quantity || t('common.dash')}</td>
+                                  <td>{line.unitPrice ? `${line.unitPrice} RSD` : t('common.dash')}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -488,16 +479,16 @@ export default function Orders() {
                 onClick={() => fetchPage(currentPage - 1)}
                 disabled={currentPage === 1 || loading}
               >
-                &lsaquo; Prev
+                {t('common.prev')}
               </button>
-              <span className="pagination-info">Page {currentPage} of {totalPages} &mdash; {totalRecords} records</span>
+              <span className="pagination-info">{t('common.paginationInfo', { current: currentPage, total: totalPages, records: totalRecords })}</span>
               <button
                 type="button"
                 className="secondary-button"
                 onClick={() => fetchPage(currentPage + 1)}
                 disabled={currentPage >= totalPages || loading}
               >
-                Next &rsaquo;
+                {t('common.next')}
               </button>
             </div>
           )}
@@ -515,28 +506,28 @@ export default function Orders() {
           zIndex: 1000,
         }}>
           <div style={{ background: '#fff', borderRadius: 8, padding: '2rem', minWidth: 360, maxWidth: 480, width: '100%' }}>
-            <h3 style={{ marginTop: 0 }}>Issue Fiscal Bill</h3>
+            <h3 style={{ marginTop: 0 }}>{t('orders.issueFiscalBillTitle')}</h3>
             <p style={{ color: '#64748b', marginTop: 0 }}>
-              Orders selected: <strong>{fiscalModal.orders.length}</strong>
+              {t('orders.ordersSelected')} <strong>{fiscalModal.orders.length}</strong>
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <div className="form-group">
-                <label className="form-label">Invoice Type</label>
+                <label className="form-label">{t('orders.invoiceType')}</label>
                 <select className="form-input" value={fiscalInvoiceType} onChange={(e) => setFiscalInvoiceType(e.target.value)}>
-                  {INVOICE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  {INVOICE_TYPE_VALUES.map((v) => <option key={v} value={v}>{t(`orders.invoiceTypes.${v}`)}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Transaction Type</label>
-                <input className="form-input" value="0 – Sale" disabled readOnly />
+                <label className="form-label">{t('orders.transactionType')}</label>
+                <input className="form-input" value={t('orders.transactionTypeSale')} disabled readOnly />
               </div>
             </div>
             {fiscalError && <p style={{ color: 'red', marginTop: '0.75rem' }}>{fiscalError}</p>}
             <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem' }}>
               <button className="primary-button" onClick={submitFiscalBill} disabled={fiscalSubmitting}>
-                {fiscalSubmitting ? 'Submitting…' : 'Submit'}
+                {fiscalSubmitting ? t('common.submitting') : t('common.submit')}
               </button>
-              <button className="secondary-button" onClick={closeFiscalModal} disabled={fiscalSubmitting}>Cancel</button>
+              <button className="secondary-button" onClick={closeFiscalModal} disabled={fiscalSubmitting}>{t('common.cancel')}</button>
             </div>
           </div>
         </div>

@@ -17,6 +17,23 @@
 - Keep footer in a separate reusable component file included on all main pages.
 - Footer content is TBD and will be finalized after MVP operations review.
 
+## 2A. Internationalization (i18n)
+
+- **Stack:** `i18next`, `react-i18next`, `i18next-browser-languagedetector`
+- **Supported UI languages:** `en` (fallback), `sr` — registered in [`frontend/src/i18n/index.js`](frontend/src/i18n/index.js)
+- **Init:** import `./i18n` once in [`frontend/src/main.jsx`](frontend/src/main.jsx) before render
+- **Catalog:** [`frontend/src/locales/<lng>.json`](frontend/src/locales/en.json) — nested keys by feature (`common`, `nav`, `auth`, page namespaces such as `orders`, `roles`, `fiscalBills`). Keep key sets identical across locale files and preserve `{{placeholder}}` names
+- **Usage:** `useTranslation()` + `t('key')` in components; `i18next.t()` in non-React code (e.g. `AuthContext`). Use `count` for plurals and `{{var}}` for interpolation
+- **Plurals:** English uses `*_one` / `*_other` suffix keys (for example `common.counts.orders_one`). Serbian adds `*_few` for Slavic plural rules (2–4); define all three suffixes in `sr.json` when adding new counted strings
+- **Language switcher:** [`LanguageSwitcher`](frontend/src/components/AppShell.jsx) in the top bar — custom dropdown with `aria-expanded`, `role="listbox"`, and localized option labels (`common.languages.*`). Persists choice via detector `localStorage` key `efiscal_lang` (also honors browser language on first visit)
+- **RBAC labels:** Backend action codes stay stable API identifiers. Display names and tooltips come from locale maps keyed by `actionCode`: `roles.actionLabels`, `roles.permissionDescriptions`, and `roles.permissionModules` (see [`Roles.jsx`](frontend/src/pages/Roles.jsx)); use `defaultValue` from API metadata when a new action has no catalog entry yet
+- **Lint:** `npm run lint` in `frontend/` runs ESLint with `eslint-plugin-i18next` (`jsx-text-only` mode; also checks `title`, `placeholder`, `aria-label`, `alt`). Fix hardcoded user-visible strings before merge
+- **Serbian maintenance script:** [`frontend/scripts/build-sr-locale.mjs`](frontend/scripts/build-sr-locale.mjs) regenerates `sr.json` from `en.json` plus translation tables (run manually: `node frontend/scripts/build-sr-locale.mjs` after large English catalog changes; review output and hand-edit domain-specific strings as needed)
+- **IDE:** [i18n Ally](https://marketplace.visualstudio.com/items?itemName=Lokalise.i18n-ally) paths configured in [`.vscode/settings.json`](.vscode/settings.json)
+- **Do not translate:** `className`, `id`, API paths, enum/code `value` attributes, object keys, `console` output, server error pass-through, MerchantPro/Tax API payload field names
+- **Accessibility:** Icon-only controls (for example modal `×` close) keep the glyph but require localized `aria-label` (typically `common.close`) in every supported language
+- **Route guard feedback:** [`ActionProtectedRoute`](frontend/src/components/ActionProtectedRoute.jsx) shows `common.permissionDenied` once per denied navigation signature (avoids duplicate toasts on re-render) and uses `common.loading` for the loading state
+
 ## 3. Core ERP UI Patterns
 
 ### 3.1 App Shell Pattern

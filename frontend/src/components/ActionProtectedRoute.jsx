@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { Navigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { hasAction, hasAnyAction, isSuperAdmin } from '../utils/permissions'
 
@@ -10,7 +11,9 @@ export default function ActionProtectedRoute({
   requireSuperAdmin = false,
   fallback = '/account',
 }) {
+  const { t } = useTranslation()
   const { user, loading, showNotification } = useAuth()
+  const lastDeniedSignatureRef = useRef(null)
 
   const allowed = !loading && user && (
     requireSuperAdmin
@@ -20,12 +23,24 @@ export default function ActionProtectedRoute({
 
   useEffect(() => {
     if (!loading && user && !allowed) {
-      showNotification('You do not have permission to access this page.', 'error')
+      const deniedSignature = JSON.stringify({
+        userId: user.userId ?? user.email ?? 'unknown',
+        action: action ?? null,
+        actions: actions ?? [],
+        requireSuperAdmin,
+        fallback,
+      })
+      if (lastDeniedSignatureRef.current !== deniedSignature) {
+        lastDeniedSignatureRef.current = deniedSignature
+        showNotification(t('common.permissionDenied'), 'error')
+      }
+    } else if (allowed) {
+      lastDeniedSignatureRef.current = null
     }
-  }, [loading, user, allowed, showNotification])
+  }, [loading, user, allowed, showNotification, t, action, actions, requireSuperAdmin, fallback])
 
   if (loading) {
-    return <div className="center-state">Loading...</div>
+    return <div className="center-state">{t('common.loading')}</div>
   }
 
   if (!user) {

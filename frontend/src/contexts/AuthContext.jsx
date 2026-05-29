@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import i18n from 'i18next'
 import { authApi } from '../services/api'
 
 const AuthContext = createContext(null)
@@ -54,7 +55,7 @@ export function AuthProvider({ children }) {
       setUser(result.user)
       return true
     } catch (loginError) {
-      setError(loginError.response?.data?.message || 'Login failed')
+      setError(loginError.response?.data?.message || i18n.t('auth.loginFailedFallback'))
       return false
     }
   }

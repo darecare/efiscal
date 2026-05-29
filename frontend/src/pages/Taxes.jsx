@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
 import { taxApi, taxCategoryApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -20,6 +21,7 @@ const emptyCategoryForm = {
 }
 
 export default function Taxes() {
+  const { t } = useTranslation()
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
 
@@ -50,8 +52,8 @@ export default function Taxes() {
 
   useEffect(() => {
     if (!success) return
-    const t = setTimeout(() => setSuccess(null), 3500)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setSuccess(null), 3500)
+    return () => clearTimeout(timer)
   }, [success])
 
   const categoryMap = useMemo(() => {
@@ -68,7 +70,7 @@ export default function Taxes() {
       setTaxes(taxData)
       setCategories(categoryData)
     } catch (err) {
-      setError(err?.response?.data?.message || err?.response?.data || 'Failed to load taxes and categories')
+      setError(err?.response?.data?.message || err?.response?.data || t('taxes.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -103,15 +105,15 @@ export default function Taxes() {
     setTaxFormError(null)
 
     if (!taxForm.taxCategoryId) {
-      setTaxFormError('Tax category is required')
+      setTaxFormError(t('taxes.taxCategoryRequired'))
       return
     }
     if (!taxForm.label.trim()) {
-      setTaxFormError('Label is required')
+      setTaxFormError(t('taxes.labelRequired'))
       return
     }
     if (taxForm.rate === '' || Number.isNaN(Number(taxForm.rate))) {
-      setTaxFormError('Rate must be a valid number')
+      setTaxFormError(t('taxes.rateInvalid'))
       return
     }
 
@@ -128,15 +130,15 @@ export default function Taxes() {
       }
       if (taxMode === 'add') {
         await taxApi.create(payload)
-        setSuccess('Tax created')
+        setSuccess(t('taxes.taxCreated'))
       } else {
         await taxApi.update(editTaxId, payload)
-        setSuccess('Tax updated')
+        setSuccess(t('taxes.taxUpdated'))
       }
       setTaxModal(false)
       setTaxes(await taxApi.list())
     } catch (err) {
-      setTaxFormError(err?.response?.data?.message || err?.response?.data || 'Operation failed')
+      setTaxFormError(err?.response?.data?.message || err?.response?.data || t('common.operationFailed'))
     } finally {
       setSavingTax(false)
     }
@@ -167,7 +169,7 @@ export default function Taxes() {
     setCategoryFormError(null)
 
     if (!categoryForm.name.trim()) {
-      setCategoryFormError('Category name is required')
+      setCategoryFormError(t('taxes.categoryNameRequired'))
       return
     }
 
@@ -180,17 +182,17 @@ export default function Taxes() {
       }
       if (categoryMode === 'add') {
         await taxCategoryApi.create(payload)
-        setSuccess('Tax category created')
+        setSuccess(t('taxes.categoryCreated'))
       } else {
         await taxCategoryApi.update(editCategoryId, payload)
-        setSuccess('Tax category updated')
+        setSuccess(t('taxes.categoryUpdated'))
       }
       setCategoryModal(false)
       const updatedCategories = await taxCategoryApi.list()
       setCategories(updatedCategories)
       setTaxes(await taxApi.list())
     } catch (err) {
-      setCategoryFormError(err?.response?.data?.message || err?.response?.data || 'Operation failed')
+      setCategoryFormError(err?.response?.data?.message || err?.response?.data || t('common.operationFailed'))
     } finally {
       setSavingCategory(false)
     }
@@ -198,13 +200,13 @@ export default function Taxes() {
 
   return (
     <AppShell
-      title="Taxes"
-      subtitle="Manage tax rates and tax categories"
+      title={t('taxes.title')}
+      subtitle={t('taxes.subtitle')}
       actions={
         isSuperAdmin ? (
           activeTab === 'taxes'
-            ? <button className="primary-button" onClick={openAddTax}>Add Tax</button>
-            : <button className="primary-button" onClick={openAddCategory}>Add Tax Category</button>
+            ? <button className="primary-button" onClick={openAddTax}>{t('taxes.addTax')}</button>
+            : <button className="primary-button" onClick={openAddCategory}>{t('taxes.addTaxCategory')}</button>
         ) : null
       }
     >
@@ -218,37 +220,37 @@ export default function Taxes() {
             onClick={() => setActiveTab('taxes')}
             type="button"
           >
-            Tax Rates
+            {t('taxes.taxRatesTab')}
           </button>
           <button
             className={activeTab === 'categories' ? 'primary-button' : 'secondary-button'}
             onClick={() => setActiveTab('categories')}
             type="button"
           >
-            Tax Categories
+            {t('taxes.taxCategoriesTab')}
           </button>
         </div>
       </section>
 
-      {loading ? <p style={{ opacity: 0.6 }}>Loading...</p> : null}
+      {loading ? <p style={{ opacity: 0.6 }}>{t('common.loading')}</p> : null}
 
       {!loading && activeTab === 'taxes' && (
         <section className="table-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h3 style={{ margin: 0 }}>Tax Rates</h3>
-            <span style={{ fontSize: 13, opacity: 0.6 }}>{taxes.length} record{taxes.length !== 1 ? 's' : ''}</span>
+            <h3 style={{ margin: 0 }}>{t('taxes.taxRatesTitle')}</h3>
+            <span style={{ fontSize: 13, opacity: 0.6 }}>{t('common.counts.records', { count: taxes.length })}</span>
           </div>
           <table>
             <thead>
               <tr>
-                <th>Label</th>
-                <th>Rate (%)</th>
-                <th>Category</th>
-                <th>Tax Name</th>
-                <th>Advance Prefix</th>
-                <th>Advance Name</th>
-                <th>Status</th>
-                {isSuperAdmin ? <th>Actions</th> : null}
+                <th>{t('taxes.labelLabel')}</th>
+                <th>{t('taxes.ratePercent')}</th>
+                <th>{t('taxes.category')}</th>
+                <th>{t('taxes.taxName')}</th>
+                <th>{t('taxes.advancePrefix')}</th>
+                <th>{t('taxes.advanceName')}</th>
+                <th>{t('common.status')}</th>
+                {isSuperAdmin ? <th>{t('common.actions')}</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -262,12 +264,12 @@ export default function Taxes() {
                   <td>{tax.efiscalAdvancename || '-'}</td>
                   <td>
                     <span className={`status-chip ${tax.isActive ? 'active' : 'inactive'}`}>
-                      {tax.isActive ? 'Active' : 'Inactive'}
+                      {tax.isActive ? t('common.active') : t('common.inactive')}
                     </span>
                   </td>
                   {isSuperAdmin ? (
                     <td>
-                      <button className="secondary-button" onClick={() => openEditTax(tax)}>Edit</button>
+                      <button className="secondary-button" onClick={() => openEditTax(tax)}>{t('common.edit')}</button>
                     </td>
                   ) : null}
                 </tr>
@@ -275,7 +277,7 @@ export default function Taxes() {
               {taxes.length === 0 ? (
                 <tr>
                   <td colSpan={isSuperAdmin ? 8 : 7} style={{ textAlign: 'center', opacity: 0.5, padding: '24px 0' }}>
-                    No tax rates found
+                    {t('taxes.noTaxRates')}
                   </td>
                 </tr>
               ) : null}
@@ -287,16 +289,16 @@ export default function Taxes() {
       {!loading && activeTab === 'categories' && (
         <section className="table-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h3 style={{ margin: 0 }}>Tax Categories</h3>
-            <span style={{ fontSize: 13, opacity: 0.6 }}>{categories.length} record{categories.length !== 1 ? 's' : ''}</span>
+            <h3 style={{ margin: 0 }}>{t('taxes.taxCategoriesTitle')}</h3>
+            <span style={{ fontSize: 13, opacity: 0.6 }}>{t('common.counts.records', { count: categories.length })}</span>
           </div>
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Code</th>
-                <th>Status</th>
-                {isSuperAdmin ? <th>Actions</th> : null}
+                <th>{t('common.name')}</th>
+                <th>{t('taxes.code')}</th>
+                <th>{t('common.status')}</th>
+                {isSuperAdmin ? <th>{t('common.actions')}</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -306,12 +308,12 @@ export default function Taxes() {
                   <td>{category.taxcategoryCode ?? '-'}</td>
                   <td>
                     <span className={`status-chip ${category.isActive ? 'active' : 'inactive'}`}>
-                      {category.isActive ? 'Active' : 'Inactive'}
+                      {category.isActive ? t('common.active') : t('common.inactive')}
                     </span>
                   </td>
                   {isSuperAdmin ? (
                     <td>
-                      <button className="secondary-button" onClick={() => openEditCategory(category)}>Edit</button>
+                      <button className="secondary-button" onClick={() => openEditCategory(category)}>{t('common.edit')}</button>
                     </td>
                   ) : null}
                 </tr>
@@ -319,7 +321,7 @@ export default function Taxes() {
               {categories.length === 0 ? (
                 <tr>
                   <td colSpan={isSuperAdmin ? 4 : 3} style={{ textAlign: 'center', opacity: 0.5, padding: '24px 0' }}>
-                    No tax categories found
+                    {t('taxes.noTaxCategories')}
                   </td>
                 </tr>
               ) : null}
@@ -332,68 +334,68 @@ export default function Taxes() {
         <div className="modal-overlay" onClick={() => setTaxModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{taxMode === 'add' ? 'Add Tax' : 'Edit Tax'}</h3>
-              <button className="modal-close" onClick={() => setTaxModal(false)}>x</button>
+              <h3>{taxMode === 'add' ? t('taxes.addTaxTitle') : t('taxes.editTaxTitle')}</h3>
+              <button className="modal-close" onClick={() => setTaxModal(false)} aria-label={t('common.close')}>×</button>
             </div>
             <form onSubmit={submitTax}>
               <div className="form-grid">
                 <div className="field">
-                  <label>Category *</label>
+                  <label>{t('taxes.categoryLabel')} *</label>
                   <select value={taxForm.taxCategoryId} onChange={(e) => setTaxForm((p) => ({ ...p, taxCategoryId: e.target.value }))}>
-                    <option value="">Select category</option>
+                    <option value="">{t('taxes.selectCategory')}</option>
                     {categories.map((c) => (
                       <option key={c.taxCategoryId} value={c.taxCategoryId}>{c.name}</option>
                     ))}
                   </select>
                 </div>
                 <div className="field">
-                  <label>Label *</label>
+                  <label>{t('taxes.labelLabel')} *</label>
                   <input value={taxForm.label} onChange={(e) => setTaxForm((p) => ({ ...p, label: e.target.value }))} placeholder="A" maxLength={20} />
                 </div>
                 <div className="field">
-                  <label>Rate (%) *</label>
+                  <label>{t('taxes.rateLabel')} *</label>
                   <input type="number" step="0.0001" value={taxForm.rate} onChange={(e) => setTaxForm((p) => ({ ...p, rate: e.target.value }))} />
                 </div>
                 <div className="field">
-                  <label>Tax Name</label>
-                  <input value={taxForm.efiscalTaxname} maxLength={22} onChange={(e) => setTaxForm((p) => ({ ...p, efiscalTaxname: e.target.value }))} placeholder="e.g. PDV" />
+                  <label>{t('taxes.taxName')}</label>
+                  <input value={taxForm.efiscalTaxname} maxLength={22} onChange={(e) => setTaxForm((p) => ({ ...p, efiscalTaxname: e.target.value }))} placeholder={t('taxes.taxNamePlaceholder')} />
                 </div>
                 <div className="field">
-                  <label>Advance Prefix</label>
+                  <label>{t('taxes.advancePrefix')}</label>
                   <input
                     value={taxForm.efiscalAdvanceprefix}
                     maxLength={50}
                     onChange={(e) => setTaxForm((p) => ({ ...p, efiscalAdvanceprefix: e.target.value }))}
-                    placeholder="e.g. 20:"
+                    placeholder={t('taxes.advancePrefixPlaceholder')}
                   />
                 </div>
                 <div className="field">
-                  <label>Advance Name</label>
+                  <label>{t('taxes.advanceName')}</label>
                   <input
                     value={taxForm.efiscalAdvancename}
                     maxLength={50}
                     onChange={(e) => setTaxForm((p) => ({ ...p, efiscalAdvancename: e.target.value }))}
-                    placeholder="e.g. AvansA"
+                    placeholder={t('taxes.advanceNamePlaceholder')}
                   />
                 </div>
                 {taxMode === 'edit' ? (
                   <div className="field">
-                    <label>Status</label>
+                    <label>{t('common.status')}</label>
                     <select
                       value={taxForm.isActive ? 'true' : 'false'}
                       onChange={(e) => setTaxForm((p) => ({ ...p, isActive: e.target.value === 'true' }))}
                     >
-                      <option value="true">Active</option>
-                      <option value="false">Inactive</option>
+                      <option value="true">{t('common.active')}</option>
+                      <option value="false">{t('common.inactive')}</option>
                     </select>
                   </div>
                 ) : null}
               </div>
               {taxFormError ? <p style={{ color: 'var(--error, #c0392b)', marginTop: 12 }}>{taxFormError}</p> : null}
               <div className="modal-actions">
-                <button type="button" className="secondary-button" onClick={() => setTaxModal(false)}>Cancel</button>
+                <button type="button" className="secondary-button" onClick={() => setTaxModal(false)}>{t('common.cancel')}</button>
                 <button type="submit" className="primary-button" disabled={savingTax}>
-                  {savingTax ? 'Saving...' : taxMode === 'add' ? 'Create' : 'Save Changes'}
+                  {savingTax ? t('common.savingDots') : taxMode === 'add' ? t('common.create') : t('common.saveChanges')}
                 </button>
               </div>
             </form>
@@ -405,37 +407,37 @@ export default function Taxes() {
         <div className="modal-overlay" onClick={() => setCategoryModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{categoryMode === 'add' ? 'Add Tax Category' : 'Edit Tax Category'}</h3>
-              <button className="modal-close" onClick={() => setCategoryModal(false)}>x</button>
+              <h3>{categoryMode === 'add' ? t('taxes.addCategoryTitle') : t('taxes.editCategoryTitle')}</h3>
+              <button className="modal-close" onClick={() => setCategoryModal(false)} aria-label={t('common.close')}>×</button>
             </div>
             <form onSubmit={submitCategory}>
               <div className="form-grid">
                 <div className="field">
-                  <label>Name *</label>
+                  <label>{t('taxes.nameLabel')} *</label>
                   <input value={categoryForm.name} onChange={(e) => setCategoryForm((p) => ({ ...p, name: e.target.value }))} maxLength={120} />
                 </div>
                 <div className="field">
-                  <label>Code (2 chars)</label>
-                  <input value={categoryForm.taxcategoryCode} maxLength={10} onChange={(e) => setCategoryForm((p) => ({ ...p, taxcategoryCode: e.target.value.toUpperCase() }))} placeholder="e.g. VA" />
+                  <label>{t('taxes.codeLabel')}</label>
+                  <input value={categoryForm.taxcategoryCode} maxLength={10} onChange={(e) => setCategoryForm((p) => ({ ...p, taxcategoryCode: e.target.value.toUpperCase() }))} placeholder={t('taxes.codePlaceholder')} />
                 </div>
                 {categoryMode === 'edit' ? (
                   <div className="field">
-                    <label>Status</label>
+                    <label>{t('common.status')}</label>
                     <select
                       value={categoryForm.isActive ? 'true' : 'false'}
                       onChange={(e) => setCategoryForm((p) => ({ ...p, isActive: e.target.value === 'true' }))}
                     >
-                      <option value="true">Active</option>
-                      <option value="false">Inactive</option>
+                      <option value="true">{t('common.active')}</option>
+                      <option value="false">{t('common.inactive')}</option>
                     </select>
                   </div>
                 ) : null}
               </div>
               {categoryFormError ? <p style={{ color: 'var(--error, #c0392b)', marginTop: 12 }}>{categoryFormError}</p> : null}
               <div className="modal-actions">
-                <button type="button" className="secondary-button" onClick={() => setCategoryModal(false)}>Cancel</button>
+                <button type="button" className="secondary-button" onClick={() => setCategoryModal(false)}>{t('common.cancel')}</button>
                 <button type="submit" className="primary-button" disabled={savingCategory}>
-                  {savingCategory ? 'Saving...' : categoryMode === 'add' ? 'Create' : 'Save Changes'}
+                  {savingCategory ? t('common.savingDots') : categoryMode === 'add' ? t('common.create') : t('common.saveChanges')}
                 </button>
               </div>
             </form>

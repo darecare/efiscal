@@ -10,11 +10,12 @@ It connects webshop/order systems (currently MerchantPro) with Serbian Tax Autho
 - Fiscal bill creation (order-based and manual flows)
 - Retry and status tracking for fiscalization attempts
 - Admin workflows for users, roles, organizations, and API connection templates
+- Localized web UI (English and Serbian) with in-app language switcher
 - Extensible integration model for future modules (WooCommerce, Shopify, ERP, courier, etc.)
 
 ## Tech Stack
 
-- Frontend: React 19 + Vite + React Router + Axios
+- Frontend: React 19 + Vite + React Router + Axios + i18next (English and Serbian UI)
 - Backend: Java 17+ / Spring Boot 3.4.x
 - Database: PostgreSQL 15/16 (Flyway migrations)
 - Auth/Security: Bearer token auth, role/action authorization, scoped access checks
@@ -174,7 +175,10 @@ cd frontend
 npm run dev
 npm run build
 npm run preview
+npm run lint          # ESLint, including i18next literal-string checks
 ```
+
+UI copy lives in `frontend/src/locales/en.json` and `frontend/src/locales/sr.json`. See `FRONTEND_STRUCTURE.md` (section 2A) for i18n conventions.
 
 ### Backend
 

@@ -19,6 +19,13 @@ Middleware platform for automated fiscalization of online orders. React frontend
 - Use `API_CONTRACT.md` for endpoint contracts and error formats
 - After making changes, review and update the relevant documentation (API_CONTRACT, BACKEND_STRUCTURE, README, DATA_MODEL, etc.) so it stays in sync with the codebase
 
+## UI Internationalization Rules
+
+- Treat all user-facing UI text as i18n-managed text; do not hardcode visible labels/messages in React components.
+- When adding or changing a label/message, update all supported locale catalogs in the same change set (currently `en` and `sr`).
+- Keep locale key sets synchronized across languages (same keys and interpolation placeholders).
+- For icon-only or accessibility-only controls, keep visual glyphs as icons but provide localized accessible labels (for example via `aria-label`/screen-reader text) in every supported language.
+
 ## Stack
 
 - Frontend: React 19, Vite, React Router, Axios, Sass
