@@ -197,7 +197,8 @@ public class OrgService {
         @Size(max = 10, message = "Currency must not exceed 10 characters")
         String currency,
 
-        Boolean isActive
+        Boolean isActive,
+        Boolean isSearchshopproducts
     ) {}
 
     public record UpdateOrgRequest(
