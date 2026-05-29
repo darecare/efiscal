@@ -1,14 +1,10 @@
 import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
 import { apiConnApi, apiTemplateApi, orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
-const PLATFORM_OPTIONS = [
-  { value: 'MP', label: 'MerchantPro' },
-  { value: 'WO', label: 'WooCommerce' },
-  { value: 'SH', label: 'Shopify' },
-  { value: 'FS', label: 'Fiscal System' },
-]
+const PLATFORM_VALUES = ['MP', 'WO', 'SH', 'FS']
 const AUTH_OPTIONS = ['BASIC_AUTH', 'OAUTH', 'MTLS', 'NONE']
 const METHOD_OPTIONS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 
@@ -22,6 +18,7 @@ const emptyTplForm = {
 }
 
 export default function ApiConfig() {
+  const { t } = useTranslation()
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
 
@@ -66,7 +63,7 @@ export default function ApiConfig() {
       setError(null)
       setConnections(await apiConnApi.list())
     } catch {
-      setError('Failed to load connections')
+      setError(t('apiConfig.loadFailed'))
     } finally {
       setLoadingConn(false)
     }
@@ -107,8 +104,8 @@ export default function ApiConfig() {
   async function handleConnSubmit(e) {
     e.preventDefault()
     setConnFormError(null)
-    if (!connForm.displayName.trim()) { setConnFormError('Display name is required'); return }
-    if (!connForm.orgId) { setConnFormError('Organization is required'); return }
+    if (!connForm.displayName.trim()) { setConnFormError(t('apiConfig.displayNameRequired')); return }
+    if (!connForm.orgId) { setConnFormError(t('apiConfig.organizationRequired')); return }
     try {
       setConnSaving(true)
       const payload = {
@@ -122,10 +119,10 @@ export default function ApiConfig() {
       }
       if (connMode === 'add') {
         await apiConnApi.create(payload)
-        setSuccessMsg('Connection created')
+        setSuccessMsg(t('apiConfig.connectionCreated'))
       } else {
         await apiConnApi.update(editConnId, payload)
-        setSuccessMsg('Connection updated')
+        setSuccessMsg(t('apiConfig.connectionUpdated'))
       }
       setConnModal(false)
       const updated = await apiConnApi.list()
@@ -135,7 +132,7 @@ export default function ApiConfig() {
         if (found) setSelectedConn(found)
       }
     } catch (err) {
-      setConnFormError(err.response?.data?.message || err.response?.data || 'Operation failed')
+      setConnFormError(err.response?.data?.message || err.response?.data || t('common.operationFailed'))
     } finally {
       setConnSaving(false)
     }
@@ -163,21 +160,21 @@ export default function ApiConfig() {
   async function handleTplSubmit(e) {
     e.preventDefault()
     setTplFormError(null)
-    if (!tplForm.operationKey.trim()) { setTplFormError('Operation key is required'); return }
-    if (!tplForm.endpointPath.trim()) { setTplFormError('Endpoint path is required'); return }
+    if (!tplForm.operationKey.trim()) { setTplFormError(t('apiConfig.operationKeyRequired')); return }
+    if (!tplForm.endpointPath.trim()) { setTplFormError(t('apiConfig.endpointPathRequired')); return }
     try {
       setTplSaving(true)
       if (tplMode === 'add') {
         await apiTemplateApi.create({ ...tplForm, apiconnId: selectedConn.apiconnId })
-        setSuccessMsg('Template created')
+        setSuccessMsg(t('apiConfig.templateCreated'))
       } else {
         await apiTemplateApi.update(editTplId, { ...tplForm, apiconnId: selectedConn.apiconnId })
-        setSuccessMsg('Template updated')
+        setSuccessMsg(t('apiConfig.templateUpdated'))
       }
       setTplModal(false)
       setTemplates(await apiTemplateApi.list(selectedConn.apiconnId))
     } catch (err) {
-      setTplFormError(err.response?.data?.message || err.response?.data || 'Operation failed')
+      setTplFormError(err.response?.data?.message || err.response?.data || t('common.operationFailed'))
     } finally {
       setTplSaving(false)
     }
@@ -185,9 +182,9 @@ export default function ApiConfig() {
 
   return (
     <AppShell
-      title="API Configuration"
-      subtitle="Platform connections and operation templates."
-      actions={isSuperAdmin ? <button className="primary-button" onClick={openAddConn}>Add Connection</button> : null}
+      title={t('apiConfig.title')}
+      subtitle={t('apiConfig.subtitle')}
+      actions={isSuperAdmin ? <button className="primary-button" onClick={openAddConn}>{t('apiConfig.addConnection')}</button> : null}
     >
       {successMsg && <div className="success-banner">{successMsg}</div>}
       {error && <div className="error-banner">{error}</div>}
@@ -195,21 +192,21 @@ export default function ApiConfig() {
       {/* ── Master: Connections ── */}
       <section className="table-card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ margin: 0 }}>API Connections</h3>
-          <span style={{ fontSize: 13, opacity: 0.6 }}>{connections.length} record{connections.length !== 1 ? 's' : ''}</span>
+          <h3 style={{ margin: 0 }}>{t('apiConfig.connectionsTitle')}</h3>
+          <span style={{ fontSize: 13, opacity: 0.6 }}>{t('common.counts.records', { count: connections.length })}</span>
         </div>
-        {loadingConn ? <p style={{ opacity: 0.5 }}>Loading…</p> : (
+        {loadingConn ? <p style={{ opacity: 0.5 }}>{t('common.loadingDots')}</p> : (
           <table>
             <thead>
               <tr>
                 <th style={{ width: 24 }}></th>
-                <th>Name</th>
-                <th>Platform</th>
-                <th>Organization</th>
-                <th>Base URL</th>
-                <th>Auth Type</th>
-                <th>Status</th>
-                {isSuperAdmin && <th>Actions</th>}
+                <th>{t('common.name')}</th>
+                <th>{t('apiConfig.platform')}</th>
+                <th>{t('common.organization')}</th>
+                <th>{t('apiConfig.baseUrl')}</th>
+                <th>{t('apiConfig.authType')}</th>
+                <th>{t('common.status')}</th>
+                {isSuperAdmin && <th>{t('common.actions')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -226,18 +223,18 @@ export default function ApiConfig() {
                     {selectedConn?.apiconnId === c.apiconnId ? '▶' : ''}
                   </td>
                   <td>{c.displayName}</td>
-                  <td>{PLATFORM_OPTIONS.find(p => p.value === c.apiPlatform)?.label ?? c.apiPlatform}</td>
+                  <td>{t(`apiConfig.platformLabels.${c.apiPlatform}`, { defaultValue: c.apiPlatform })}</td>
                   <td>{c.orgName}</td>
                   <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{c.apiBaseUrl}</td>
                   <td>{c.apiauthtype}</td>
                   <td>
                     <span className={`status-chip ${c.isActive ? 'active' : 'inactive'}`}>
-                      {c.isActive ? 'Active' : 'Inactive'}
+                      {c.isActive ? t('common.active') : t('common.inactive')}
                     </span>
                   </td>
                   {isSuperAdmin && (
                     <td onClick={ev => ev.stopPropagation()}>
-                      <button className="secondary-button" onClick={() => openEditConn(c)}>Edit</button>
+                      <button className="secondary-button" onClick={() => openEditConn(c)}>{t('common.edit')}</button>
                     </td>
                   )}
                 </tr>
@@ -245,7 +242,7 @@ export default function ApiConfig() {
               {connections.length === 0 && (
                 <tr>
                   <td colSpan={isSuperAdmin ? 8 : 7} style={{ textAlign: 'center', opacity: 0.45, padding: '24px 0' }}>
-                    No connections configured yet
+                    {t('apiConfig.noConnections')}
                   </td>
                 </tr>
               )}
@@ -260,49 +257,49 @@ export default function ApiConfig() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
             <div>
               <h3 style={{ margin: 0 }}>
-                Templates —{' '}
+                {t('apiConfig.templatesFor')}{' '}
                 <span style={{ color: '#c2753c' }}>{selectedConn.displayName}</span>
               </h3>
               <p style={{ margin: '4px 0 0', opacity: 0.55, fontSize: 13 }}>
-                Operation templates for this connection
+                {t('apiConfig.templatesSubtitle')}
               </p>
             </div>
             {isSuperAdmin && (
-              <button className="primary-button" onClick={openAddTpl}>Add Template</button>
+              <button className="primary-button" onClick={openAddTpl}>{t('apiConfig.addTemplate')}</button>
             )}
           </div>
-          {loadingTpl ? <p style={{ opacity: 0.5 }}>Loading…</p> : (
+          {loadingTpl ? <p style={{ opacity: 0.5 }}>{t('common.loadingDots')}</p> : (
             <table>
               <thead>
                 <tr>
-                  <th>Operation Key</th>
-                  <th>Method</th>
-                  <th>Content Type</th>
-                  <th>Endpoint Path</th>
-                  <th>Status</th>
-                  {isSuperAdmin && <th>Actions</th>}
+                  <th>{t('apiConfig.operationKey')}</th>
+                  <th>{t('apiConfig.method')}</th>
+                  <th>{t('apiConfig.contentType')}</th>
+                  <th>{t('apiConfig.endpointPath')}</th>
+                  <th>{t('common.status')}</th>
+                  {isSuperAdmin && <th>{t('common.actions')}</th>}
                 </tr>
               </thead>
               <tbody>
-                {templates.map((t) => (
-                  <tr key={t.apitemplateId}>
-                    <td><code style={{ fontSize: 13 }}>{t.operationKey}</code></td>
+                {templates.map((tpl) => (
+                  <tr key={tpl.apitemplateId}>
+                    <td><code style={{ fontSize: 13 }}>{tpl.operationKey}</code></td>
                     <td>
                       <span style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 12,
                         background: 'rgba(194,117,60,0.15)', padding: '2px 6px', borderRadius: 4 }}>
-                        {t.httpMethod}
+                        {tpl.httpMethod}
                       </span>
                     </td>
-                    <td style={{ fontSize: 13 }}>{t.contentType}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{t.endpointPath}</td>
+                    <td style={{ fontSize: 13 }}>{tpl.contentType}</td>
+                    <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{tpl.endpointPath}</td>
                     <td>
-                      <span className={`status-chip ${t.isActive ? 'active' : 'inactive'}`}>
-                        {t.isActive ? 'Active' : 'Inactive'}
+                      <span className={`status-chip ${tpl.isActive ? 'active' : 'inactive'}`}>
+                        {tpl.isActive ? t('common.active') : t('common.inactive')}
                       </span>
                     </td>
                     {isSuperAdmin && (
                       <td>
-                        <button className="secondary-button" onClick={() => openEditTpl(t)}>Edit</button>
+                        <button className="secondary-button" onClick={() => openEditTpl(tpl)}>{t('common.edit')}</button>
                       </td>
                     )}
                   </tr>
@@ -310,7 +307,7 @@ export default function ApiConfig() {
                 {templates.length === 0 && (
                   <tr>
                     <td colSpan={isSuperAdmin ? 6 : 5} style={{ textAlign: 'center', opacity: 0.45, padding: '24px 0' }}>
-                      No templates for this connection
+                      {t('apiConfig.noTemplates')}
                     </td>
                   </tr>
                 )}
@@ -325,34 +322,34 @@ export default function ApiConfig() {
         <div className="modal-overlay" onClick={() => setConnModal(false)}>
           <div className="modal" style={{ maxWidth: 750, width: '100%' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{connMode === 'add' ? 'Add Connection' : 'Edit Connection'}</h3>
-              <button className="modal-close" onClick={() => setConnModal(false)}>✕</button>
+              <h3>{connMode === 'add' ? t('apiConfig.addConnTitle') : t('apiConfig.editConnTitle')}</h3>
+              <button className="modal-close" onClick={() => setConnModal(false)} aria-label={t('common.close')}>×</button>
             </div>
             <form onSubmit={handleConnSubmit}>
               <div className="form-grid">
                 <div className="field">
-                  <label>Display Name *</label>
+                  <label>{t('apiConfig.displayNameLabel')} *</label>
                   <input value={connForm.displayName} onChange={e => setConnForm(p => ({ ...p, displayName: e.target.value }))} required />
                 </div>
                 <div className="field">
-                  <label>Organization *</label>
+                  <label>{t('apiConfig.organizationLabel')} *</label>
                   <select value={connForm.orgId} onChange={e => setConnForm(p => ({ ...p, orgId: e.target.value }))}>
-                    <option value="">— Select org —</option>
+                    <option value="">{t('apiConfig.selectOrgShort')}</option>
                     {orgs.map(o => <option key={o.orgId} value={o.orgId}>{o.name}</option>)}
                   </select>
                 </div>
                 <div className="field">
-                  <label>Platform *</label>
+                  <label>{t('apiConfig.platformLabel')} *</label>
                   <select value={connForm.apiPlatform} onChange={e => setConnForm(p => ({ ...p, apiPlatform: e.target.value }))}>
-                    {PLATFORM_OPTIONS.map(x => <option key={x.value} value={x.value}>{x.label}</option>)}
+                    {PLATFORM_VALUES.map(x => <option key={x} value={x}>{t(`apiConfig.platformLabels.${x}`)}</option>)}
                   </select>
                 </div>
                 <div className="field">
-                  <label>Base URL</label>
+                  <label>{t('apiConfig.baseUrlLabel')}</label>
                   <input value={connForm.apiBaseUrl} onChange={e => setConnForm(p => ({ ...p, apiBaseUrl: e.target.value }))} />
                 </div>
                 <div className="field">
-                  <label>Auth Type</label>
+                  <label>{t('apiConfig.authTypeLabel')}</label>
                   <select value={connForm.apiauthtype} onChange={e => setConnForm(p => ({ ...p, apiauthtype: e.target.value }))}>
                     {AUTH_OPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
                   </select>
@@ -360,28 +357,28 @@ export default function ApiConfig() {
                 {connForm.apiauthtype !== 'MTLS' && (
                   <>
                     <div className="field">
-                      <label>API Key</label>
+                      <label>{t('apiConfig.apiKey')}</label>
                       <input value={connForm.apikey} onChange={e => setConnForm(p => ({ ...p, apikey: e.target.value }))} />
                     </div>
                     <div className="field">
-                      <label>API Secret</label>
+                      <label>{t('apiConfig.apiSecret')}</label>
                       <input type="password" value={connForm.apisecret} onChange={e => setConnForm(p => ({ ...p, apisecret: e.target.value }))} />
                     </div>
                   </>
                 )}
                 <div className="field">
-                  <label>PAC</label>
+                  <label>{t('apiConfig.pac')}</label>
                   <input
                     value={connForm.pac}
                     maxLength={10}
                     onChange={e => setConnForm(p => ({ ...p, pac: e.target.value }))}
-                    placeholder="Platform access code"
+                    placeholder={t('apiConfig.pacPlaceholder')}
                   />
                 </div>
                 {connForm.apiauthtype === 'MTLS' && (
                   <>
                     <div className="field" style={{ gridColumn: '1 / -1' }}>
-                      <label>Certificate File (PEM / PKCS12)</label>
+                      <label>{t('apiConfig.certificateFile')}</label>
                       <input
                         type="file"
                         accept=".pem,.p12,.pfx,.crt,.cer"
@@ -394,35 +391,35 @@ export default function ApiConfig() {
                         }}
                       />
                       {connMode === 'edit' && !connForm.certData && (
-                        <span style={{ fontSize: 12, opacity: 0.55 }}>Leave empty to keep existing certificate</span>
+                        <span style={{ fontSize: 12, opacity: 0.55 }}>{t('apiConfig.keepCertificate')}</span>
                       )}
                     </div>
                     <div className="field">
-                      <label>Certificate Password</label>
+                      <label>{t('apiConfig.certificatePassword')}</label>
                       <input
                         type="password"
                         value={connForm.certPassword}
                         onChange={e => setConnForm(p => ({ ...p, certPassword: e.target.value }))}
-                        placeholder={connMode === 'edit' ? 'Leave blank to keep existing' : ''}
+                        placeholder={connMode === 'edit' ? t('apiConfig.keepPassword') : ''}
                       />
                     </div>
                   </>
                 )}
                 {connMode === 'edit' && (
                   <div className="field">
-                    <label>Status</label>
+                    <label>{t('common.status')}</label>
                     <select value={connForm.isActive ? 'true' : 'false'} onChange={e => setConnForm(p => ({ ...p, isActive: e.target.value === 'true' }))}>
-                      <option value="true">Active</option>
-                      <option value="false">Inactive</option>
+                      <option value="true">{t('common.active')}</option>
+                      <option value="false">{t('common.inactive')}</option>
                     </select>
                   </div>
                 )}
               </div>
               {connFormError && <p style={{ color: 'var(--error, #c0392b)', marginTop: 12 }}>{connFormError}</p>}
               <div className="modal-actions">
-                <button type="button" className="secondary-button" onClick={() => setConnModal(false)}>Cancel</button>
+                <button type="button" className="secondary-button" onClick={() => setConnModal(false)}>{t('common.cancel')}</button>
                 <button type="submit" className="primary-button" disabled={connSaving}>
-                  {connSaving ? 'Saving…' : connMode === 'add' ? 'Create' : 'Save Changes'}
+                  {connSaving ? t('common.saving') : connMode === 'add' ? t('common.create') : t('common.saveChanges')}
                 </button>
               </div>
             </form>
@@ -435,13 +432,13 @@ export default function ApiConfig() {
         <div className="modal-overlay" onClick={() => setTplModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{tplMode === 'add' ? 'Add Template' : 'Edit Template'}</h3>
-              <button className="modal-close" onClick={() => setTplModal(false)}>✕</button>
+              <h3>{tplMode === 'add' ? t('apiConfig.addTplTitle') : t('apiConfig.editTplTitle')}</h3>
+              <button className="modal-close" onClick={() => setTplModal(false)} aria-label={t('common.close')}>×</button>
             </div>
             <form onSubmit={handleTplSubmit}>
               <div className="form-grid">
                 <div className="field">
-                  <label>Operation Key *</label>
+                  <label>{t('apiConfig.operationKeyLabel')} *</label>
                   <input
                     value={tplForm.operationKey}
                     onChange={e => setTplForm(p => ({ ...p, operationKey: e.target.value }))}
@@ -450,17 +447,17 @@ export default function ApiConfig() {
                   />
                 </div>
                 <div className="field">
-                  <label>HTTP Method *</label>
+                  <label>{t('apiConfig.httpMethodLabel')} *</label>
                   <select value={tplForm.httpMethod} onChange={e => setTplForm(p => ({ ...p, httpMethod: e.target.value }))}>
                     {METHOD_OPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
                   </select>
                 </div>
                 <div className="field">
-                  <label>Content Type</label>
+                  <label>{t('apiConfig.contentTypeLabel')}</label>
                   <input value={tplForm.contentType} onChange={e => setTplForm(p => ({ ...p, contentType: e.target.value }))} />
                 </div>
                 <div className="field">
-                  <label>Endpoint Path *</label>
+                  <label>{t('apiConfig.endpointPathLabel')} *</label>
                   <input
                     value={tplForm.endpointPath}
                     onChange={e => setTplForm(p => ({ ...p, endpointPath: e.target.value }))}
@@ -470,19 +467,19 @@ export default function ApiConfig() {
                 </div>
                 {tplMode === 'edit' && (
                   <div className="field">
-                    <label>Status</label>
+                    <label>{t('common.status')}</label>
                     <select value={tplForm.isActive ? 'true' : 'false'} onChange={e => setTplForm(p => ({ ...p, isActive: e.target.value === 'true' }))}>
-                      <option value="true">Active</option>
-                      <option value="false">Inactive</option>
+                      <option value="true">{t('common.active')}</option>
+                      <option value="false">{t('common.inactive')}</option>
                     </select>
                   </div>
                 )}
               </div>
               {tplFormError && <p style={{ color: 'var(--error, #c0392b)', marginTop: 12 }}>{tplFormError}</p>}
               <div className="modal-actions">
-                <button type="button" className="secondary-button" onClick={() => setTplModal(false)}>Cancel</button>
+                <button type="button" className="secondary-button" onClick={() => setTplModal(false)}>{t('common.cancel')}</button>
                 <button type="submit" className="primary-button" disabled={tplSaving}>
-                  {tplSaving ? 'Saving…' : tplMode === 'add' ? 'Create' : 'Save Changes'}
+                  {tplSaving ? t('common.saving') : tplMode === 'add' ? t('common.create') : t('common.saveChanges')}
                 </button>
               </div>
             </form>

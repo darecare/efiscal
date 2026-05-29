@@ -51,7 +51,7 @@ EXTERNAL API SPEC REFERENCES:
 - Serbian Tax Authority tax amounts docs: https://tap.sandbox.suf.purs.gov.rs/Help/view/1034863356/Tax-Amounts/en-US
 
 TECHNOLOGY STACK:
-• Frontend: React 19, Vite, React Router, Axios, Sass
+• Frontend: React 19, Vite, React Router, Axios, Sass, i18next (en/sr UI catalogs)
 • Backend: Java 21 LTS, Spring Boot 3.x
 • Database: PostgreSQL 15
 • Authentication: JWT (Spring Security), bcrypt

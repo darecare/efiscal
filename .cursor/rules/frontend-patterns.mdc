@@ -28,3 +28,10 @@ alwaysApply: false
 - Use modal dialogs for critical actions/errors
 - Loading spinners during API calls
 - Data views (like Orders and Fiscal Bills) should clearly present related status details and action bars
+
+## Internationalization
+- All user-visible strings go through `react-i18next` (`useTranslation` / `t()`); catalogs in `frontend/src/locales/en.json` and `sr.json`
+- Register new languages in `frontend/src/i18n/index.js`; keep locale key sets aligned across files
+- RBAC UI: translate display text via `roles.actionLabels`, `roles.permissionDescriptions`, and `roles.permissionModules` keyed by `actionCode`; keep API permission codes untranslated
+- Run `npm run lint` in `frontend/` — `eslint-plugin-i18next` flags hardcoded JSX text and relevant attributes
+- Modal close and other icon-only controls need localized `aria-label` keys (for example `common.close`)
