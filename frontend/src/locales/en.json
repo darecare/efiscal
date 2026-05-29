@@ -153,6 +153,8 @@
     "paymentTypes": "Payment Types",
     "allowedPaymentTypes": "Allowed Payment Types",
     "createOrganization": "Create Organization",
+    "searchShopProductsLabel": "Search product data from shop",
+    "searchShopProductsHelp": "Search products directly from shop for manual creation of fiscal bill",
     "paymentTypeLabels": {
       "0": "Other",
       "1": "Cash",

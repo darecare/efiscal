@@ -162,6 +162,8 @@
     "paymentTypes": "Tipovi plaćanja",
     "allowedPaymentTypes": "Dozvoljeni tipovi plaćanja",
     "createOrganization": "Kreiraj organizaciju",
+    "searchShopProductsLabel": "Pretraži podatke o proizvodima iz prodavnice",
+    "searchShopProductsHelp": "Pretražuj proizvode direktno iz prodavnice za ručno kreiranje fiskalnog računa",
     "paymentTypeLabels": {
       "0": "Ostalo",
       "1": "Gotovina",

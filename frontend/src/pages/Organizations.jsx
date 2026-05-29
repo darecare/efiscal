@@ -318,9 +318,9 @@ export default function Organizations() {
                         checked={form.isSearchshopproducts}
                         onChange={(e) => handleChange('isSearchshopproducts', e.target.checked)}
                       />
-                      <span>Search product data from shop</span>
+                      <span>{t('organizations.searchShopProductsLabel')}</span>
                     </label>
-                    <small className="muted">Search products directly from shop for manual creation of fiscal bill</small>
+                    <small className="muted">{t('organizations.searchShopProductsHelp')}</small>
                   </div>
                 </div>
               )}
