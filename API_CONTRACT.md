@@ -346,6 +346,109 @@ Subscription behavior:
 - 204 Response: No Content
 - Errors: `400` (self-deletion), `401`, `403` (client scope mismatch), `404`, `500`
 
+## 5B. Application Info Endpoint
+
+### GET /app-info
+- Description: Return easily accessible software identity information for the About screen.
+- 200 Response:
+```json
+{
+  "manufacturer": "eFiscal",
+  "serialNumber": "EFISCAL-VPS-001",
+  "softwareVersion": "0.0.1-SNAPSHOT"
+}
+```
+- Notes:
+  - Values are sourced from backend application configuration.
+  - The endpoint is intended for authenticated UI use in the header About/help menu.
+- Errors: `401`, `500`
+
+## 5C. Organization Management Endpoints
+
+### GET /orgs
+- Description: List organizations within caller scope.
+- Query:
+  - `clientId` (optional; honored for SuperAdmin calls)
+- 200 Response:
+```json
+[
+  {
+    "orgId": 1002,
+    "clientId": 1001,
+    "clientName": "Acme Retail",
+    "name": "Acme Belgrade",
+    "taxId": "101234567",
+    "status": "ACTIVE",
+    "currency": "RSD",
+    "isActive": true,
+    "isSearchshopproducts": false,
+    "smtpServer": "smtp.example.com",
+    "smtpPort": 587,
+    "emailFrom": "no-reply@example.com",
+    "smtpUsername": "smtp-user",
+    "smtpConnectionSecurity": "STARTTLS",
+    "createdAt": "2026-03-24T10:00:00Z"
+  }
+]
+```
+- Notes:
+  - `smtpPassword` is write-only and is never returned in API responses.
+- Errors: `401`, `403`, `500`
+
+### GET /orgs/{orgId}
+- Description: Get organization details by ID (requires scope and action checks).
+- 200 Response: Same object shape as `GET /orgs` item.
+- Errors: `401`, `403`, `404`, `500`
+
+### POST /orgs
+- Description: Create organization.
+- Request:
+```json
+{
+  "clientId": 1001,
+  "name": "Acme Novi Sad",
+  "taxId": "101234568",
+  "status": "ACTIVE",
+  "currency": "RSD",
+  "isActive": true,
+  "isSearchshopproducts": false,
+  "smtpServer": "smtp.example.com",
+  "smtpPort": 587,
+  "emailFrom": "no-reply@example.com",
+  "smtpUsername": "smtp-user",
+  "smtpPassword": "secret",
+  "smtpConnectionSecurity": "STARTTLS"
+}
+```
+- Validation:
+  - `smtpPort` range: `1..65535`
+  - `smtpConnectionSecurity` allowed values: `STARTTLS`, `SSL_TLS`
+- 201 Response: Created organization object (same as `GET /orgs`, excluding `smtpPassword`).
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### PUT /orgs/{orgId}
+- Description: Update organization fields.
+- Request: Partial update payload using the same fields as `POST /orgs`.
+- 200 Response: Updated organization object (same as `GET /orgs`, excluding `smtpPassword`).
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### GET /orgs/{orgId}/payment-types
+- Description: Get allowed payment types for organization.
+- 200 Response:
+```json
+[1, 2, 4]
+```
+- Errors: `401`, `403`, `404`, `500`
+
+### POST /orgs/{orgId}/payment-types
+- Description: Replace allowed payment types for organization.
+- Request:
+```json
+[1, 2, 4]
+```
+- 200 Response: Empty body
+- Errors: `400`, `401`, `403`, `404`, `500`
+
 ## 6. Error Model
 All non-2xx responses should follow:
 ```json

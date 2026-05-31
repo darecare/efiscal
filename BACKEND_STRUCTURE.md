@@ -233,6 +233,9 @@ The system defines the following canonical action codes (inserted during migrati
     *   `/api/v1/orgs` (except `/my-access`) -> requires `ORGS_MANAGE`
     *   `/api/v1/apiconn` -> requires `ORGS_MANAGE`
     *   `/api/v1/apitemplate` -> requires `ORGS_MANAGE`
+  *   Organization payload includes optional email settings fields persisted on `org`: `smtpServer`, `smtpPort`, `emailFrom`, `smtpUsername`, `smtpPassword`, `smtpConnectionSecurity`.
+  *   `smtpConnectionSecurity` is validated in service layer and accepts only `STARTTLS` or `SSL_TLS`.
+  *   `smtpPassword` is treated as sensitive write-only input and is not returned from organization DTO responses.
 *   **Sync Endpoints (`/api/v1/merchantpro/orders`):**
     *   `GET /merchantpro/orders` -> requires `MERCHANTPRO_FETCH_ORDERS` and organization access validation.
 *   **Fiscalization Endpoints (`/api/v1/fiscalbill`):**

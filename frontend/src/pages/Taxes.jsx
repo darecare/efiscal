@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
-import { taxApi, taxCategoryApi } from '../services/api'
+import { fiscalBillApi, orgsApi, taxApi, taxCategoryApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const emptyTaxForm = {
@@ -31,6 +31,12 @@ export default function Taxes() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+  const [orgs, setOrgs] = useState([])
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importOrgId, setImportOrgId] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState(null)
+  const [importSummary, setImportSummary] = useState(null)
 
   const [taxModal, setTaxModal] = useState(false)
   const [taxMode, setTaxMode] = useState('add')
@@ -49,6 +55,13 @@ export default function Taxes() {
   useEffect(() => {
     loadAll()
   }, [])
+
+  useEffect(() => {
+    if (!isSuperAdmin) return
+    orgsApi.list()
+      .then(setOrgs)
+      .catch(() => setOrgs([]))
+  }, [isSuperAdmin])
 
   useEffect(() => {
     if (!success) return
@@ -82,6 +95,19 @@ export default function Taxes() {
     setTaxForm(emptyTaxForm)
     setTaxFormError(null)
     setTaxModal(true)
+  }
+
+  function openImportTaxes() {
+    setImportModalOpen(true)
+    setImportOrgId('')
+    setImportError(null)
+    setImportSummary(null)
+  }
+
+  function closeImportTaxes() {
+    setImportModalOpen(false)
+    setImportError(null)
+    setImportSummary(null)
   }
 
   function openEditTax(tax) {
@@ -198,6 +224,104 @@ export default function Taxes() {
     }
   }
 
+  function normalizeText(value) {
+    return (value ?? '').toString().trim()
+  }
+
+  function normalizeKey(value) {
+    return normalizeText(value).toUpperCase()
+  }
+
+  async function submitImportTaxes() {
+    setImportError(null)
+    setImportSummary(null)
+
+    if (!importOrgId) {
+      setImportError(t('taxes.importOrgRequired'))
+      return
+    }
+
+    try {
+      setImporting(true)
+
+      const statusResponse = await fiscalBillApi.getStatus(Number(importOrgId))
+      const taxCategoriesFromStatus = statusResponse?.currentTaxRates?.taxCategories || []
+
+      if (taxCategoriesFromStatus.length === 0) {
+        setImportSummary({ createdCategories: 0, createdTaxes: 0, skippedTaxes: 0 })
+        return
+      }
+
+      const [existingCategories, existingTaxes] = await Promise.all([
+        taxCategoryApi.list(),
+        taxApi.list(),
+      ])
+
+      const categoriesByCode = new Map(
+        existingCategories
+          .filter((category) => normalizeText(category.taxcategoryCode))
+          .map((category) => [normalizeKey(category.taxcategoryCode), category])
+      )
+      const existingTaxLabels = new Set(existingTaxes.map((tax) => normalizeKey(tax.label)))
+
+      let createdCategories = 0
+      let createdTaxes = 0
+      let skippedTaxes = 0
+
+      for (const statusCategory of taxCategoriesFromStatus) {
+        const categoryName = normalizeText(statusCategory?.name || statusCategory?.categoryName)
+        if (!categoryName) continue
+
+        const categoryCode = normalizeKey(categoryName).slice(0, 10)
+        let category = categoriesByCode.get(categoryCode)
+
+        if (!category) {
+          category = await taxCategoryApi.create({
+            name: categoryName,
+            taxcategoryCode: categoryCode,
+            isActive: true,
+          })
+          categoriesByCode.set(categoryCode, category)
+          createdCategories += 1
+        }
+
+        for (const statusTax of statusCategory?.taxRates || []) {
+          const label = normalizeText(statusTax?.label)
+          if (!label) continue
+
+          const normalizedLabel = normalizeKey(label)
+          if (existingTaxLabels.has(normalizedLabel)) {
+            skippedTaxes += 1
+            continue
+          }
+
+          const rate = Number(statusTax?.rate)
+          if (Number.isNaN(rate)) continue
+
+          await taxApi.create({
+            taxCategoryId: category.taxCategoryId,
+            label: normalizedLabel,
+            rate,
+            isActive: true,
+            efiscalTaxname: null,
+            efiscalAdvanceprefix: null,
+            efiscalAdvancename: null,
+          })
+          existingTaxLabels.add(normalizedLabel)
+          createdTaxes += 1
+        }
+      }
+
+      setImportSummary({ createdCategories, createdTaxes, skippedTaxes })
+      setSuccess(t('taxes.importCompleted', { createdCategories, createdTaxes, skippedTaxes }))
+      await loadAll()
+    } catch (err) {
+      setImportError(err?.response?.data?.message || err?.response?.data || t('taxes.importFailed'))
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <AppShell
       title={t('taxes.title')}
@@ -205,7 +329,16 @@ export default function Taxes() {
       actions={
         isSuperAdmin ? (
           activeTab === 'taxes'
-            ? <button className="primary-button" onClick={openAddTax}>{t('taxes.addTax')}</button>
+            ? (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="secondary-button" onClick={openImportTaxes} type="button">
+                  {t('taxes.importTaxes')}
+                </button>
+                <button className="primary-button" onClick={openAddTax} type="button">
+                  {t('taxes.addTax')}
+                </button>
+              </div>
+            )
             : <button className="primary-button" onClick={openAddCategory}>{t('taxes.addTaxCategory')}</button>
         ) : null
       }
@@ -441,6 +574,48 @@ export default function Taxes() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {importModalOpen && (
+        <div className="modal-overlay" onClick={closeImportTaxes}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{t('taxes.importTaxesTitle')}</h3>
+              <button className="modal-close" onClick={closeImportTaxes} aria-label={t('common.close')}>×</button>
+            </div>
+
+            <div style={{ padding: '20px' }}>
+              <div className="field">
+                <label>{t('taxes.importOrgLabel')} *</label>
+                <select value={importOrgId} onChange={(e) => setImportOrgId(e.target.value)}>
+                  <option value="">{t('taxes.selectImportOrg')}</option>
+                  {orgs.map((org) => (
+                    <option key={org.orgId} value={org.orgId}>{org.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <p className="muted" style={{ marginTop: 12 }}>
+                {t('taxes.importTaxesHint')}
+              </p>
+
+              {importSummary && (
+                <div className="success-banner" style={{ marginTop: 12 }}>
+                  {t('taxes.importSummary', importSummary)}
+                </div>
+              )}
+
+              {importError ? <p className="error-text" style={{ marginTop: 12 }}>{importError}</p> : null}
+            </div>
+
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={closeImportTaxes}>{t('common.cancel')}</button>
+              <button type="button" className="primary-button" disabled={importing} onClick={submitImportTaxes}>
+                {importing ? t('common.processing') : t('taxes.importTaxes')}
+              </button>
+            </div>
           </div>
         </div>
       )}

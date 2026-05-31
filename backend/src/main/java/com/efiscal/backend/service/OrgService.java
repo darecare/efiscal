@@ -9,10 +9,14 @@ import com.efiscal.backend.repository.OrgPayTypeRepository;
 import com.efiscal.backend.repository.OrgRepository;
 import com.efiscal.backend.repository.UserOrgAccessRepository;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +24,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class OrgService {
+
+    private static final Set<String> ALLOWED_SMTP_CONNECTION_SECURITY = Set.of("STARTTLS", "SSL_TLS");
 
     private final OrgRepository orgRepository;
     private final ClientRepository clientRepository;
@@ -81,6 +87,12 @@ public class OrgService {
         org.setCurrency(req.currency() != null ? req.currency() : "RSD");
         org.setActive(req.isActive() != null ? req.isActive() : true);
         org.setSearchshopproducts(req.isSearchshopproducts() != null ? req.isSearchshopproducts() : false);
+        org.setSmtpServer(normalizeOptional(req.smtpServer()));
+        org.setSmtpPort(req.smtpPort());
+        org.setEmailFrom(normalizeOptional(req.emailFrom()));
+        org.setSmtpUsername(normalizeOptional(req.smtpUsername()));
+        org.setSmtpPassword(normalizeOptional(req.smtpPassword()));
+        org.setSmtpConnectionSecurity(validateAndNormalizeSmtpConnectionSecurity(req.smtpConnectionSecurity()));
         return toDto(orgRepository.save(org));
     }
 
@@ -107,6 +119,14 @@ public class OrgService {
         if (req.currency() != null) org.setCurrency(req.currency());
         if (req.isActive() != null) org.setActive(req.isActive());
         if (req.isSearchshopproducts() != null) org.setSearchshopproducts(req.isSearchshopproducts());
+        if (req.smtpServer() != null) org.setSmtpServer(normalizeOptional(req.smtpServer()));
+        if (req.smtpPort() != null) org.setSmtpPort(req.smtpPort());
+        if (req.emailFrom() != null) org.setEmailFrom(normalizeOptional(req.emailFrom()));
+        if (req.smtpUsername() != null) org.setSmtpUsername(normalizeOptional(req.smtpUsername()));
+        if (req.smtpPassword() != null) org.setSmtpPassword(normalizeOptional(req.smtpPassword()));
+        if (req.smtpConnectionSecurity() != null) {
+            org.setSmtpConnectionSecurity(validateAndNormalizeSmtpConnectionSecurity(req.smtpConnectionSecurity()));
+        }
         return toDto(orgRepository.save(org));
     }
 
@@ -162,8 +182,36 @@ public class OrgService {
             o.getCurrency(),
             o.isActive(),
             o.isSearchshopproducts(),
+            o.getSmtpServer(),
+            o.getSmtpPort(),
+            o.getEmailFrom(),
+            o.getSmtpUsername(),
+            o.getSmtpConnectionSecurity(),
             o.getCreatedAt()
         );
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String validateAndNormalizeSmtpConnectionSecurity(String value) {
+        String normalized = normalizeOptional(value);
+        if (normalized == null) {
+            return null;
+        }
+        String upper = normalized.toUpperCase(Locale.ROOT);
+        if (!ALLOWED_SMTP_CONNECTION_SECURITY.contains(upper)) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "SMTP connection security must be STARTTLS or SSL_TLS"
+            );
+        }
+        return upper;
     }
 
     public record OrgDto(
@@ -176,6 +224,13 @@ public class OrgService {
         String currency,
         boolean isActive,
         boolean isSearchshopproducts,
+        String smtpServer,
+        @Min(value = 1, message = "SMTP port must be at least 1")
+        @Max(value = 65535, message = "SMTP port must be at most 65535")
+        Integer smtpPort,
+        String emailFrom,
+        String smtpUsername,
+        String smtpConnectionSecurity,
         OffsetDateTime createdAt
     ) {}
 
@@ -198,7 +253,26 @@ public class OrgService {
         String currency,
 
         Boolean isActive,
-        Boolean isSearchshopproducts
+        Boolean isSearchshopproducts,
+
+        @Size(max = 255, message = "SMTP server must not exceed 255 characters")
+        String smtpServer,
+
+        @Min(value = 1, message = "SMTP port must be at least 1")
+        @Max(value = 65535, message = "SMTP port must be at most 65535")
+        Integer smtpPort,
+
+        @Size(max = 255, message = "From email must not exceed 255 characters")
+        String emailFrom,
+
+        @Size(max = 255, message = "SMTP username must not exceed 255 characters")
+        String smtpUsername,
+
+        @Size(max = 255, message = "SMTP password must not exceed 255 characters")
+        String smtpPassword,
+
+        @Size(max = 20, message = "SMTP connection security must not exceed 20 characters")
+        String smtpConnectionSecurity
     ) {}
 
     public record UpdateOrgRequest(
@@ -217,6 +291,23 @@ public class OrgService {
         String currency,
 
         Boolean isActive,
-        Boolean isSearchshopproducts
+        Boolean isSearchshopproducts,
+
+        @Size(max = 255, message = "SMTP server must not exceed 255 characters")
+        String smtpServer,
+
+        Integer smtpPort,
+
+        @Size(max = 255, message = "From email must not exceed 255 characters")
+        String emailFrom,
+
+        @Size(max = 255, message = "SMTP username must not exceed 255 characters")
+        String smtpUsername,
+
+        @Size(max = 255, message = "SMTP password must not exceed 255 characters")
+        String smtpPassword,
+
+        @Size(max = 20, message = "SMTP connection security must not exceed 20 characters")
+        String smtpConnectionSecurity
     ) {}
 }

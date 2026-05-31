@@ -67,6 +67,13 @@ On Organization level is defined connection to mail server. From this mail addre
 | status         | VARCHAR(50)  | NOT NULL, DEFAULT 'ACTIVE' | ACTIVE, SETUP, SUSPENDED, INACTIVE |
 | currency       | VARCHAR(10)  | NOT NULL, DEFAULT 'RSD'  |                               |
 | is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
+| is_searchshopproducts | BOOLEAN | NOT NULL, DEFAULT FALSE | Search product data directly from shop |
+| smtp_server    | VARCHAR(255) | NULL                     | SMTP host/server name         |
+| smtp_port      | INTEGER      | NULL                     | SMTP port (`1..65535`)        |
+| email_from     | VARCHAR(255) | NULL                     | Sender email displayed to recipients |
+| smtp_username  | VARCHAR(255) | NULL                     | SMTP authentication username  |
+| smtp_password  | VARCHAR(255) | NULL                     | SMTP authentication password (sensitive) |
+| smtp_connection_security | VARCHAR(20) | NULL            | Allowed: `STARTTLS`, `SSL_TLS` |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | deleted_at     | TIMESTAMPTZ  | NULL                     | Soft delete                   |

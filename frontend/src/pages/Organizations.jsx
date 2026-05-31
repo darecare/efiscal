@@ -12,10 +12,17 @@ const emptyForm = {
   currency: 'RSD',
   isActive: true,
   isSearchshopproducts: false,
+  smtpServer: '',
+  smtpPort: '',
+  emailFrom: '',
+  smtpUsername: '',
+  smtpPassword: '',
+  smtpConnectionSecurity: 'STARTTLS',
 }
 const STATUS_OPTIONS = ['ACTIVE', 'SETUP', 'SUSPENDED', 'INACTIVE']
 const CURRENCY_OPTIONS = ['RSD', 'EUR', 'USD']
 const PAYMENT_TYPE_VALUES = [0, 1, 2, 3, 4, 5, 6]
+const CONNECTION_SECURITY_OPTIONS = ['STARTTLS', 'SSL_TLS']
 
 export default function Organizations() {
   const { t } = useTranslation()
@@ -85,6 +92,12 @@ export default function Organizations() {
       currency: o.currency,
       isActive: o.isActive,
       isSearchshopproducts: Boolean(o.isSearchshopproducts),
+      smtpServer: o.smtpServer || '',
+      smtpPort: o.smtpPort ?? '',
+      emailFrom: o.emailFrom || '',
+      smtpUsername: o.smtpUsername || '',
+      smtpPassword: '',
+      smtpConnectionSecurity: o.smtpConnectionSecurity || 'STARTTLS',
     })
     setFormError(null)
     setModalMode('edit')
@@ -134,6 +147,12 @@ export default function Organizations() {
         clientId: form.clientId ? Number(form.clientId) : null,
         name: form.name.trim(),
         taxId: form.taxId || null,
+        smtpServer: form.smtpServer?.trim() || null,
+        smtpPort: form.smtpPort === '' ? null : Number(form.smtpPort),
+        emailFrom: form.emailFrom?.trim() || null,
+        smtpUsername: form.smtpUsername?.trim() || null,
+        smtpPassword: form.smtpPassword || null,
+        smtpConnectionSecurity: form.smtpConnectionSecurity || null,
       }
       if (modalMode === 'add') {
         await orgsApi.create(payload)
@@ -252,6 +271,12 @@ export default function Organizations() {
                 >
                   {t('organizations.paymentTypes')}
                 </button>
+                <button
+                  className={`tab-button ${activeTab === 'email-settings' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('email-settings')}
+                >
+                  {t('organizations.emailSettings')}
+                </button>
               </div>
             )}
 
@@ -344,6 +369,66 @@ export default function Organizations() {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {activeTab === 'email-settings' && (
+                <div className="form-grid" style={{ padding: '20px' }}>
+                  <div className="field">
+                    <label>{t('organizations.smtpServer')}</label>
+                    <input
+                      value={form.smtpServer}
+                      onChange={(e) => handleChange('smtpServer', e.target.value)}
+                      placeholder={t('organizations.smtpServerPlaceholder')}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>{t('organizations.smtpPort')}</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="65535"
+                      value={form.smtpPort}
+                      onChange={(e) => handleChange('smtpPort', e.target.value)}
+                      placeholder={t('organizations.smtpPortPlaceholder')}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>{t('organizations.fromEmail')}</label>
+                    <input
+                      value={form.emailFrom}
+                      onChange={(e) => handleChange('emailFrom', e.target.value)}
+                      placeholder={t('organizations.fromEmailPlaceholder')}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>{t('organizations.smtpUsername')}</label>
+                    <input
+                      value={form.smtpUsername}
+                      onChange={(e) => handleChange('smtpUsername', e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>{t('organizations.smtpPassword')}</label>
+                    <input
+                      type="password"
+                      value={form.smtpPassword}
+                      onChange={(e) => handleChange('smtpPassword', e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>{t('organizations.connectionSecurity')}</label>
+                    <select
+                      value={form.smtpConnectionSecurity}
+                      onChange={(e) => handleChange('smtpConnectionSecurity', e.target.value)}
+                    >
+                      {CONNECTION_SECURITY_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {t(`organizations.connectionSecurityLabels.${option}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
 

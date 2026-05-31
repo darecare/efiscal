@@ -95,6 +95,13 @@ export const orgsApi = {
   },
 }
 
+export const appInfoApi = {
+  async get() {
+    const response = await api.get('/app-info')
+    return response.data
+  },
+}
+
 export const rolesApi = {
   async list(includeInactive = false) {
     const response = await api.get('/roles', { params: { includeInactive } })

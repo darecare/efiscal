@@ -12,6 +12,7 @@
 - Keep header in a separate reusable component file included on all main pages.
 - Header contains global options and additional quick-access menu.
 - Header menu is separate from sidebar navigation.
+- Header quick-access menu includes a compact About/help control rendered as a small `i` icon button that opens a localized About modal.
 
 ### 2.2 Footer
 - Keep footer in a separate reusable component file included on all main pages.
@@ -26,6 +27,7 @@
 - **Usage:** `useTranslation()` + `t('key')` in components; `i18next.t()` in non-React code (e.g. `AuthContext`). Use `count` for plurals and `{{var}}` for interpolation
 - **Plurals:** English uses `*_one` / `*_other` suffix keys (for example `common.counts.orders_one`). Serbian adds `*_few` for Slavic plural rules (2–4); define all three suffixes in `sr.json` when adding new counted strings
 - **Language switcher:** [`LanguageSwitcher`](frontend/src/components/AppShell.jsx) in the top bar — custom dropdown with `aria-expanded`, `role="listbox"`, and localized option labels (`common.languages.*`). Persists choice via detector `localStorage` key `efiscal_lang` (also honors browser language on first visit)
+- **About modal:** Header help menu exposes an About modal with manufacturer, serial number, and software version pulled from backend app info endpoint.
 - **RBAC labels:** Backend action codes stay stable API identifiers. Display names and tooltips come from locale maps keyed by `actionCode`: `roles.actionLabels`, `roles.permissionDescriptions`, and `roles.permissionModules` (see [`Roles.jsx`](frontend/src/pages/Roles.jsx)); use `defaultValue` from API metadata when a new action has no catalog entry yet
 - **Lint:** `npm run lint` in `frontend/` runs ESLint with `eslint-plugin-i18next` (`jsx-text-only` mode; also checks `title`, `placeholder`, `aria-label`, `alt`). Fix hardcoded user-visible strings before merge
 - **Serbian maintenance script:** [`frontend/scripts/build-sr-locale.mjs`](frontend/scripts/build-sr-locale.mjs) regenerates `sr.json` from `en.json` plus translation tables (run manually: `node frontend/scripts/build-sr-locale.mjs` after large English catalog changes; review output and hand-edit domain-specific strings as needed)
@@ -125,6 +127,15 @@
 		- User list interface must provide a delete button for each user.
 		- Clicking delete triggers a confirmation modal to perform a soft-delete (calling `DELETE /users/{userId}`).
 		- **Self-deletion Protection**: The UI must disable or hide the delete action for the currently logged-in user to prevent accidental self-account lockout.
+- Organizations page edit modal must provide three tabs for existing organizations:
+	- **Main** tab: general organization data (`clientId`, `name`, `taxId`, status/currency/active flags, product-search flag).
+	- **Payment Types** tab: allowed payment type mapping.
+	- **Email Settings** tab: SMTP server, SMTP port, from email, username, password, and connection security (`STARTTLS` or `SSL/TLS`).
+- Email settings form behavior:
+	- All email settings fields are optional.
+	- SMTP port input is numeric and constrained to valid SMTP range (`1..65535`).
+	- Connection security is selected from a fixed option list (`STARTTLS`, `SSL/TLS`).
+	- Password input is masked and initialized empty on edit; backend does not return stored SMTP password.
 - Role Definition page and action assignment actions are restricted to authorized admin roles.
 
 ## 5. Governance
