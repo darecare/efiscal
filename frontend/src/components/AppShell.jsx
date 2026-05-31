@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { hasAction, hasAnyAction } from '../utils/permissions'
+import { appInfoApi } from '../services/api'
 import i18n from '../i18n'
 
 function LanguageSwitcher() {
@@ -74,6 +75,55 @@ function LanguageSwitcher() {
   )
 }
 
+function HelpMenu({ onAbout }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onPointerDown = (e) => {
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false)
+    }
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  function openAbout() {
+    setOpen(false)
+    onAbout()
+  }
+
+  return (
+    <div className="help-menu" ref={rootRef}>
+      <button
+        type="button"
+        className="help-menu__trigger"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={t('about.menuLabel')}
+      >
+        i
+      </button>
+      {open && (
+        <div className="help-menu__menu" role="menu" aria-label={t('about.menuLabel')}>
+          <button type="button" className="help-menu__item" role="menuitem" onClick={openAbout}>
+            {t('about.title')}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const getNavItems = (user) => {
   const can = (action) => hasAction(user, action)
 
@@ -116,6 +166,29 @@ export default function AppShell({ title, subtitle, actions, children }) {
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const [aboutLoading, setAboutLoading] = useState(false)
+  const [aboutError, setAboutError] = useState(null)
+  const [aboutInfo, setAboutInfo] = useState(null)
+
+  async function openAbout() {
+    setAboutOpen(true)
+    setAboutLoading(true)
+    setAboutError(null)
+    setAboutInfo(null)
+    try {
+      setAboutInfo(await appInfoApi.get())
+    } catch {
+      setAboutError(t('about.loadFailed'))
+    } finally {
+      setAboutLoading(false)
+    }
+  }
+
+  function closeAbout() {
+    setAboutOpen(false)
+    setAboutError(null)
+  }
 
   const filteredNavItems = getNavItems(user)
     .filter((item) => item.show !== false)
@@ -152,6 +225,7 @@ export default function AppShell({ title, subtitle, actions, children }) {
         </div>
         <div className="topbar-actions">
           <LanguageSwitcher />
+          <HelpMenu onAbout={openAbout} />
           <span className="badge">{user?.roleName}</span>
           <button className="secondary-button" onClick={handleLogout}>{t('nav.logout')}</button>
         </div>
@@ -209,6 +283,38 @@ export default function AppShell({ title, subtitle, actions, children }) {
           {children}
         </main>
       </div>
+
+      {aboutOpen && (
+        <div className="modal-overlay" onClick={closeAbout}>
+          <div className="modal about-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{t('about.title')}</h3>
+              <button className="modal-close" onClick={closeAbout} aria-label={t('common.close')}>×</button>
+            </div>
+
+            {aboutLoading ? (
+              <p className="muted">{t('common.loadingDots')}</p>
+            ) : aboutError ? (
+              <p className="error-text">{aboutError}</p>
+            ) : (
+              <div className="about-grid">
+                <div className="about-row">
+                  <span>{t('about.manufacturer')}</span>
+                  <strong>{aboutInfo?.manufacturer || t('common.dash')}</strong>
+                </div>
+                <div className="about-row">
+                  <span>{t('about.serialNumber')}</span>
+                  <strong>{aboutInfo?.serialNumber || t('common.dash')}</strong>
+                </div>
+                <div className="about-row">
+                  <span>{t('about.softwareVersion')}</span>
+                  <strong>{aboutInfo?.softwareVersion || t('common.dash')}</strong>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

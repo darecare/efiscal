@@ -17,3 +17,8 @@ spring:
   flyway:
     enabled: true
     validate-on-migrate: false
+
+app:
+  manufacturer: ${APP_MANUFACTURER:eFiscal}
+  serial-number: ${APP_SERIAL_NUMBER:EFISCAL-VPS-001}
+  software-version: ${APP_SOFTWARE_VERSION:0.0.1-SNAPSHOT}

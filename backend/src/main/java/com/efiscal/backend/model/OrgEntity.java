@@ -36,6 +36,24 @@ public class OrgEntity {
     @Column(name = "is_searchshopproducts", nullable = false)
     private boolean isSearchshopproducts = false;
 
+    @Column(name = "smtp_server", length = 255)
+    private String smtpServer;
+
+    @Column(name = "smtp_port")
+    private Integer smtpPort;
+
+    @Column(name = "email_from", length = 255)
+    private String emailFrom;
+
+    @Column(name = "smtp_username", length = 255)
+    private String smtpUsername;
+
+    @Column(name = "smtp_password", length = 255)
+    private String smtpPassword;
+
+    @Column(name = "smtp_connection_security", length = 20)
+    private String smtpConnectionSecurity;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -63,6 +81,18 @@ public class OrgEntity {
     public void setActive(boolean active) { isActive = active; }
     public boolean isSearchshopproducts() { return isSearchshopproducts; }
     public void setSearchshopproducts(boolean searchshopproducts) { isSearchshopproducts = searchshopproducts; }
+    public String getSmtpServer() { return smtpServer; }
+    public void setSmtpServer(String smtpServer) { this.smtpServer = smtpServer; }
+    public Integer getSmtpPort() { return smtpPort; }
+    public void setSmtpPort(Integer smtpPort) { this.smtpPort = smtpPort; }
+    public String getEmailFrom() { return emailFrom; }
+    public void setEmailFrom(String emailFrom) { this.emailFrom = emailFrom; }
+    public String getSmtpUsername() { return smtpUsername; }
+    public void setSmtpUsername(String smtpUsername) { this.smtpUsername = smtpUsername; }
+    public String getSmtpPassword() { return smtpPassword; }
+    public void setSmtpPassword(String smtpPassword) { this.smtpPassword = smtpPassword; }
+    public String getSmtpConnectionSecurity() { return smtpConnectionSecurity; }
+    public void setSmtpConnectionSecurity(String smtpConnectionSecurity) { this.smtpConnectionSecurity = smtpConnectionSecurity; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public OffsetDateTime getDeletedAt() { return deletedAt; }
