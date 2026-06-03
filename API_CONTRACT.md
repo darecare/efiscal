@@ -50,7 +50,8 @@ Provider reference documentation:
     "subscriptionStatus": "ACTIVE",
     "subscriptionExpiresAt": "2026-11-23",
     "actions": ["ROLES_MANAGE", "USERS_MANAGE", "FISCAL_CREATE_BILL"],
-    "allowedOrgIds": [1002, 1003]
+    "allowedOrgIds": [1002, 1003],
+    "preferredLanguage": "sr"
   }
 }
 ```
@@ -289,11 +290,24 @@ Subscription behavior:
     "subscriptionStartAt": "2026-01-01T00:00:00Z",
     "subscriptionExpiresAt": "2026-12-31T23:59:59Z",
     "isActive": true,
-    "orgIds": [1002, 1003]
+    "orgIds": [1002, 1003],
+    "preferredLanguage": "sr"
   }
 ]
 ```
 - Errors: `401`, `403`, `500`
+
+### PATCH /users/me/language
+- Description: Update the authenticated user's preferred UI language (self-service; no `USERS_MANAGE` required).
+- Request:
+```json
+{
+  "preferredLanguage": "sr"
+}
+```
+- Supported values: `en`, `sr`
+- 200 Response: No content
+- Errors: `400` (unsupported language), `401`, `404`, `500`
 
 ### GET /users/{userId}
 - Description: Get detailed user profile by user ID.
@@ -313,9 +327,11 @@ Subscription behavior:
   "subscriptionStatus": "ACTIVE",
   "subscriptionStartAt": "2026-01-01T00:00:00Z",
   "subscriptionExpiresAt": "2026-12-31T23:59:59Z",
-  "orgIds": [1002, 1003]
+  "orgIds": [1002, 1003],
+  "preferredLanguage": "sr"
 }
 ```
+- `preferredLanguage` is optional; when omitted or null, the user has no stored preference (browser/local default applies until they choose a language in the UI).
 - 201 Response: Created user object matching the shape above.
 - Errors: `400`, `401`, `403`, `409` (email in use), `500`
 
@@ -332,7 +348,8 @@ Subscription behavior:
   "subscriptionExpiresAt": "2026-12-31T23:59:59Z",
   "isActive": true,
   "newPassword": "NewPassword123!",
-  "orgIds": [1002, 1003]
+  "orgIds": [1002, 1003],
+  "preferredLanguage": "en"
 }
 ```
 - 200 Response: Updated user object.

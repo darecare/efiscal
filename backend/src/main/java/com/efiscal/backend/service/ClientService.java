@@ -39,6 +39,7 @@ public class ClientService {
         client.setStatus(req.status() != null ? req.status() : "ACTIVE");
         client.setCurrency(req.currency() != null ? req.currency() : "RSD");
         client.setActive(req.isActive() != null ? req.isActive() : true);
+        client.setPreferredLanguage(normalizePreferredLanguage(req.preferredLanguage()));
         return toDto(clientRepository.save(client));
     }
 
@@ -51,7 +52,15 @@ public class ClientService {
         if (req.status() != null) client.setStatus(req.status());
         if (req.currency() != null) client.setCurrency(req.currency());
         if (req.isActive() != null) client.setActive(req.isActive());
+        client.setPreferredLanguage(normalizePreferredLanguage(req.preferredLanguage()));
         return toDto(clientRepository.save(client));
+    }
+
+    private static String normalizePreferredLanguage(String preferredLanguage) {
+        if (preferredLanguage == null || preferredLanguage.isBlank()) {
+            return null;
+        }
+        return preferredLanguage.trim();
     }
 
     private ClientDto toDto(ClientEntity c) {
@@ -61,7 +70,8 @@ public class ClientService {
             c.getStatus(),
             c.getCurrency(),
             c.isActive(),
-            c.getCreatedAt()
+            c.getCreatedAt(),
+            c.getPreferredLanguage()
         );
     }
 
@@ -71,13 +81,15 @@ public class ClientService {
         String status,
         String currency,
         boolean isActive,
-        OffsetDateTime createdAt
+        OffsetDateTime createdAt,
+        String preferredLanguage
     ) {}
 
     public record ClientRequest(
         String name,
         String status,
         String currency,
-        Boolean isActive
+        Boolean isActive,
+        String preferredLanguage
     ) {}
 }

@@ -4,7 +4,8 @@ import AppShell from '../components/AppShell'
 import { clientsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
-const emptyForm = { name: '', status: 'ACTIVE', currency: 'RSD', isActive: true }
+const emptyForm = { name: '', status: 'ACTIVE', currency: 'RSD', isActive: true, preferredLanguage: '' }
+const LANGUAGE_OPTIONS = ['', 'en', 'sr']
 const STATUS_OPTIONS = ['ACTIVE', 'SETUP', 'SUSPENDED', 'INACTIVE']
 const CURRENCY_OPTIONS = ['RSD', 'EUR', 'USD']
 
@@ -57,7 +58,13 @@ export default function Clients() {
   }
 
   function openEditModal(c) {
-    setForm({ name: c.name, status: c.status, currency: c.currency, isActive: c.isActive })
+    setForm({
+      name: c.name,
+      status: c.status,
+      currency: c.currency,
+      isActive: c.isActive,
+      preferredLanguage: c.preferredLanguage || '',
+    })
     setFormError(null)
     setModalMode('edit')
     setEditClientId(c.clientId)
@@ -83,10 +90,18 @@ export default function Clients() {
     try {
       setSaving(true)
       if (modalMode === 'add') {
-        await clientsApi.create({ ...form, name: form.name.trim() })
+        await clientsApi.create({
+          ...form,
+          name: form.name.trim(),
+          preferredLanguage: form.preferredLanguage || null,
+        })
         setSuccessMsg(t('clients.createdSuccess'))
       } else {
-        await clientsApi.update(editClientId, { ...form, name: form.name.trim() })
+        await clientsApi.update(editClientId, {
+          ...form,
+          name: form.name.trim(),
+          preferredLanguage: form.preferredLanguage || null,
+        })
         setSuccessMsg(t('clients.updatedSuccess'))
       }
       closeModal()
@@ -182,6 +197,21 @@ export default function Clients() {
                   <select value={form.status} onChange={(e) => handleChange('status', e.target.value)}>
                     {STATUS_OPTIONS.map((s) => (
                       <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>{t('clients.fields.preferredLanguage')}</label>
+                  <select
+                    value={form.preferredLanguage}
+                    onChange={(e) => handleChange('preferredLanguage', e.target.value)}
+                  >
+                    {LANGUAGE_OPTIONS.map((lng) => (
+                      <option key={lng || 'none'} value={lng}>
+                        {lng
+                          ? t(`common.languages.${lng}`, { defaultValue: lng })
+                          : t('common.noPreference')}
+                      </option>
                     ))}
                   </select>
                 </div>

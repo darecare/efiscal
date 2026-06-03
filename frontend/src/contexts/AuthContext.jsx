@@ -19,7 +19,12 @@ export function AuthProvider({ children }) {
     }
     authApi
       .me()
-      .then(setUser)
+      .then((user) => {
+        setUser(user)
+        if (user?.preferredLanguage) {
+          i18n.changeLanguage(user.preferredLanguage)
+        }
+      })
       .catch(() => {
         localStorage.removeItem('token')
         setUser(null)
@@ -53,6 +58,9 @@ export function AuthProvider({ children }) {
       const result = await authApi.login(email, password)
       localStorage.setItem('token', result.accessToken)
       setUser(result.user)
+      if (result.user?.preferredLanguage) {
+        i18n.changeLanguage(result.user.preferredLanguage)
+      }
       return true
     } catch (loginError) {
       setError(loginError.response?.data?.message || i18n.t('auth.loginFailedFallback'))

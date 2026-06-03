@@ -5,12 +5,14 @@ import { usersApi, rolesApi, clientsApi, orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const SUBSCRIPTION_STATUSES = ['ACTIVE', 'EXPIRED', 'SUSPENDED']
+const LANGUAGE_OPTIONS = ['', 'en', 'sr']
 
 const emptyForm = {
   email: '',
   fullName: '',
   roleId: '',
   clientId: '',
+  preferredLanguage: '',
   subscriptionStatus: 'ACTIVE',
   subscriptionStartAt: '',
   subscriptionExpiresAt: '',
@@ -88,10 +90,26 @@ export default function Users() {
     }
   }
 
-  function openAddModal() {
+  async function openAddModal() {
+    const clientId = isSuperAdmin ? '' : (currentUser?.clientId || '')
+    let preferredLanguage = ''
+    if (clientId) {
+      if (isSuperAdmin) {
+        const client = clients.find((c) => String(c.clientId) === String(clientId))
+        preferredLanguage = client?.preferredLanguage || ''
+      } else {
+        try {
+          const client = await clientsApi.get(clientId)
+          preferredLanguage = client.preferredLanguage || ''
+        } catch {
+          preferredLanguage = ''
+        }
+      }
+    }
     setForm({
       ...emptyForm,
-      clientId: isSuperAdmin ? '' : (currentUser?.clientId || ''),
+      clientId,
+      preferredLanguage,
     })
     setFormError(null)
     setModalMode('add')
@@ -111,6 +129,7 @@ export default function Users() {
       isActive: u.isActive,
       newPassword: '',
       orgIds: u.orgIds || [],
+      preferredLanguage: u.preferredLanguage || '',
     })
     setFormError(null)
     setModalMode('edit')
@@ -125,6 +144,15 @@ export default function Users() {
 
   function handleChange(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function handleClientChange(clientId) {
+    const client = clients.find((c) => String(c.clientId) === String(clientId))
+    setForm((prev) => ({
+      ...prev,
+      clientId,
+      preferredLanguage: client?.preferredLanguage || '',
+    }))
   }
 
   async function handleSubmit(e) {
@@ -155,6 +183,7 @@ export default function Users() {
           subscriptionStartAt: form.subscriptionStartAt ? new Date(form.subscriptionStartAt).toISOString() : null,
           subscriptionExpiresAt: form.subscriptionExpiresAt ? new Date(form.subscriptionExpiresAt).toISOString() : null,
           orgIds: form.orgIds,
+          preferredLanguage: form.preferredLanguage || null,
         })
         setSuccessMsg(t('users.createdSuccess'))
       } else {
@@ -168,6 +197,7 @@ export default function Users() {
           isActive: form.isActive,
           newPassword: form.newPassword || null,
           orgIds: form.orgIds,
+          preferredLanguage: form.preferredLanguage || null,
         })
         setSuccessMsg(t('users.updatedSuccess'))
       }
@@ -350,7 +380,7 @@ export default function Users() {
                   <label>{t('common.client')}</label>
                   <select
                     value={form.clientId}
-                    onChange={(e) => handleChange('clientId', e.target.value)}
+                    onChange={(e) => (isSuperAdmin ? handleClientChange(e.target.value) : handleChange('clientId', e.target.value))}
                     disabled={!isSuperAdmin}
                   >
                     {isSuperAdmin ? (
@@ -394,6 +424,21 @@ export default function Users() {
                   ) : (
                     <p className="muted" style={{ fontSize: '0.85rem', marginTop: '4px' }}>{t('users.noOrgsForClient')}</p>
                   )}
+                </div>
+                <div className="field">
+                  <label>{t('users.fields.preferredLanguage')}</label>
+                  <select
+                    value={form.preferredLanguage}
+                    onChange={(e) => handleChange('preferredLanguage', e.target.value)}
+                  >
+                    {LANGUAGE_OPTIONS.map((lng) => (
+                      <option key={lng || 'none'} value={lng}>
+                        {lng
+                          ? t(`common.languages.${lng}`, { defaultValue: lng })
+                          : t('common.noPreference')}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="field">
                   <label>{t('users.subscriptionStatus')}</label>

@@ -29,6 +29,8 @@ Represents authenticated users of the eFiscal application.
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | deleted_at     | TIMESTAMPTZ  | NULL                     | Soft delete                   |
+| preferred_language | VARCHAR(10) | NULL                  | UI locale: `en`, `sr`, or NULL (browser default) |
+| full_name      | VARCHAR(255) | NOT NULL                 | Display name                  |
 
 Rules:
 - Bootstrap SuperAdmin may have NULL subscription dates and is not blocked by expiration checks.
@@ -51,6 +53,7 @@ Table name: client
 | created_at | TIMESTAMPTZ | NOT NULL                       |                          |
 | updated_at | TIMESTAMPTZ | NOT NULL                       |                          |
 | deleted_at | TIMESTAMPTZ | NULL                           | Soft delete              |
+| preferred_language | VARCHAR(10) | NULL                    | Default UI locale for new users under this client (`en`, `sr`, or NULL) |
 
 
 ### 2.3 organizations
