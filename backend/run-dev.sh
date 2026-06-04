@@ -45,5 +45,9 @@ if command -v ss >/dev/null 2>&1; then
   fi
 fi
 
+# Maven copies resources into target/ but does not delete removed/renamed files.
+# Flyway reads from target/classes/db/migration, so stale SQL causes version conflicts.
+rm -rf target/classes/db/migration
+
 echo "Starting backend on port ${DEV_PORT} (Ctrl+C to stop)..."
 exec mvn spring-boot:run -Dspring-boot.run.profiles=dev "$@"
