@@ -35,6 +35,7 @@
     "remove": "Ukloni",
     "error": "Greška",
     "language": "Jezik",
+    "noPreference": "Bez podešavanja (koristi sistemski/jezik pregledača)",
     "selectOrgPlaceholder": "— Izaberite organizaciju —",
     "selectClientPlaceholder": "— Izaberite klijenta —",
     "selectRolePlaceholder": "— Izaberite ulogu —",
@@ -91,7 +92,7 @@
   },
   "nav": {
     "brand": "eFiscal",
-    "logout": "Odjava",
+    "logout": "Odjavite se",
     "help": "Pomoć",
     "orders": "Porudžbine",
     "fiscalBills": "Fiskalni računi",
@@ -136,7 +137,8 @@
     "statusLabel": "Status",
     "clientLabel": "Klijent",
     "expiresLabel": "Ističe",
-    "noExpiry": "Bez isteka"
+    "noExpiry": "Bez isteka",
+    "preferredLanguageLabel": "Željeni jezik"
   },
   "clients": {
     "title": "Klijenti",
@@ -149,7 +151,10 @@
     "addModalTitle": "Dodaj klijenta",
     "editModalTitle": "Izmeni klijenta",
     "nameLabel": "Naziv",
-    "createClient": "Kreiraj klijenta"
+    "createClient": "Kreiraj klijenta",
+    "fields": {
+      "preferredLanguage": "Željeni jezik"
+    }
   },
   "organizations": {
     "title": "Organizacije",
@@ -224,7 +229,10 @@
     "deleteTitle": "Obriši korisnika: {{name}}",
     "deleteConfirm": "Da li ste sigurni da želite da obrišete <strong>{{name}}</strong> ({{email}})? Nalog će biti deaktiviran i ova radnja se ne može poništiti sa ovog ekrana.",
     "cannotDeleteSelfTitle": "Ne možete obrisati sopstveni nalog",
-    "myClient": "Moj klijent"
+    "myClient": "Moj klijent",
+    "fields": {
+      "preferredLanguage": "Željeni jezik"
+    }
   },
   "roles": {
     "title": "Uloge i dozvole",

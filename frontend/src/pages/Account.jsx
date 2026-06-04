@@ -16,6 +16,12 @@ export default function Account() {
             <p><strong>{t('account.nameLabel')}:</strong> {user?.fullName}</p>
             <p><strong>{t('account.emailLabel')}:</strong> {user?.email}</p>
             <p><strong>{t('account.roleLabel')}:</strong> {user?.roleName}</p>
+            <p>
+              <strong>{t('account.preferredLanguageLabel')}:</strong>{' '}
+              {user?.preferredLanguage
+                ? t(`common.languages.${user.preferredLanguage}`, { defaultValue: user.preferredLanguage })
+                : t('common.noPreference')}
+            </p>
           </div>
           <div>
             <h3>{t('account.subscription')}</h3>

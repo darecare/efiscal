@@ -125,7 +125,8 @@ public class DemoDataService {
                 subscriptionStatus,
                 subscriptionExpiresAt,
                 actions,
-                allowedOrgIds);
+                allowedOrgIds,
+                user.getPreferredLanguage());
             String token = UUID.randomUUID().toString();
             sessionsByToken.put(token, authenticatedUser);
             return new LoginResult(token, authenticatedUser);
@@ -153,7 +154,8 @@ public class DemoDataService {
             account.subscriptionStatus(),
             account.subscriptionExpiresAt(),
             actions,
-            allowedOrgIds);
+            allowedOrgIds,
+            null);
         String token = UUID.randomUUID().toString();
         sessionsByToken.put(token, authenticatedUser);
         return new LoginResult(token, authenticatedUser);
@@ -202,7 +204,8 @@ public class DemoDataService {
                 subscriptionStatus,
                 subscriptionExpiresAt,
                 actions,
-                allowedOrgIds
+                allowedOrgIds,
+                dbUser.getPreferredLanguage()
             );
             sessionsByToken.put(token, updatedUser);
             return updatedUser;
@@ -233,7 +236,8 @@ public class DemoDataService {
                     account.subscriptionStatus(),
                     account.subscriptionExpiresAt(),
                     actions,
-                    allowedOrgIds);
+                    allowedOrgIds,
+                    null);
             })
             .toList();
     }
@@ -364,7 +368,8 @@ public class DemoDataService {
         String subscriptionStatus,
         String subscriptionExpiresAt,
         List<String> actions,
-        List<Long> allowedOrgIds) {
+        List<Long> allowedOrgIds,
+        String preferredLanguage) {
 
         public List<SimpleGrantedAuthority> authorities() {
             List<SimpleGrantedAuthority> auths = new java.util.ArrayList<>();

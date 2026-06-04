@@ -3,11 +3,12 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { hasAction, hasAnyAction } from '../utils/permissions'
-import { appInfoApi } from '../services/api'
+import { appInfoApi, usersApi } from '../services/api'
 import i18n from '../i18n'
 
 function LanguageSwitcher() {
   const { t } = useTranslation()
+  const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const rootRef = useRef(null)
 
@@ -32,6 +33,9 @@ function LanguageSwitcher() {
 
   function selectLanguage(lng) {
     i18n.changeLanguage(lng)
+    if (user) {
+      usersApi.updateMyLanguage(lng).catch(() => {})
+    }
     setOpen(false)
   }
 

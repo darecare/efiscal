@@ -35,6 +35,7 @@
     "remove": "Remove",
     "error": "Error",
     "language": "Language",
+    "noPreference": "No preference (use system/browser default)",
     "selectOrgPlaceholder": "— Select organization —",
     "selectClientPlaceholder": "— Select client —",
     "selectRolePlaceholder": "— Select role —",
@@ -127,7 +128,8 @@
     "statusLabel": "Status",
     "clientLabel": "Client",
     "expiresLabel": "Expires",
-    "noExpiry": "No expiry"
+    "noExpiry": "No expiry",
+    "preferredLanguageLabel": "Preferred Language"
   },
   "clients": {
     "title": "Clients",
@@ -140,7 +142,10 @@
     "addModalTitle": "Add Client",
     "editModalTitle": "Edit Client",
     "nameLabel": "Name",
-    "createClient": "Create Client"
+    "createClient": "Create Client",
+    "fields": {
+      "preferredLanguage": "Preferred Language"
+    }
   },
   "organizations": {
     "title": "Organizations",
@@ -215,7 +220,10 @@
     "deleteTitle": "Delete User: {{name}}",
     "deleteConfirm": "Are you sure you want to delete <strong>{{name}}</strong> ({{email}})? This will deactivate the account and cannot be undone from this screen.",
     "cannotDeleteSelfTitle": "Cannot delete your own account",
-    "myClient": "My Client"
+    "myClient": "My Client",
+    "fields": {
+      "preferredLanguage": "Preferred Language"
+    }
   },
   "roles": {
     "title": "Roles & Permissions",

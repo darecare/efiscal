@@ -43,6 +43,10 @@ export const usersApi = {
   async remove(userId) {
     await api.delete(`/users/${userId}`)
   },
+  async updateMyLanguage(preferredLanguage) {
+    const response = await api.patch('/users/me/language', { preferredLanguage })
+    return response.data
+  },
 }
 
 export const clientsOrgsApi = {
@@ -55,6 +59,10 @@ export const clientsOrgsApi = {
 export const clientsApi = {
   async list() {
     const response = await api.get('/clients')
+    return response.data
+  },
+  async get(clientId) {
+    const response = await api.get(`/clients/${clientId}`)
     return response.data
   },
   async create(payload) {

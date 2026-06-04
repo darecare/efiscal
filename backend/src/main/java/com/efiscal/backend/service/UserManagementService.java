@@ -17,6 +17,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class UserManagementService {
+
+    private static final Set<String> SUPPORTED_LANGUAGES = Set.of("en", "sr");
 
     private final AppUserRepository userRepository;
     private final ClientRepository clientRepository;
@@ -98,6 +101,7 @@ public class UserManagementService {
         user.setSubscriptionStatus(req.subscriptionStatus() != null ? req.subscriptionStatus() : "ACTIVE");
         user.setSubscriptionStartAt(req.subscriptionStartAt());
         user.setSubscriptionExpiresAt(req.subscriptionExpiresAt());
+        user.setPreferredLanguage(normalizePreferredLanguage(req.preferredLanguage()));
         user.setActive(true);
         AppUserEntity savedUser = userRepository.save(user);
 
@@ -140,6 +144,7 @@ public class UserManagementService {
         if (req.newPassword() != null && !req.newPassword().isBlank()) {
             user.setPasswordHash(passwordEncoder.encode(req.newPassword()));
         }
+        user.setPreferredLanguage(normalizePreferredLanguage(req.preferredLanguage()));
 
         Long targetClientId = user.getClient().getClientId();
         if (req.clientId() != null) {
@@ -172,6 +177,21 @@ public class UserManagementService {
     }
 
     @Transactional
+    public void updateMyPreferredLanguage(Long userId, String preferredLanguage) {
+        String normalized = normalizePreferredLanguage(preferredLanguage);
+        if (normalized != null && !SUPPORTED_LANGUAGES.contains(normalized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported language. Supported: en, sr");
+        }
+        AppUserEntity user = userRepository.findById(userId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        if (!user.isActive() || user.getDeletedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
+        }
+        user.setPreferredLanguage(normalized);
+        userRepository.save(user);
+    }
+
+    @Transactional
     public void deleteUser(Long userId, Long callerClientId, boolean isSuperAdmin, String callerUserId) {
         AppUserEntity user = userRepository.findById(userId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
@@ -187,6 +207,13 @@ public class UserManagementService {
         user.setDeletedAt(OffsetDateTime.now());
         userRepository.save(user);
         userOrgAccessRepository.deleteByUserId(user.getUserId());
+    }
+
+    private static String normalizePreferredLanguage(String preferredLanguage) {
+        if (preferredLanguage == null || preferredLanguage.isBlank()) {
+            return null;
+        }
+        return preferredLanguage.trim();
     }
 
     private void validateRoleScope(RoleEntity role, Long targetClientId, boolean isSuperAdmin) {
@@ -215,7 +242,8 @@ public class UserManagementService {
             u.getSubscriptionStartAt(),
             u.getSubscriptionExpiresAt(),
             u.isActive(),
-            orgIds
+            orgIds,
+            u.getPreferredLanguage()
         );
     }
 
@@ -232,7 +260,8 @@ public class UserManagementService {
         OffsetDateTime subscriptionStartAt,
         OffsetDateTime subscriptionExpiresAt,
         boolean isActive,
-        List<Long> orgIds
+        List<Long> orgIds,
+        String preferredLanguage
     ) {}
 
     public record CreateUserRequest(
@@ -260,7 +289,8 @@ public class UserManagementService {
 
         OffsetDateTime subscriptionStartAt,
         OffsetDateTime subscriptionExpiresAt,
-        List<Long> orgIds
+        List<Long> orgIds,
+        String preferredLanguage
     ) {}
 
     public record UpdateUserRequest(
@@ -279,6 +309,13 @@ public class UserManagementService {
 
         @Size(max = 100, message = "Password must not exceed 100 characters")
         String newPassword,
-        List<Long> orgIds
+        List<Long> orgIds,
+        String preferredLanguage
+    ) {}
+
+    public record UpdateMyLanguageRequest(
+        @NotBlank(message = "Preferred language is required")
+        @Size(max = 10, message = "Preferred language must not exceed 10 characters")
+        String preferredLanguage
     ) {}
 }

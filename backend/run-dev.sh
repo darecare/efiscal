@@ -33,4 +33,21 @@ java -version
 javac -version
 
 cd "$(dirname "$0")"
+
+DEV_PORT="${SERVER_PORT:-8080}"
+if command -v ss >/dev/null 2>&1; then
+  if ss -tlnH "sport = :${DEV_PORT}" 2>/dev/null | grep -q .; then
+    echo "ERROR: Port ${DEV_PORT} is already in use. Another backend instance is probably still running."
+    echo "Find it:  ss -tlnp | grep :${DEV_PORT}"
+    echo "Stop it:  kill \$(ss -tlnp | grep :${DEV_PORT} | sed -n 's/.*pid=\\([0-9]*\\).*/\\1/p' | head -1)"
+    echo "Or set a different port: SERVER_PORT=8081 ./run-dev.sh"
+    exit 1
+  fi
+fi
+
+# Maven copies resources into target/ but does not delete removed/renamed files.
+# Flyway reads from target/classes/db/migration, so stale SQL causes version conflicts.
+rm -rf target/classes/db/migration
+
+echo "Starting backend on port ${DEV_PORT} (Ctrl+C to stop)..."
 exec mvn spring-boot:run -Dspring-boot.run.profiles=dev "$@"

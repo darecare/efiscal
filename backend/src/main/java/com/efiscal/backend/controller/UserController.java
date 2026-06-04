@@ -3,6 +3,7 @@ package com.efiscal.backend.controller;
 import com.efiscal.backend.security.AuthorizationService;
 import com.efiscal.backend.service.UserManagementService;
 import com.efiscal.backend.service.UserManagementService.CreateUserRequest;
+import com.efiscal.backend.service.UserManagementService.UpdateMyLanguageRequest;
 import com.efiscal.backend.service.UserManagementService.UpdateUserRequest;
 import com.efiscal.backend.service.UserManagementService.UserDto;
 import jakarta.validation.Valid;
@@ -30,6 +31,13 @@ public class UserController {
             authorizationService.getClientId(),
             authorizationService.isSuperAdmin()
         );
+    }
+
+    @PatchMapping("/me/language")
+    public ResponseEntity<Void> updateMyLanguage(@Valid @RequestBody UpdateMyLanguageRequest req) {
+        Long userId = Long.parseLong(authorizationService.requireCurrentUser().id());
+        userManagementService.updateMyPreferredLanguage(userId, req.preferredLanguage());
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/{userId}")
