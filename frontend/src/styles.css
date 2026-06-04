@@ -523,6 +523,84 @@ select.form-input {
   gap: 0.75rem;
 }
 
+.product-name-combobox {
+  position: relative;
+}
+
+.product-name-combobox .fiscal-input {
+  width: 100%;
+}
+
+.product-suggest-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.product-suggest-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.product-suggest-option:hover,
+.product-suggest-option:focus {
+  background: rgba(59, 130, 246, 0.08);
+  outline: none;
+}
+
+.product-suggest-name {
+  font-weight: 500;
+}
+
+.product-suggest-meta {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.product-suggest-item {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.product-suggest-item--muted {
+  color: #64748b;
+}
+
+.product-suggest-item--error {
+  color: #b91c1c;
+}
+
+.fiscal-price-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.fiscal-price-hint--warn {
+  color: #b45309;
+}
+
 .fiscal-tab-actions,
 .fiscal-submit-row {
   margin-top: 0.75rem;
@@ -1261,4 +1339,13 @@ select.form-input {
   border-radius: 4px;
   font-weight: 500;
   white-space: nowrap;
+}
+.sync-progress-card progress.sync-progress {
+  width: 100%;
+  height: 0.65rem;
+  accent-color: #3b82f6;
+}
+
+.sync-progress-card progress.sync-progress:indeterminate {
+  width: 100%;
 }

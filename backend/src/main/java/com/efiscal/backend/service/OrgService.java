@@ -86,7 +86,6 @@ public class OrgService {
         org.setStatus(req.status() != null ? req.status() : "ACTIVE");
         org.setCurrency(req.currency() != null ? req.currency() : "RSD");
         org.setActive(req.isActive() != null ? req.isActive() : true);
-        org.setSearchshopproducts(req.isSearchshopproducts() != null ? req.isSearchshopproducts() : false);
         org.setSmtpServer(normalizeOptional(req.smtpServer()));
         org.setSmtpPort(req.smtpPort());
         org.setEmailFrom(normalizeOptional(req.emailFrom()));
@@ -118,7 +117,6 @@ public class OrgService {
         if (req.status() != null) org.setStatus(req.status());
         if (req.currency() != null) org.setCurrency(req.currency());
         if (req.isActive() != null) org.setActive(req.isActive());
-        if (req.isSearchshopproducts() != null) org.setSearchshopproducts(req.isSearchshopproducts());
         if (req.smtpServer() != null) org.setSmtpServer(normalizeOptional(req.smtpServer()));
         if (req.smtpPort() != null) org.setSmtpPort(req.smtpPort());
         if (req.emailFrom() != null) org.setEmailFrom(normalizeOptional(req.emailFrom()));
@@ -181,7 +179,6 @@ public class OrgService {
             o.getStatus(),
             o.getCurrency(),
             o.isActive(),
-            o.isSearchshopproducts(),
             o.getSmtpServer(),
             o.getSmtpPort(),
             o.getEmailFrom(),
@@ -223,7 +220,6 @@ public class OrgService {
         String status,
         String currency,
         boolean isActive,
-        boolean isSearchshopproducts,
         String smtpServer,
         @Min(value = 1, message = "SMTP port must be at least 1")
         @Max(value = 65535, message = "SMTP port must be at most 65535")
@@ -253,7 +249,6 @@ public class OrgService {
         String currency,
 
         Boolean isActive,
-        Boolean isSearchshopproducts,
 
         @Size(max = 255, message = "SMTP server must not exceed 255 characters")
         String smtpServer,
@@ -291,7 +286,6 @@ public class OrgService {
         String currency,
 
         Boolean isActive,
-        Boolean isSearchshopproducts,
 
         @Size(max = 255, message = "SMTP server must not exceed 255 characters")
         String smtpServer,

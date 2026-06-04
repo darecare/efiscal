@@ -179,6 +179,19 @@ Reference-only guidance:
   - add provider-specific adapter/client code only for non-standard protocols or flows.
 - Target outcome for scale (for example 50 providers): most new providers should be onboarded using Mode A or Mode B.
 
+### 6.6 MerchantPro Products Integration (Implemented)
+- Service: `MerchantProProductService` — resolves `MP` apiconn + `GET_PRODUCTS` apitemplate, executes GET with Basic auth.
+- Query params: `fields=id,name,sku,ean,price_gross`, `start`, `limit`, optional `sku_equals`, `ean_equals`.
+- Service: `ProductService` — local CRUD; catalog search via `q` (`ProductRepository.searchByTerm`: name LIKE OR exact SKU/EAN; active, non-deleted only); legacy `name`/`sku`/`ean` AND filters when `q` omitted; `validateRequest` enforces non-blank name; paginated sync with per-page `REQUIRES_NEW` (`upsertPage`); SSE progress (`syncFromShopStream`); live lookup SKU-first then EAN.
+- Upsert match order: `mp_product_id` → SKU (case-insensitive) → EAN; clears `deleted_at` on match.
+- Controller: `ProductController` at `/api/v1/products`.
+  - `GET /products/sync` — `SseEmitter`, 5 min timeout, events `{ synced, total, done }`
+  - `GET /products/search` — optional `q` or legacy filters
+  - `GET /products/lookup` — live MerchantPro price for selected SKU/EAN
+- Required apitemplate: `operation_key = GET_PRODUCTS`, `endpoint_path` relative to MerchantPro base (e.g. `api/v2/products`).
+- Dev seeding: `DataInitializerService` seeds demo MP connection + `FETCH_ORDERS` and `GET_PRODUCTS` templates for Acme orgs. Production orgs still configure real credentials via API Config UI.
+- Removed: `org.is_searchshopproducts` (dropped in `V33`); product search is governed by RBAC actions only.
+
 ## 7. Security and Access Control
 - JWT authentication via Spring Security.
 - Role-based authorization for endpoint access and actions.
@@ -217,6 +230,7 @@ The system defines the following canonical action codes (inserted during migrati
 | `FISCAL` | `FISCAL_RETRY_BILL` | Retry Fiscal Bill | Allows retrying failed fiscal bills |
 | `FISCAL` | `FISCAL_VIEW_BILLS` | View Fiscal Bills | Allows listing and retrieving details of fiscal bills |
 | `MERCHANTPRO` | `MERCHANTPRO_FETCH_ORDERS` | Fetch Orders | Allows syncing orders from MerchantPro API |
+| `FISCAL` | `FISCAL_MANAGE_PRODUCTS` | Manage Products | Allows product CRUD and shop sync |
 | `SYSTEM` | `USERS_MANAGE` | Manage Users | Allows CRUD operations on user accounts |
 | `SYSTEM` | `ROLES_MANAGE` | Manage Roles | Allows CRUD operations on custom client roles |
 | `SYSTEM` | `ORGS_MANAGE` | Manage Organizations | Allows managing organizations, API connections, and templates |

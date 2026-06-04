@@ -33,9 +33,6 @@ public class OrgEntity {
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
-    @Column(name = "is_searchshopproducts", nullable = false)
-    private boolean isSearchshopproducts = false;
-
     @Column(name = "smtp_server", length = 255)
     private String smtpServer;
 
@@ -79,8 +76,6 @@ public class OrgEntity {
     public void setCurrency(String currency) { this.currency = currency; }
     public boolean isActive() { return isActive; }
     public void setActive(boolean active) { isActive = active; }
-    public boolean isSearchshopproducts() { return isSearchshopproducts; }
-    public void setSearchshopproducts(boolean searchshopproducts) { isSearchshopproducts = searchshopproducts; }
     public String getSmtpServer() { return smtpServer; }
     public void setSmtpServer(String smtpServer) { this.smtpServer = smtpServer; }
     public Integer getSmtpPort() { return smtpPort; }

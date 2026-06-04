@@ -168,6 +168,91 @@ Subscription behavior:
 ```
 - Errors: `401`, `429`, `500`, `502`, `504`
 
+## 5B. Products Endpoints
+
+Base path: `/products`
+
+Required action codes:
+- `FISCAL_MANAGE_PRODUCTS` — list, create, update, delete, sync
+- `FISCAL_CREATE_BILL` — catalog search (inline autocomplete), live lookup (price verification)
+
+All endpoints require `orgId` scope validation via user's `allowedOrgIds` (except superadmin).
+
+### GET /products
+- Description: List products for an organization.
+- Query: `orgId` (required)
+- 200 Response: array of `ProductDto`
+- Errors: `401`, `403`, `404`
+
+### POST /products
+- Description: Create a product manually.
+- Query: `orgId` (required)
+- Request:
+```json
+{
+  "name": "Widget A",
+  "sku": "W-001",
+  "ean": "1234567890123",
+  "lastKnownPrice": 1200.00,
+  "isActive": true
+}
+```
+- 201 Response: `ProductDto`
+- Errors: `400` (missing/blank name, or both sku/ean missing), `401`, `403`
+
+### PUT /products/{id}
+- Description: Update a product.
+- Request: same shape as POST body
+- 200 Response: `ProductDto`
+- Errors: `400`, `401`, `403`, `404`
+
+### DELETE /products/{id}
+- Description: Soft-delete a product.
+- 204 Response: empty
+- Errors: `401`, `403`, `404`
+
+### GET /products/search
+- Description: Search local product catalog (used by Create Fiscal Bill inline autocomplete on line item Name). Returns active products only.
+- Query:
+  - `orgId` (required)
+  - `q` (recommended): single term matched with OR logic — `name` contains term (case-insensitive), or exact `sku`/`ean`
+  - Legacy filters: `name`, `sku`, `ean` (combined with AND when `q` is omitted)
+- Minimum client query length for autocomplete: 2 characters (enforced in UI, not API)
+- 200 Response: array of `ProductDto`
+- Errors: `401`, `403`
+
+### GET /products/sync
+- Description: Pull products from MerchantPro via `GET_PRODUCTS` template and upsert into local `product` table. Streams progress as Server-Sent Events (SSE).
+- Query: `orgId` (required)
+- Response: `text/event-stream` with JSON event payloads:
+```json
+{ "synced": 0, "total": 120, "done": false }
+```
+```json
+{ "synced": 120, "total": 120, "done": true }
+```
+- Notes:
+  - Client should use `fetch` with `Accept: text/event-stream` and `Authorization: Bearer <token>` (native `EventSource` cannot send the Bearer header).
+  - Emitter timeout: 5 minutes.
+- Errors: `401`, `403`, `404`, `502`
+
+### GET /products/lookup
+- Description: Live price lookup from MerchantPro. Tries `sku_equals` first, then `ean_equals` if SKU lookup returns no rows.
+- Query: `orgId` (required), `sku` and/or `ean`
+- 200 Response:
+```json
+{
+  "name": "Widget A",
+  "sku": "W-001",
+  "ean": "1234567890123",
+  "priceGross": 1250.00,
+  "mpProductId": 1001
+}
+```
+- Errors: `400`, `401`, `403`, `404`, `502`
+
+`ProductDto` fields: `productId`, `clientId`, `orgId`, `mpProductId`, `name`, `sku`, `ean`, `lastKnownPrice`, `isActive`
+
 ## 5A. Access Control Endpoints (Role and Action Management)
 
 ### GET /roles
@@ -398,7 +483,6 @@ Subscription behavior:
     "status": "ACTIVE",
     "currency": "RSD",
     "isActive": true,
-    "isSearchshopproducts": false,
     "smtpServer": "smtp.example.com",
     "smtpPort": 587,
     "emailFrom": "no-reply@example.com",
@@ -428,7 +512,6 @@ Subscription behavior:
   "status": "ACTIVE",
   "currency": "RSD",
   "isActive": true,
-  "isSearchshopproducts": false,
   "smtpServer": "smtp.example.com",
   "smtpPort": 587,
   "emailFrom": "no-reply@example.com",

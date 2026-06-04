@@ -70,7 +70,6 @@ On Organization level is defined connection to mail server. From this mail addre
 | status         | VARCHAR(50)  | NOT NULL, DEFAULT 'ACTIVE' | ACTIVE, SETUP, SUSPENDED, INACTIVE |
 | currency       | VARCHAR(10)  | NOT NULL, DEFAULT 'RSD'  |                               |
 | is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
-| is_searchshopproducts | BOOLEAN | NOT NULL, DEFAULT FALSE | Search product data directly from shop |
 | smtp_server    | VARCHAR(255) | NULL                     | SMTP host/server name         |
 | smtp_port      | INTEGER      | NULL                     | SMTP port (`1..65535`)        |
 | email_from     | VARCHAR(255) | NULL                     | Sender email displayed to recipients |
@@ -445,12 +444,42 @@ Organization-level fiscal configuration used during fiscal bill creation.
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_fiscalbillconfig_org ON fiscalbillconfig (org_id) WHERE isactive = 'Y';
 
+### 2.18 product
+Table name: product
+Organization-scoped product catalog for fiscal bill line item lookup. Populated manually or via MerchantPro sync (`GET_PRODUCTS`).
+
+| Column              | Type         | Constraints              | Notes                                    |
+|---------------------|--------------|--------------------------|------------------------------------------|
+| product_id          | BIGINT       | PK, NOT NULL, IDENTITY(1000,1) | Auto-generated integer        |
+| client_id           | BIGINT       | FK → client.client_id, NOT NULL | Client scope                  |
+| org_id              | BIGINT       | FK → org.org_id, NOT NULL           | Organization scope          |
+| mp_product_id       | INTEGER      | NULL                     | MerchantPro product id (sync key) |
+| name                | VARCHAR(500) | NOT NULL                 | Product name                  |
+| sku                 | VARCHAR(255) | NULL                     | Optional SKU                  |
+| ean                 | VARCHAR(100) | NULL                     | Optional EAN/barcode          |
+| last_known_price    | NUMERIC(14,2)| NULL                     | Informational; live price verified at selection |
+| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                             |
+| created_at          | TIMESTAMPTZ  | NOT NULL                 |                             |
+| updated_at          | TIMESTAMPTZ  | NOT NULL                 |                             |
+| deleted_at          | TIMESTAMPTZ  | NULL                     | Soft delete                   |
+
+Rules:
+- At least one of `sku` or `ean` is required for manual create and for live shop price lookup.
+- `last_known_price` is not authoritative for fiscal bills; use live lookup at line-item selection.
+- Catalog search (API `q` param): matches active, non-deleted rows where `name` contains the term OR `sku`/`ean` equals the term (case-insensitive).
+- Sync upsert match order: `mp_product_id` → `sku` (case-insensitive) → `ean`; restores soft-deleted rows on match.
+
+Migrations:
+- `V31__create_product_table.sql` — creates `product` table and indexes
+- `V32__seed_fiscal_products_action.sql` — seeds `FISCAL_MANAGE_PRODUCTS` action and grants for built-in admin roles
+- `V33__drop_org_searchshopproducts.sql` — removes deprecated `org.is_searchshopproducts` (product search is no longer gated by org flag; use RBAC actions instead)
 
 ## 3. Entity Relationships
 
 ```
 organizations
     ├── user_orgaccess (1:N)
+    ├── product (1:N)
     ├── platform_connections (1:N)
     ├── sales_orders (1:N)
     │     └── fiscalbill (1:N)
@@ -487,6 +516,8 @@ action_catalog → role_action_access (1:N)
 | fiscal_documents           | (organization_id, status)                      | Status dashboards               |
 | fiscal_documents           | idempotency_key                                | Idempotent submission check     |
 | fiscal_document_audit_log  | fiscal_document_id                             | Audit trail retrieval           |
+| product                    | (org_id) WHERE deleted_at IS NULL              | Product list/search by org      |
+| product                    | (org_id, mp_product_id) UNIQUE partial         | Sync upsert key                 |
 
 ---
 

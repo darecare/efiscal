@@ -265,6 +265,97 @@ export const taxCategoryApi = {
   },
 }
 
+export const productsApi = {
+  async list(orgId) {
+    const response = await api.get('/products', { params: { orgId } })
+    return response.data
+  },
+  async create(orgId, payload) {
+    const response = await api.post('/products', payload, { params: { orgId } })
+    return response.data
+  },
+  async update(productId, payload) {
+    const response = await api.put(`/products/${productId}`, payload)
+    return response.data
+  },
+  async remove(productId) {
+    await api.delete(`/products/${productId}`)
+  },
+  async search(orgId, { q, name, sku, ean } = {}) {
+    const response = await api.get('/products/search', {
+      params: { orgId, q, name, sku, ean },
+    })
+    return response.data
+  },
+  syncStream(orgId, { onProgress, onDone, onError }) {
+    const token = localStorage.getItem('token')
+    const controller = new AbortController()
+    const url = `/api/v1/products/sync?orgId=${encodeURIComponent(orgId)}`
+
+    fetch(url, {
+      headers: {
+        Accept: 'text/event-stream',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) {
+        let message = 'Sync failed'
+        try {
+          const body = await response.json()
+          message = body.message || body.error || message
+        } catch {
+          message = response.statusText || message
+        }
+        onError?.(new Error(message))
+        return
+      }
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue
+          const payload = line.slice(5).trim()
+          if (!payload) continue
+          try {
+            const data = JSON.parse(payload)
+            if (data.done) onDone?.(data)
+            else onProgress?.(data)
+          } catch {
+            /* ignore malformed chunks */
+          }
+        }
+      }
+      if (buffer.startsWith('data:')) {
+        const payload = buffer.slice(5).trim()
+        if (payload) {
+          try {
+            const data = JSON.parse(payload)
+            if (data.done) onDone?.(data)
+            else onProgress?.(data)
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }).catch((err) => {
+      if (err.name !== 'AbortError') onError?.(err)
+    })
+
+    return { abort: () => controller.abort() }
+  },
+  async lookup(orgId, { sku, ean } = {}) {
+    const response = await api.get('/products/lookup', { params: { orgId, sku, ean } })
+    return response.data
+  },
+}
+
 export const taxApi = {
   async list() {
     const response = await api.get('/taxes')

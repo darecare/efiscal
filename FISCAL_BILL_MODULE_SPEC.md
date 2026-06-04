@@ -142,18 +142,14 @@ Users will use page to create manually fiscal bill and send it to Tax Authority 
 2. Optional - Sales Order ID - if user enters manually Sales Order ID, system must perform all checks that apply for process of creating fiscal bill from Sales Order 4.1 item(and subitems)
 
 
-### 4.2.2 Items list
-Product items list
-- List table to view all added product items
-- Button to add new product - will open modal screen.
-Products can be searched directly from MerchantPro database using APICongif for MerchantPro and endpoint GET for products.
-- Search fields:
-1. ID
-2. SKU
-3. EAN/barcode
-3. Product Name
-- When user select product from dropdown search, system adds it to fiscal bill items list, with tax taken from MerchantPro. 
-Default qty = 1, price taken from MerchantPro product.price_gross
+### 4.2.2 Items list (implemented)
+- User adds one or more line item cards on the Create Fiscal Bill page (Items tab).
+- **Product Name** field provides inline autocomplete against the local `product` catalog (`GET /api/v1/products/search?q=…`), minimum 2 characters, organization required.
+- Search matches product name (substring), or exact SKU/EAN.
+- Selecting a suggestion fills name, SKU/EAN, and internal product id; system then calls `GET /api/v1/products/lookup` for live MerchantPro `price_gross` (SKU first, EAN fallback).
+- User may still type a custom name without selecting from the catalog.
+- Catalog is maintained on the Products screen (manual CRUD + **Pull from Shop** via `GET /api/v1/products/sync` SSE).
+- MerchantPro integration requires active `MP` apiconn and `GET_PRODUCTS` apitemplate per organization (see `BACKEND_STRUCTURE.md` §6.6).
 
 ### 4.2.3 Payment types
 System will allow adding more payment types for one fiscal bill.
