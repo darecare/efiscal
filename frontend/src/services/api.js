@@ -265,9 +265,18 @@ export const taxCategoryApi = {
   },
 }
 
+function decodeApiError(body, fallback) {
+  if (!body) return fallback
+  const err = body.error
+  if (err && typeof err === 'object' && err.message) return err.message
+  if (typeof err === 'string') return err
+  if (body.message) return body.message
+  return fallback
+}
+
 export const productsApi = {
-  async list(orgId) {
-    const response = await api.get('/products', { params: { orgId } })
+  async list(orgId, { page = 0, size = 100 } = {}) {
+    const response = await api.get('/products', { params: { orgId, page, size } })
     return response.data
   },
   async create(orgId, payload) {
@@ -287,10 +296,11 @@ export const productsApi = {
     })
     return response.data
   },
-  syncStream(orgId, { onProgress, onDone, onError }) {
+  syncStream(orgId, { onProgress, onDone, onError, failedMessage } = {}) {
     const token = localStorage.getItem('token')
     const controller = new AbortController()
     const url = `/api/v1/products/sync?orgId=${encodeURIComponent(orgId)}`
+    const fallbackMessage = failedMessage || 'Sync failed'
 
     fetch(url, {
       headers: {
@@ -300,12 +310,12 @@ export const productsApi = {
       signal: controller.signal,
     }).then(async (response) => {
       if (!response.ok) {
-        let message = 'Sync failed'
+        let message = fallbackMessage
         try {
           const body = await response.json()
-          message = body.message || body.error || message
+          message = decodeApiError(body, fallbackMessage)
         } catch {
-          message = response.statusText || message
+          message = response.statusText || fallbackMessage
         }
         onError?.(new Error(message))
         return
@@ -313,6 +323,15 @@ export const productsApi = {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let completed = false
+      const handleEvent = (data) => {
+        if (data.done) {
+          completed = true
+          onDone?.(data)
+        } else {
+          onProgress?.(data)
+        }
+      }
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -324,9 +343,7 @@ export const productsApi = {
           const payload = line.slice(5).trim()
           if (!payload) continue
           try {
-            const data = JSON.parse(payload)
-            if (data.done) onDone?.(data)
-            else onProgress?.(data)
+            handleEvent(JSON.parse(payload))
           } catch {
             /* ignore malformed chunks */
           }
@@ -336,13 +353,14 @@ export const productsApi = {
         const payload = buffer.slice(5).trim()
         if (payload) {
           try {
-            const data = JSON.parse(payload)
-            if (data.done) onDone?.(data)
-            else onProgress?.(data)
+            handleEvent(JSON.parse(payload))
           } catch {
             /* ignore */
           }
         }
+      }
+      if (!completed) {
+        onError?.(new Error(fallbackMessage))
       }
     }).catch((err) => {
       if (err.name !== 'AbortError') onError?.(err)

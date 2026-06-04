@@ -27,7 +27,7 @@ public class ProductEntity {
     private Long orgId;
 
     @Column(name = "mp_product_id")
-    private Integer mpProductId;
+    private Long mpProductId;
 
     @Column(name = "name", nullable = false, length = 500)
     private String name;
@@ -61,8 +61,8 @@ public class ProductEntity {
     public void setClientId(Long clientId) { this.clientId = clientId; }
     public Long getOrgId() { return orgId; }
     public void setOrgId(Long orgId) { this.orgId = orgId; }
-    public Integer getMpProductId() { return mpProductId; }
-    public void setMpProductId(Integer mpProductId) { this.mpProductId = mpProductId; }
+    public Long getMpProductId() { return mpProductId; }
+    public void setMpProductId(Long mpProductId) { this.mpProductId = mpProductId; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getSku() { return sku; }

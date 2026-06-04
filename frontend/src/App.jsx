@@ -1,6 +1,7 @@
 import React from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { SyncProvider } from './contexts/SyncContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import ActionProtectedRoute from './components/ActionProtectedRoute'
 import Login from './pages/Login'
@@ -30,6 +31,7 @@ function guarded(element, options = {}) {
 export default function App() {
   return (
     <AuthProvider>
+      <SyncProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
@@ -48,6 +50,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/orders" replace />} />
       </Routes>
       <Toast />
+      </SyncProvider>
     </AuthProvider>
   )
 }

@@ -3,17 +3,21 @@ package com.efiscal.backend.repository;
 import com.efiscal.backend.model.ProductEntity;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ProductRepository extends JpaRepository<ProductEntity, Long> {
 
-    List<ProductEntity> findAllByOrgIdAndDeletedAtIsNullOrderByNameAsc(Long orgId);
+    Page<ProductEntity> findAllByOrgIdAndDeletedAtIsNullOrderByNameAsc(Long orgId, Pageable pageable);
+
+    long countByOrgIdAndDeletedAtIsNull(Long orgId);
 
     Optional<ProductEntity> findByProductIdAndDeletedAtIsNull(Long productId);
 
-    Optional<ProductEntity> findByOrgIdAndMpProductIdAndDeletedAtIsNull(Long orgId, Integer mpProductId);
+    Optional<ProductEntity> findByOrgIdAndMpProductIdAndDeletedAtIsNull(Long orgId, Long mpProductId);
 
     Optional<ProductEntity> findByOrgIdAndSkuIgnoreCaseAndDeletedAtIsNull(Long orgId, String sku);
 
@@ -31,7 +35,8 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long> {
         @Param("orgId") Long orgId,
         @Param("name") String name,
         @Param("sku") String sku,
-        @Param("ean") String ean
+        @Param("ean") String ean,
+        Pageable pageable
     );
 
     @Query("""
@@ -46,6 +51,7 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long> {
         """)
     List<ProductEntity> searchByTerm(
         @Param("orgId") Long orgId,
-        @Param("term") String term
+        @Param("term") String term,
+        Pageable pageable
     );
 }

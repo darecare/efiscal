@@ -1,8 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
-import { orgsApi, productsApi } from '../services/api'
+import { orgsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { useSyncContext } from '../contexts/SyncContext'
+
+const PAGE_SIZE = 100
 
 function emptyForm() {
   return { name: '', sku: '', ean: '', lastKnownPrice: '', isActive: true }
@@ -12,16 +15,16 @@ export default function Products() {
   const { t } = useTranslation()
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
+  const { syncing, syncOrgId, syncProgress, syncResult, startSync, cancelSync, consumeResult } = useSyncContext()
 
   const [orgs, setOrgs] = useState([])
   const [selectedOrgId, setSelectedOrgId] = useState('')
   const [products, setProducts] = useState([])
+  const [page, setPage] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
-  const [syncing, setSyncing] = useState(false)
-  const [syncProgress, setSyncProgress] = useState(null)
-  const syncAbortRef = useRef(null)
 
   const [modalOpen, setModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState('add')
@@ -29,6 +32,9 @@ export default function Products() {
   const [form, setForm] = useState(emptyForm())
   const [formError, setFormError] = useState(null)
   const [saving, setSaving] = useState(false)
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
+  const isSyncingThisOrg = syncing && String(syncOrgId) === String(selectedOrgId)
 
   useEffect(() => {
     const loadOrgs = isSuperAdmin ? orgsApi.list() : orgsApi.myAccess()
@@ -38,10 +44,12 @@ export default function Products() {
   useEffect(() => {
     if (!selectedOrgId) {
       setProducts([])
-      return
+      setTotalCount(0)
+      return undefined
     }
     loadProducts()
-  }, [selectedOrgId])
+    return undefined
+  }, [selectedOrgId, page])
 
   useEffect(() => {
     if (!success) return undefined
@@ -49,12 +57,28 @@ export default function Products() {
     return () => clearTimeout(timer)
   }, [success])
 
-  async function loadProducts() {
+  // Pick up a sync that completed while the user was on another page.
+  useEffect(() => {
+    if (!syncResult) return
+    if (String(syncResult.orgId) !== String(selectedOrgId)) return
+    if (syncResult.ok) {
+      setPage(0)
+      loadProducts(0)
+      setSuccess(t('products.pullSuccess', { count: syncResult.synced }))
+    } else {
+      setError(syncResult.message || t('products.pullError'))
+    }
+    consumeResult()
+  }, [syncResult, selectedOrgId])
+
+  async function loadProducts(pageOverride) {
+    const currentPage = pageOverride ?? page
     setLoading(true)
     setError(null)
     try {
-      const data = await productsApi.list(Number(selectedOrgId))
-      setProducts(data)
+      const data = await productsApi.list(Number(selectedOrgId), { page: currentPage, size: PAGE_SIZE })
+      setProducts(data.items || [])
+      setTotalCount(data.totalCount ?? 0)
     } catch (err) {
       const msg = err?.response?.data?.message || err?.response?.data || t('products.loadFailed')
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
@@ -136,7 +160,11 @@ export default function Products() {
     if (!window.confirm(t('products.deleteConfirm', { name: product.name }))) return
     try {
       await productsApi.remove(product.productId)
-      setProducts((prev) => prev.filter((p) => p.productId !== product.productId))
+      if (products.length === 1 && page > 0) {
+        setPage((p) => p - 1)
+      } else {
+        await loadProducts()
+      }
       setSuccess(t('products.deleted'))
     } catch (err) {
       const msg = err?.response?.data?.message || err?.response?.data || t('products.deleteFailed')
@@ -144,38 +172,14 @@ export default function Products() {
     }
   }
 
+  function handleCancelSync() {
+    cancelSync()
+  }
+
   function handlePullFromShop() {
     if (!selectedOrgId || syncing) return
-    setSyncing(true)
     setError(null)
-    setSyncProgress({ synced: 0, total: 0 })
-
-    const stream = productsApi.syncStream(Number(selectedOrgId), {
-      onProgress: (data) => {
-        setSyncProgress({ synced: data.synced, total: data.total })
-      },
-      onDone: async (data) => {
-        setSyncProgress({ synced: data.synced, total: data.total })
-        try {
-          await loadProducts()
-          setSuccess(t('products.pullSuccess', { count: data.synced }))
-        } catch {
-          setError(t('products.loadFailed'))
-        } finally {
-          setSyncing(false)
-          setSyncProgress(null)
-          syncAbortRef.current = null
-        }
-      },
-      onError: (err) => {
-        const msg = err?.message || t('products.pullError')
-        setError(msg)
-        setSyncing(false)
-        setSyncProgress(null)
-        syncAbortRef.current = null
-      },
-    })
-    syncAbortRef.current = stream
+    startSync(Number(selectedOrgId), t('products.pullError'))
   }
 
   function formatPrice(value) {
@@ -191,15 +195,24 @@ export default function Products() {
       actions={
         selectedOrgId && (
           <>
+            {isSyncingThisOrg && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleCancelSync}
+              >
+                {t('common.cancel')}
+              </button>
+            )}
             <button
               type="button"
               className="secondary-button"
               onClick={handlePullFromShop}
               disabled={syncing}
             >
-              {syncing ? t('products.pulling') : t('products.pullFromShop')}
+              {isSyncingThisOrg ? t('products.pulling') : t('products.pullFromShop')}
             </button>
-            <button type="button" className="primary-button" onClick={openAdd}>
+            <button type="button" className="primary-button" onClick={openAdd} disabled={syncing}>
               {t('products.addProduct')}
             </button>
           </>
@@ -212,7 +225,10 @@ export default function Products() {
           <select
             className="form-input"
             value={selectedOrgId}
-            onChange={(e) => setSelectedOrgId(e.target.value)}
+            onChange={(e) => {
+              setSelectedOrgId(e.target.value)
+              setPage(0)
+            }}
           >
             <option value="">{t('products.selectOrg')}</option>
             {orgs.map((org) => (
@@ -234,8 +250,7 @@ export default function Products() {
         </div>
       )}
 
-
-      {syncing && syncProgress && (
+      {isSyncingThisOrg && syncProgress && (
         <div className="card sync-progress-card" style={{ marginBottom: '1rem' }}>
           <p className="muted" style={{ marginBottom: '0.5rem' }}>
             {syncProgress.total > 0
@@ -256,50 +271,79 @@ export default function Products() {
         ) : loading ? (
           <p className="muted">{t('common.loadingDots')}</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>{t('products.columns.id')}</th>
-                <th>{t('products.columns.name')}</th>
-                <th>{t('products.columns.sku')}</th>
-                <th>{t('products.columns.ean')}</th>
-                <th>{t('products.columns.price')}</th>
-                <th>{t('products.columns.active')}</th>
-                <th>{t('common.actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.length === 0 ? (
+          <>
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan={7} className="muted">{t('products.empty')}</td>
+                  <th>{t('products.columns.id')}</th>
+                  <th>{t('products.columns.name')}</th>
+                  <th>{t('products.columns.sku')}</th>
+                  <th>{t('products.columns.ean')}</th>
+                  <th>{t('products.columns.price')}</th>
+                  <th>{t('products.columns.active')}</th>
+                  <th>{t('common.actions')}</th>
                 </tr>
-              ) : (
-                products.map((p) => (
-                  <tr key={p.productId}>
-                    <td>{p.productId}</td>
-                    <td>{p.name}</td>
-                    <td>{p.sku || t('common.dash')}</td>
-                    <td>{p.ean || t('common.dash')}</td>
-                    <td>{formatPrice(p.lastKnownPrice)}</td>
-                    <td>
-                      <span className={`status-chip ${p.isActive ? 'active' : 'inactive'}`}>
-                        {p.isActive ? t('common.active') : t('common.inactive')}
-                      </span>
-                    </td>
-                    <td>
-                      <button type="button" className="secondary-button" onClick={() => openEdit(p)}>
-                        {t('common.edit')}
-                      </button>
-                      {' '}
-                      <button type="button" className="secondary-button" onClick={() => handleDelete(p)}>
-                        {t('common.delete')}
-                      </button>
-                    </td>
+              </thead>
+              <tbody>
+                {products.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="muted">{t('products.empty')}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  products.map((p) => (
+                    <tr key={p.productId}>
+                      <td>{p.productId}</td>
+                      <td>{p.name}</td>
+                      <td>{p.sku || t('common.dash')}</td>
+                      <td>{p.ean || t('common.dash')}</td>
+                      <td>{formatPrice(p.lastKnownPrice)}</td>
+                      <td>
+                        <span className={`status-chip ${p.isActive ? 'active' : 'inactive'}`}>
+                          {p.isActive ? t('common.active') : t('common.inactive')}
+                        </span>
+                      </td>
+                      <td>
+                        <button type="button" className="secondary-button" onClick={() => openEdit(p)}>
+                          {t('common.edit')}
+                        </button>
+                        {' '}
+                        <button type="button" className="secondary-button" onClick={() => handleDelete(p)}>
+                          {t('common.delete')}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+            {totalCount > 0 && (
+              <div className="pagination-bar" style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <span className="muted">
+                  {t('common.paginationInfo', {
+                    current: page + 1,
+                    total: totalPages,
+                    records: totalCount,
+                  })}
+                </span>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={page <= 0 || loading}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  {t('common.prev')}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={page >= totalPages - 1 || loading}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  {t('common.next')}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
 

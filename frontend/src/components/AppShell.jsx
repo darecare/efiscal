@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
+import { useSyncContext } from '../contexts/SyncContext'
 import { hasAction, hasAnyAction } from '../utils/permissions'
 import { appInfoApi, usersApi } from '../services/api'
 import i18n from '../i18n'
@@ -169,6 +170,7 @@ const getNavItems = (user) => {
 export default function AppShell({ title, subtitle, actions, children }) {
   const { t } = useTranslation()
   const { user, logout } = useAuth()
+  const { syncing, syncProgress } = useSyncContext()
   const location = useLocation()
   const navigate = useNavigate()
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -229,6 +231,14 @@ export default function AppShell({ title, subtitle, actions, children }) {
           <p>{user?.email}</p>
         </div>
         <div className="topbar-actions">
+          {syncing && (
+            <span className="sync-indicator" aria-label={t('products.pulling')}>
+              <span className="sync-indicator__spinner" aria-hidden="true" />
+              {syncProgress && syncProgress.total > 0
+                ? t('products.syncingProgress', { synced: syncProgress.synced, total: syncProgress.total })
+                : t('products.pulling')}
+            </span>
+          )}
           <LanguageSwitcher />
           <HelpMenu onAbout={openAbout} />
           <span className="badge">{user?.roleName}</span>

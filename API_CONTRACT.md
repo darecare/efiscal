@@ -179,9 +179,20 @@ Required action codes:
 All endpoints require `orgId` scope validation via user's `allowedOrgIds` (except superadmin).
 
 ### GET /products
-- Description: List products for an organization.
-- Query: `orgId` (required)
-- 200 Response: array of `ProductDto`
+- Description: List products for an organization (paginated).
+- Query:
+  - `orgId` (required)
+  - `page` (int, default `0`)
+  - `size` (int, default `100`, max `500`)
+- 200 Response:
+```json
+{
+  "items": [ /* ProductDto[] */ ],
+  "totalCount": 1250,
+  "page": 0,
+  "size": 100
+}
+```
 - Errors: `401`, `403`, `404`
 
 ### POST /products
@@ -233,11 +244,13 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 ```
 - Notes:
   - Client should use `fetch` with `Accept: text/event-stream` and `Authorization: Bearer <token>` (native `EventSource` cannot send the Bearer header).
-  - Emitter timeout: 5 minutes.
-- Errors: `401`, `403`, `404`, `502`
+  - Server-side emitter has no timeout; sync may run for large catalogs (rate-limited to ~80 MP requests/min).
+  - Pagination follows MerchantPro `meta.links.next` (stops when `next` is null).
+  - Client must handle stream end without `done: true` as an error.
+- Errors: `401`, `403`, `404`, `429`, `502`
 
 ### GET /products/lookup
-- Description: Live price lookup from MerchantPro. Tries `sku_equals` first, then `ean_equals` if SKU lookup returns no rows.
+- Description: Live price lookup from MerchantPro via `GET /api/v2/inventory/{type}/{identifier}` (`type` = `sku` or `ean`). Tries SKU first, then EAN.
 - Query: `orgId` (required), `sku` and/or `ean`
 - 200 Response:
 ```json
@@ -249,9 +262,9 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   "mpProductId": 1001
 }
 ```
-- Errors: `400`, `401`, `403`, `404`, `502`
+- Errors: `400`, `401`, `403`, `404`, `429`, `502`
 
-`ProductDto` fields: `productId`, `clientId`, `orgId`, `mpProductId`, `name`, `sku`, `ean`, `lastKnownPrice`, `isActive`
+`ProductDto` fields: `productId`, `clientId`, `orgId`, `mpProductId` (number), `name`, `sku`, `ean`, `lastKnownPrice`, `isActive`
 
 ## 5A. Access Control Endpoints (Role and Action Management)
 

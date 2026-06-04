@@ -12,7 +12,9 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -25,7 +27,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public class ProductService {
 
     private static final int SYNC_PAGE_SIZE = 100;
-    private static final long SSE_TIMEOUT_MS = 300_000L;
+    private static final long SSE_TIMEOUT_MS = 0L;
+    private static final long SYNC_PAGE_THROTTLE_MS = 750L;
+    private static final int SEARCH_MAX_RESULTS = 50;
 
     private final ProductRepository productRepository;
     private final OrgRepository orgRepository;
@@ -48,11 +52,14 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
-    public List<ProductDto> listByOrg(Long orgId) {
-        return productRepository.findAllByOrgIdAndDeletedAtIsNullOrderByNameAsc(orgId)
-            .stream()
-            .map(this::toDto)
-            .toList();
+    public ProductPage listByOrg(Long orgId, int page, int size) {
+        requireOrg(orgId);
+        int safeSize = Math.min(Math.max(size, 1), 500);
+        int safePage = Math.max(page, 0);
+        var pageable = PageRequest.of(safePage, safeSize);
+        var result = productRepository.findAllByOrgIdAndDeletedAtIsNullOrderByNameAsc(orgId, pageable);
+        List<ProductDto> items = result.getContent().stream().map(this::toDto).toList();
+        return new ProductPage(items, result.getTotalElements(), safePage, safeSize);
     }
 
     @Transactional(readOnly = true)
@@ -63,14 +70,15 @@ public class ProductService {
     @Transactional(readOnly = true)
     public List<ProductDto> search(Long orgId, String q, String name, String sku, String ean) {
         requireOrg(orgId);
+        var pageable = PageRequest.of(0, SEARCH_MAX_RESULTS);
         String term = blankToNull(q);
         if (term != null) {
-            return productRepository.searchByTerm(orgId, term)
+            return productRepository.searchByTerm(orgId, term, pageable)
                 .stream()
                 .map(this::toDto)
                 .toList();
         }
-        return productRepository.search(orgId, blankToNull(name), blankToNull(sku), blankToNull(ean))
+        return productRepository.search(orgId, blankToNull(name), blankToNull(sku), blankToNull(ean), pageable)
             .stream()
             .map(this::toDto)
             .toList();
@@ -120,19 +128,19 @@ public class ProductService {
         emitter.onError(ex -> emitter.complete());
 
         OrgEntity org = requireOrg(orgId);
-        java.util.concurrent.CompletableFuture.runAsync(() -> runSyncStream(org, emitter));
+        long clientId = org.getClient().getClientId();
+        java.util.concurrent.CompletableFuture.runAsync(() -> runSyncStream(orgId, clientId, emitter));
         return emitter;
     }
 
-    private void runSyncStream(OrgEntity org, SseEmitter emitter) {
+    private void runSyncStream(Long orgId, long clientId, SseEmitter emitter) {
         try {
             int start = 0;
             int synced = 0;
             Integer total = null;
 
             while (true) {
-                ProductFetchResult page = merchantProProductService.fetchProducts(
-                    org.getOrgId(), null, null, start, SYNC_PAGE_SIZE);
+                ProductFetchResult page = merchantProProductService.fetchProducts(orgId, start, SYNC_PAGE_SIZE);
 
                 if (total == null) {
                     total = page.total() > 0 ? page.total() : null;
@@ -143,35 +151,44 @@ public class ProductService {
                     .toList();
 
                 if (!rows.isEmpty()) {
-                    synced += self.upsertPage(org, rows);
+                    synced += self.upsertPage(orgId, clientId, rows);
                 }
 
                 int reportedTotal = total != null ? total : synced;
                 sendProgress(emitter, new SyncProgress(synced, reportedTotal, false));
 
-                if (page.data().isEmpty() || page.data().size() < SYNC_PAGE_SIZE) {
+                if (page.nextLink() == null || page.data().isEmpty()) {
                     break;
                 }
                 start += SYNC_PAGE_SIZE;
+                Thread.sleep(SYNC_PAGE_THROTTLE_MS);
             }
 
             int finalTotal = total != null ? total : synced;
             sendProgress(emitter, new SyncProgress(synced, finalTotal, true));
             emitter.complete();
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            completeWithError(emitter, new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Product sync interrupted"));
         } catch (Exception ex) {
-            try {
-                emitter.completeWithError(ex);
-            } catch (Exception ignored) {
-                emitter.complete();
-            }
+            completeWithError(emitter, ex);
+        }
+    }
+
+    private void completeWithError(SseEmitter emitter, Exception ex) {
+        try {
+            emitter.completeWithError(ex);
+        } catch (Exception ignored) {
+            emitter.complete();
         }
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public int upsertPage(OrgEntity org, List<MerchantProProductRow> rows) {
+    public int upsertPage(Long orgId, long clientId, List<MerchantProProductRow> rows) {
         int count = 0;
         for (MerchantProProductRow row : rows) {
-            upsertFromMerchantPro(org, row);
+            upsertFromMerchantPro(orgId, clientId, row);
             count++;
         }
         return count;
@@ -187,22 +204,25 @@ public class ProductService {
                 "SKU or EAN is required for live price lookup");
         }
 
-        ProductFetchResult result = merchantProProductService.fetchProducts(orgId, skuVal, null, 0, 1);
-        if (result.data().isEmpty() && eanVal != null) {
-            result = merchantProProductService.fetchProducts(orgId, null, eanVal, 0, 1);
+        Optional<MerchantProProductRow> row = Optional.empty();
+        if (skuVal != null) {
+            row = merchantProProductService.fetchInventoryByIdentifier(orgId, "sku", skuVal);
         }
-        if (result.data().isEmpty()) {
+        if (row.isEmpty() && eanVal != null) {
+            row = merchantProProductService.fetchInventoryByIdentifier(orgId, "ean", eanVal);
+        }
+        if (row.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                 "Product not found in shop for the given SKU or EAN");
         }
 
-        MerchantProProductRow row = result.data().get(0);
+        MerchantProProductRow found = row.get();
         return new LivePriceLookupResult(
-            row.name(),
-            row.sku(),
-            row.ean(),
-            row.priceGross(),
-            row.mpProductId()
+            found.name(),
+            found.sku(),
+            found.ean(),
+            found.priceGross(),
+            found.mpProductId()
         );
     }
 
@@ -211,32 +231,32 @@ public class ProductService {
         emitter.send(SseEmitter.event().data(json, MediaType.APPLICATION_JSON));
     }
 
-    private void upsertFromMerchantPro(OrgEntity org, MerchantProProductRow row) {
+    private void upsertFromMerchantPro(Long orgId, long clientId, MerchantProProductRow row) {
         ProductEntity entity = null;
         if (row.mpProductId() != null) {
             entity = productRepository
-                .findByOrgIdAndMpProductIdAndDeletedAtIsNull(org.getOrgId(), row.mpProductId())
+                .findByOrgIdAndMpProductIdAndDeletedAtIsNull(orgId, row.mpProductId())
                 .orElse(null);
         }
 
         String skuVal = trimOrNull(row.sku());
         if (entity == null && skuVal != null) {
             entity = productRepository
-                .findByOrgIdAndSkuIgnoreCaseAndDeletedAtIsNull(org.getOrgId(), skuVal)
+                .findByOrgIdAndSkuIgnoreCaseAndDeletedAtIsNull(orgId, skuVal)
                 .orElse(null);
         }
 
         String eanVal = trimOrNull(row.ean());
         if (entity == null && eanVal != null) {
             entity = productRepository
-                .findByOrgIdAndEanAndDeletedAtIsNull(org.getOrgId(), eanVal)
+                .findByOrgIdAndEanAndDeletedAtIsNull(orgId, eanVal)
                 .orElse(null);
         }
 
         if (entity == null) {
             entity = new ProductEntity();
-            entity.setClientId(org.getClient().getClientId());
-            entity.setOrgId(org.getOrgId());
+            entity.setClientId(clientId);
+            entity.setOrgId(orgId);
             entity.setMpProductId(row.mpProductId());
         }
 
@@ -308,12 +328,19 @@ public class ProductService {
         Long productId,
         Long clientId,
         Long orgId,
-        Integer mpProductId,
+        Long mpProductId,
         String name,
         String sku,
         String ean,
         BigDecimal lastKnownPrice,
         boolean isActive
+    ) {}
+
+    public record ProductPage(
+        List<ProductDto> items,
+        long totalCount,
+        int page,
+        int size
     ) {}
 
     public record ProductRequest(
@@ -331,6 +358,6 @@ public class ProductService {
         String sku,
         String ean,
         BigDecimal priceGross,
-        Integer mpProductId
+        Long mpProductId
     ) {}
 }

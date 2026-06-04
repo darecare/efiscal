@@ -11,6 +11,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -18,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -25,6 +27,8 @@ import org.springframework.web.server.ResponseStatusException;
 public class MerchantProProductService {
 
     private static final String FIELDS = "id,name,sku,ean,price_gross";
+    private static final int MAX_429_RETRIES = 3;
+    private static final long[] RETRY_BACKOFF_MS = { 60_000L, 120_000L, 240_000L };
 
     private final ApiConnRepository apiConnRepository;
     private final ApiTemplateRepository apiTemplateRepository;
@@ -41,31 +45,35 @@ public class MerchantProProductService {
     }
 
     @Transactional(readOnly = true)
-    public ProductFetchResult fetchProducts(Long orgId, String skuEquals, String eanEquals, int start, int limit) {
+    public ProductFetchResult fetchProducts(Long orgId, int start, int limit) {
         ApiConnEntity conn = resolveConnection(orgId);
         ApiTemplateEntity template = resolveTemplate(conn);
 
-        String apiBase = conn.getApiBaseUrl() != null ? conn.getApiBaseUrl() : "";
-        if (!apiBase.endsWith("/")) {
-            apiBase += "/";
-        }
+        String apiBase = normalizeApiBase(conn.getApiBaseUrl());
+        String url = apiBase
+            + template.getEndpointPath()
+            + "?fields=" + FIELDS
+            + "&start=" + start
+            + "&limit=" + limit;
 
-        StringBuilder url = new StringBuilder(apiBase)
-            .append(template.getEndpointPath())
-            .append("?fields=").append(FIELDS)
-            .append("&start=").append(start)
-            .append("&limit=").append(limit);
-
-        if (skuEquals != null && !skuEquals.isBlank()) {
-            url.append("&sku_equals=").append(encodeQueryValue(skuEquals.trim()));
-        }
-        if (eanEquals != null && !eanEquals.isBlank()) {
-            url.append("&ean_equals=").append(encodeQueryValue(eanEquals.trim()));
-        }
-
-        URI uri = buildUri(url.toString());
+        URI uri = buildUri(url);
         Map<?, ?> body = executeGet(conn, uri);
-        return parseResponse(body);
+        return parseCollectionResponse(body);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<MerchantProProductRow> fetchInventoryByIdentifier(Long orgId, String type, String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            return Optional.empty();
+        }
+        ApiConnEntity conn = resolveConnection(orgId);
+        String apiBase = normalizeApiBase(conn.getApiBaseUrl());
+        String encoded = encodePathSegment(identifier.trim());
+        String url = apiBase + "api/v2/inventory/" + type + "/" + encoded + "?fields=" + FIELDS;
+
+        URI uri = buildUri(url);
+        Map<?, ?> body = executeGet(conn, uri);
+        return parseIndividualResponse(body);
     }
 
     private ApiConnEntity resolveConnection(Long orgId) {
@@ -88,6 +96,14 @@ public class MerchantProProductService {
                 "No active GET_PRODUCTS template found for this connection"));
     }
 
+    private static String normalizeApiBase(String apiBaseUrl) {
+        String apiBase = apiBaseUrl != null ? apiBaseUrl : "";
+        if (!apiBase.endsWith("/")) {
+            apiBase += "/";
+        }
+        return apiBase;
+    }
+
     private URI buildUri(String rawUrl) {
         try {
             return new URI(rawUrl);
@@ -97,6 +113,38 @@ public class MerchantProProductService {
     }
 
     private Map<?, ?> executeGet(ApiConnEntity conn, URI uri) {
+        HttpHeaders headers = buildAuthHeaders(conn);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        for (int attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
+            try {
+                ResponseEntity<Map> response = restTemplate.exchange(uri, HttpMethod.GET, entity, Map.class);
+                return response.getBody() != null ? response.getBody() : Collections.emptyMap();
+            } catch (HttpClientErrorException ex) {
+                if (ex.getStatusCode().value() == 429) {
+                    if (attempt >= MAX_429_RETRIES) {
+                        throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                            "MerchantPro API rate limit exceeded. Please try again later.");
+                    }
+                    sleepQuietly(RETRY_BACKOFF_MS[attempt]);
+                    continue;
+                }
+                throw new ResponseStatusException(
+                    HttpStatus.valueOf(ex.getStatusCode().value()),
+                    decodeErrorMessage(ex.getResponseBodyAsString(), ex.getMessage())
+                );
+            } catch (ResponseStatusException rex) {
+                throw rex;
+            } catch (Exception ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "MerchantPro products API call failed: " + ex.getMessage());
+            }
+        }
+        throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+            "MerchantPro API rate limit exceeded. Please try again later.");
+    }
+
+    private static HttpHeaders buildAuthHeaders(ApiConnEntity conn) {
         HttpHeaders headers = new HttpHeaders();
         if ("BASIC_AUTH".equals(conn.getApiauthtype())
                 && conn.getApikey() != null && !conn.getApikey().isBlank()
@@ -106,27 +154,30 @@ public class MerchantProProductService {
             headers.set("Authorization", "Basic " + encoded);
         }
         headers.set("Accept", "application/json");
+        return headers;
+    }
 
-        HttpEntity<Void> entity = new HttpEntity<>(headers);
+    private static void sleepQuietly(long millis) {
         try {
-            ResponseEntity<Map> response = restTemplate.exchange(uri, HttpMethod.GET, entity, Map.class);
-            return response.getBody() != null ? response.getBody() : Collections.emptyMap();
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                "MerchantPro products API call failed: " + ex.getMessage());
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "MerchantPro API retry interrupted");
         }
     }
 
     @SuppressWarnings("unchecked")
-    private ProductFetchResult parseResponse(Map<?, ?> body) {
+    private ProductFetchResult parseCollectionResponse(Map<?, ?> body) {
         if (body == null || body.isEmpty()) {
-            return new ProductFetchResult(Collections.emptyList(), 0);
+            return new ProductFetchResult(Collections.emptyList(), 0, null);
         }
         List<Map<String, Object>> rawProducts = body.containsKey("data")
             ? (List<Map<String, Object>>) body.get("data")
             : Collections.emptyList();
 
         int total = rawProducts.size();
+        String nextLink = null;
         if (body.containsKey("meta")) {
             Map<String, Object> meta = (Map<String, Object>) body.get("meta");
             Object countObj = meta.get("count");
@@ -141,14 +192,37 @@ public class MerchantProProductService {
                     total = n.intValue();
                 }
             }
+            if (meta.containsKey("links")) {
+                Object linksObj = meta.get("links");
+                if (linksObj instanceof Map<?, ?> links) {
+                    Object next = links.get("next");
+                    if (next != null && !"null".equals(String.valueOf(next)) && !String.valueOf(next).isBlank()) {
+                        nextLink = String.valueOf(next);
+                    }
+                }
+            }
         }
 
         List<MerchantProProductRow> products = rawProducts.stream().map(this::mapProduct).toList();
-        return new ProductFetchResult(products, total);
+        return new ProductFetchResult(products, total, nextLink);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Optional<MerchantProProductRow> parseIndividualResponse(Map<?, ?> body) {
+        if (body == null || body.isEmpty()) {
+            return Optional.empty();
+        }
+        if (body.containsKey("data") && body.get("data") instanceof Map<?, ?> dataMap) {
+            return Optional.of(mapProduct((Map<String, Object>) dataMap));
+        }
+        if (body.containsKey("id")) {
+            return Optional.of(mapProduct((Map<String, Object>) body));
+        }
+        return Optional.empty();
     }
 
     private MerchantProProductRow mapProduct(Map<String, Object> raw) {
-        Integer id = toInteger(raw.get("id"));
+        Long id = toLong(raw.get("id"));
         String name = str(raw.get("name"));
         String sku = str(raw.get("sku"));
         String ean = str(raw.get("ean"));
@@ -156,15 +230,43 @@ public class MerchantProProductService {
         return new MerchantProProductRow(id, name, sku, ean, priceGross);
     }
 
+    private static String decodeErrorMessage(String body, String fallback) {
+        if (body == null || body.isBlank()) {
+            return fallback;
+        }
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Map<?, ?> parsed = mapper.readValue(body, Map.class);
+            if (parsed.containsKey("error")) {
+                Object err = parsed.get("error");
+                if (err instanceof Map<?, ?> errMap) {
+                    Object msg = errMap.get("message");
+                    if (msg != null) {
+                        return String.valueOf(msg);
+                    }
+                }
+                if (err instanceof String s) {
+                    return s;
+                }
+            }
+            if (parsed.containsKey("message")) {
+                return String.valueOf(parsed.get("message"));
+            }
+        } catch (Exception ignored) {
+            /* use fallback */
+        }
+        return fallback;
+    }
+
     private static String str(Object o) {
         return o == null ? "" : String.valueOf(o).trim();
     }
 
-    private static Integer toInteger(Object o) {
+    private static Long toLong(Object o) {
         if (o == null) return null;
-        if (o instanceof Number n) return n.intValue();
+        if (o instanceof Number n) return n.longValue();
         try {
-            return Integer.parseInt(String.valueOf(o));
+            return Long.parseLong(String.valueOf(o));
         } catch (NumberFormatException e) {
             return null;
         }
@@ -179,7 +281,7 @@ public class MerchantProProductService {
         }
     }
 
-    private static String encodeQueryValue(String value) {
+    private static String encodePathSegment(String value) {
         try {
             return java.net.URLEncoder.encode(value, StandardCharsets.UTF_8);
         } catch (Exception e) {
@@ -188,12 +290,12 @@ public class MerchantProProductService {
     }
 
     public record MerchantProProductRow(
-        Integer mpProductId,
+        Long mpProductId,
         String name,
         String sku,
         String ean,
         java.math.BigDecimal priceGross
     ) {}
 
-    public record ProductFetchResult(List<MerchantProProductRow> data, int total) {}
+    public record ProductFetchResult(List<MerchantProProductRow> data, int total, String nextLink) {}
 }

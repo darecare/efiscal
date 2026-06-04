@@ -4,6 +4,7 @@ import com.efiscal.backend.security.AuthorizationService;
 import com.efiscal.backend.service.ProductService;
 import com.efiscal.backend.service.ProductService.LivePriceLookupResult;
 import com.efiscal.backend.service.ProductService.ProductDto;
+import com.efiscal.backend.service.ProductService.ProductPage;
 import com.efiscal.backend.service.ProductService.ProductRequest;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -32,10 +33,14 @@ public class ProductController {
     }
 
     @GetMapping
-    public List<ProductDto> list(@RequestParam Long orgId) {
+    public ProductPage list(
+        @RequestParam Long orgId,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "100") int size
+    ) {
         authorizationService.requireAction("FISCAL_MANAGE_PRODUCTS");
         authorizationService.requireOrgAccess(orgId);
-        return productService.listByOrg(orgId);
+        return productService.listByOrg(orgId, page, size);
     }
 
     @PostMapping
