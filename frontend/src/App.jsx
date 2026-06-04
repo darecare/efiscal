@@ -9,6 +9,7 @@ import Users from './pages/Users'
 import Clients from './pages/Clients'
 import Organizations from './pages/Organizations'
 import ApiConfig from './pages/ApiConfig'
+import EmailTemplates from './pages/EmailTemplates'
 import Orders from './pages/Orders'
 import FiscalBills from './pages/FiscalBills'
 import GetStatus from './pages/GetStatus'
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/clients" element={guarded(<Clients />, { requireSuperAdmin: true })} />
         <Route path="/organizations" element={guarded(<Organizations />, { action: 'ORGS_MANAGE' })} />
         <Route path="/api-config" element={guarded(<ApiConfig />, { action: 'ORGS_MANAGE' })} />
+        <Route path="/email-templates" element={guarded(<EmailTemplates />, { action: 'ORGS_MANAGE' })} />
         <Route path="/orders" element={guarded(<Orders />, { action: 'MERCHANTPRO_FETCH_ORDERS' })} />
         <Route path="/fiscal-bills" element={guarded(<FiscalBills />, { action: 'FISCAL_VIEW_BILLS' })} />
         <Route path="/fiscal-bills/create" element={guarded(<CreateFiscalBill />, { action: 'FISCAL_CREATE_BILL' })} />

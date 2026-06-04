@@ -233,6 +233,7 @@ The system defines the following canonical action codes (inserted during migrati
     *   `/api/v1/orgs` (except `/my-access`) -> requires `ORGS_MANAGE`
     *   `/api/v1/apiconn` -> requires `ORGS_MANAGE`
     *   `/api/v1/apitemplate` -> requires `ORGS_MANAGE`
+  *   `/api/v1/email-templates` -> requires `ORGS_MANAGE`; email template bodies are stored as raw HTML and rendered later when sending the email.
   *   Organization payload includes optional email settings fields persisted on `org`: `smtpServer`, `smtpPort`, `emailFrom`, `smtpUsername`, `smtpPassword`, `smtpConnectionSecurity`.
   *   `smtpConnectionSecurity` is validated in service layer and accepts only `STARTTLS` or `SSL_TLS`.
   *   `smtpPassword` is treated as sensitive write-only input and is not returned from organization DTO responses.
@@ -242,6 +243,8 @@ The system defines the following canonical action codes (inserted during migrati
     *   `GET /fiscalbill`, `GET /fiscalbill/{id}`, `GET /fiscalbill/{id}/details` -> requires `FISCAL_VIEW_BILLS` and organization access validation.
     *   `POST /from-order`, `POST /manual`, `POST /{id}/copy`, `POST /{id}/refund` -> requires `FISCAL_CREATE_BILL` and organization access validation.
     *   `POST /{id}/retry` -> requires `FISCAL_RETRY_BILL` and organization access validation.
+  *   Successful fiscal bill creation may trigger customer email delivery when `sendEmail` is true; order-based flows read `customerEmail` from the sales-order payload and persist the result in `log_email`.
+  *   `log_email` stores delivery attempts and status (`SENT`, `FAILED`, `SKIPPED`) together with the chosen template and rendered message body.
 
 ### 7.4 Bootstrap SuperAdmin
 - Initial deployment must create one bootstrap SuperAdmin account.

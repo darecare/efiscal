@@ -110,6 +110,24 @@ export const appInfoApi = {
   },
 }
 
+export const emailTemplatesApi = {
+  async list(orgId) {
+    const response = await api.get('/email-templates', { params: { orgId } })
+    return response.data
+  },
+  async create(payload) {
+    const response = await api.post('/email-templates', payload)
+    return response.data
+  },
+  async update(templateId, payload) {
+    const response = await api.put(`/email-templates/${templateId}`, payload)
+    return response.data
+  },
+  async remove(templateId) {
+    await api.delete(`/email-templates/${templateId}`)
+  },
+}
+
 export const rolesApi = {
   async list(includeInactive = false) {
     const response = await api.get('/roles', { params: { includeInactive } })
@@ -188,6 +206,13 @@ export const fiscalBillApi = {
   },
   async details(fiscalbillId) {
     const response = await api.get(`/fiscalbill/${fiscalbillId}/details`)
+    return response.data
+  },
+  async downloadPdf(fiscalbillId, format = 'a4') {
+    const response = await api.get(`/fiscalbill/${fiscalbillId}/pdf`, {
+      params: { format },
+      responseType: 'blob',
+    })
     return response.data
   },
   async createFromOrder(payload, idempotencyKey, orgId, clientId) {

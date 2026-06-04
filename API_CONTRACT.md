@@ -121,13 +121,33 @@ Subscription behavior:
 - Description: Get detailed bill data including tax and payment rows.
 - 200 Response: [bill object with items, taxes, and payments]
 
+### GET /fiscalbill/{id}/pdf
+- Description: Download fiscal bill as PDF generated from selected HTML template.
+- Query:
+  - `format` (optional): `a4` (default) or `roll80`
+- 200 Response:
+  - Content-Type: `application/pdf`
+  - Content-Disposition: `attachment; filename=fiscal-bill-{id}-{format}.pdf`
+- Notes:
+  - Template includes fiscal header, line items (`fiscalbillline`), tax area (`fiscalbilltax`) and payments area (`fiscalbillpay`).
+  - Available templates in current implementation:
+    - `a4` -> `pdf-templates/default-a4.html`
+    - `roll80` -> `pdf-templates/default-roll80.html` (57mm–80mm paper roll style)
+  - Textual layout follows the fiscal receipt textual-display requirements (start/end fiscal section lines and grouped receipt metadata).
+
 ### POST /fiscalbill/from-order
 - Description: Create fiscal bill from an existing shop order.
 - Request: same as POST /fiscalbill but specifically for order-linked flows.
+- Additional request fields used by the UI:
+  - `sendEmail` - default `true` on the order issuance screen
+  - `customerEmail` - taken from the sales order payload and passed through when emailing is enabled
 
 ### POST /fiscalbill/manual
 - Description: Create fiscal bill from manual input.
 - Request: [manual entry payload]
+- Additional request fields used by the UI:
+  - `sendEmail` - optional boolean flag
+  - `customerEmail` - optional recipient email for future manual-email flows
 
 ### GET /fiscalbill/status
 - Description: Get overall fiscal status summary for an organization.
@@ -465,6 +485,56 @@ Subscription behavior:
 ```
 - 200 Response: Empty body
 - Errors: `400`, `401`, `403`, `404`, `500`
+
+## 5D. Email Template Management Endpoints
+
+### GET /email-templates
+- Description: List email templates for an organization.
+- Query:
+  - `orgId` (required)
+- 200 Response:
+```json
+[
+  {
+    "emailTemplateId": 2001,
+    "orgId": 1002,
+    "orgName": "Acme Belgrade",
+    "templateName": "Default Fiscal Bill Email",
+    "subject": "Your fiscal bill",
+    "bodyHtml": "<p>Dear {{ customername }},</p>",
+    "isActive": true,
+    "createdAt": "2026-06-04T10:00:00Z"
+  }
+]
+```
+- Notes:
+  - `bodyHtml` stores raw HTML and is rendered later when sending the email.
+- Errors: `401`, `403`, `404`, `500`
+
+### POST /email-templates
+- Description: Create a new email template for an organization.
+- Request:
+```json
+{
+  "orgId": 1002,
+  "templateName": "Default Fiscal Bill Email",
+  "subject": "Your fiscal bill",
+  "bodyHtml": "<p>Dear {{ customername }},</p>",
+  "isActive": true
+}
+```
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### PUT /email-templates/{templateId}
+- Description: Update email template metadata/body.
+- Request: Partial update payload using the same fields as `POST /email-templates`.
+- 200 Response: Updated email template object.
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### DELETE /email-templates/{templateId}
+- Description: Soft-delete an email template.
+- 204 Response: No Content
+- Errors: `401`, `403`, `404`, `500`
 
 ## 6. Error Model
 All non-2xx responses should follow:

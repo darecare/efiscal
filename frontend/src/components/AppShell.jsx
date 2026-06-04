@@ -155,10 +155,11 @@ const getNavItems = (user) => {
       ],
     },
     {
-      labelKey: 'nav.configuration',
+      labelKey: 'nav.settings',
       show: can('ORGS_MANAGE'),
       children: [
         { path: '/api-config', labelKey: 'nav.apiConfiguration', show: can('ORGS_MANAGE') },
+        { path: '/email-templates', labelKey: 'nav.emailTemplates', show: can('ORGS_MANAGE') },
         { path: '/fiscal-bills/paytype-map', labelKey: 'nav.paymentTypeMapping', show: can('ORGS_MANAGE') },
       ],
     },

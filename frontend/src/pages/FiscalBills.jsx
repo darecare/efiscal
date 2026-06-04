@@ -30,6 +30,7 @@ export default function FiscalBills() {
   const [details, setDetails] = useState(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('tax')
+  const [downloadingPdfFormat, setDownloadingPdfFormat] = useState('')
   const [copyingBillIds, setCopyingBillIds] = useState({})
   const [refundingBillIds, setRefundingBillIds] = useState({})
   const [copyConfirmBill, setCopyConfirmBill] = useState(null)
@@ -211,6 +212,31 @@ export default function FiscalBills() {
   function closeDetailsModal() {
     setIsDetailsModalOpen(false)
     setDetailsError(null)
+    setDownloadingPdfFormat('')
+  }
+
+  async function handleDownloadPdf(format) {
+    const fiscalBillId = details?.fiscalBill?.fiscalbillId
+    if (!fiscalBillId) return
+
+    setDetailsError(null)
+    setDownloadingPdfFormat(format)
+    try {
+      const blob = await fiscalBillApi.downloadPdf(fiscalBillId, format)
+      const url = window.URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `fiscal-bill-${fiscalBillId}-${format}.pdf`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('fiscalBills.downloadPdfFailed')
+      setDetailsError(typeof msg === 'string' ? msg : t('fiscalBills.downloadPdfFailed'))
+    } finally {
+      setDownloadingPdfFormat('')
+    }
   }
 
   function createIdempotencyKey() {
@@ -594,6 +620,25 @@ export default function FiscalBills() {
                     />
                   </div>
                 ) : null}
+
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => handleDownloadPdf('a4')}
+                    disabled={downloadingPdfFormat !== ''}
+                  >
+                    {downloadingPdfFormat === 'a4' ? t('fiscalBills.downloadingPdf') : t('fiscalBills.downloadPdfA4')}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => handleDownloadPdf('roll80')}
+                    disabled={downloadingPdfFormat !== ''}
+                  >
+                    {downloadingPdfFormat === 'roll80' ? t('fiscalBills.downloadingPdf') : t('fiscalBills.downloadPdfRoll80')}
+                  </button>
+                </div>
 
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
                   <button

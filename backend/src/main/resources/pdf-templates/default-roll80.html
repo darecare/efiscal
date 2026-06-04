@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fiscalni racun 80mm</title>
+  <style>
+    @page {
+      size: 80mm 297mm;
+      margin: 3mm;
+    }
+
+    body {
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 9px;
+      color: #111;
+      margin: 0;
+      width: 74mm;
+    }
+
+    .receipt {
+      border: 1px solid #222;
+      padding: 2.5mm 2mm;
+    }
+
+    .line {
+      text-align: center;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      margin: 0;
+      font-size: 9px;
+    }
+
+    .head {
+      margin-top: 1.5mm;
+      text-align: center;
+      line-height: 1.25;
+      word-break: break-word;
+    }
+
+    .meta {
+      margin-top: 1.5mm;
+      border-top: 1px dashed #333;
+      border-bottom: 1px dashed #333;
+      padding: 1mm 0;
+    }
+
+    .meta-row {
+      display: block;
+      margin-bottom: 0.7mm;
+      word-break: break-word;
+    }
+
+    .label {
+      font-weight: 700;
+    }
+
+    .section {
+      margin-top: 1.5mm;
+      border-top: 1px dashed #333;
+      border-bottom: 1px dashed #333;
+      text-align: center;
+      font-weight: 700;
+      padding: 0.8mm 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1mm;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid #ddd;
+      padding: 0.6mm 0.4mm;
+      vertical-align: top;
+      word-break: break-word;
+    }
+
+    th {
+      font-size: 8px;
+      background: #f2f2f2;
+    }
+
+    .num {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .subline {
+      color: #666;
+      font-size: 8px;
+    }
+
+    .muted {
+      color: #777;
+      text-align: center;
+      font-style: italic;
+    }
+
+    .totals {
+      margin-top: 1mm;
+      border-top: 1px dashed #333;
+      padding-top: 1mm;
+    }
+
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 1mm;
+      margin-bottom: 0.7mm;
+      font-weight: 700;
+    }
+
+    .qr-link {
+      margin-top: 1.3mm;
+      border-top: 1px dashed #333;
+      padding-top: 1mm;
+      font-size: 8px;
+      word-break: break-all;
+    }
+
+    .end-line {
+      margin-top: 1.3mm;
+      text-align: center;
+      font-weight: 700;
+      font-size: 8.5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="receipt">
+    <p class="line">===== FISKALNI RACUN =====</p>
+
+    <div class="head">
+      <div><strong>{{BUSINESS_NAME}}</strong></div>
+      <div>{{BUSINESS_ADDRESS}}</div>
+      <div>PIB: {{BUSINESS_TIN}}</div>
+    </div>
+
+    <div class="meta">
+      <div class="meta-row"><span class="label">Kupac:</span> {{CUSTOMER_NAME}}</div>
+      <div class="meta-row"><span class="label">Order:</span> {{ORDER_ID}}</div>
+      <div class="meta-row"><span class="label">Vrsta:</span> {{INVOICE_TYPE}}</div>
+      <div class="meta-row"><span class="label">Transakcija:</span> {{TRANSACTION_TYPE}}</div>
+      <div class="meta-row"><span class="label">PFR broj:</span> {{SDC_INVOICE_NO}}</div>
+      <div class="meta-row"><span class="label">PFR vreme:</span> {{SDC_DATE_TIME}}</div>
+      <div class="meta-row"><span class="label">ESIR broj:</span> {{PFR_REQUESTED_BY}}</div>
+    </div>
+
+    <div class="section">Artikli</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 34%;">Naziv</th>
+          <th style="width: 10%;">Ozn</th>
+          <th class="num" style="width: 18%;">Jed</th>
+          <th class="num" style="width: 14%;">Kol</th>
+          <th class="num" style="width: 24%;">Ukupno</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{LINE_ITEMS_ROWS}}
+      </tbody>
+    </table>
+
+    <div class="section">Porez</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 12%;">Ozn</th>
+          <th style="width: 40%;">Naziv</th>
+          <th class="num" style="width: 20%;">Stopa</th>
+          <th class="num" style="width: 28%;">Iznos</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{TAX_ROWS}}
+      </tbody>
+    </table>
+
+    <div class="section">Placanje</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 62%;">Nacin</th>
+          <th class="num" style="width: 38%;">Iznos</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{PAYMENT_ROWS}}
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <div class="totals-row"><span>Ukupan porez:</span><span>{{TOTAL_TAX}}</span></div>
+      <div class="totals-row"><span>Za uplatu:</span><span>{{TOTAL_AMOUNT}}</span></div>
+    </div>
+
+    <div class="qr-link">
+      Link za proveru: {{EFISCAL_LINK}}
+    </div>
+
+    <p class="end-line">===== KRAJ FISKALNOG RACUNA =====</p>
+  </div>
+</body>
+</html>
