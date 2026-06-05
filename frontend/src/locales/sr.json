@@ -652,6 +652,7 @@
     "pullFromShop": "Povuci iz prodavnice",
     "pulling": "Povlačenje…",
     "pullSuccess": "Sinhronizovano {{count}} proizvoda iz prodavnice.",
+    "pullSuccessNone": "Katalog je već ažuriran.",
     "pullError": "Povlačenje proizvoda iz prodavnice nije uspelo.",
     "selectOrg": "Izaberite organizaciju…",
     "selectOrgHint": "Izaberite organizaciju za prikaz proizvoda.",
@@ -680,7 +681,13 @@
       "editTitle": "Izmeni proizvod"
     },
     "syncStarting": "Pokretanje sinhronizacije…",
-    "syncingProgress": "Sinhronizovano {{synced}} od {{total}} proizvoda…"
+    "syncingProgress": "Sinhronizovano {{synced}} od {{total}} proizvoda…",
+    "syncTypeFull": "Puna sinhronizacija",
+    "syncTypeIncremental": "Inkrementalna sinhronizacija",
+    "syncAlreadyRunning": "Sinhronizacija je već u toku",
+    "syncFailed": "Sinhronizacija nije uspela",
+    "incrementalFilterUnsupported": "Inkrementalna sinhronizacija nije podržana u MerchantPro API-ju ove prodavnice. Obratite se administratoru ako vam je potrebno potpuno osvežavanje kataloga.",
+    "lastSyncAt": "Poslednja sinhronizacija: {{count}} proizvoda u {{time}}"
   },
   "payTypeMap": {
     "title": "Mapiranje tipova plaćanja",

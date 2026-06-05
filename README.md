@@ -155,7 +155,7 @@ See full endpoint contracts and error model in `API_CONTRACT.md`.
 
 - **Auth**: login/session bootstrap for protected APIs
 - **MerchantPro Sync**: fetch orders with parameterized filters
-- **Products**: organization-scoped catalog, pull-from-shop sync (`GET /products/sync` SSE), inline search on Create Fiscal Bill
+- **Products**: organization-scoped catalog, DB-backed pull-from-shop sync (`GET /products/sync` SSE + `GET /products/sync/status` poll, `POST /products/sync/cancel`), inline search on Create Fiscal Bill
 - **Fiscal Bill**: create, detail, retry, and status operations
 - **RBAC and Scope**:
   - action-based permissions

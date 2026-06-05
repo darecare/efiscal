@@ -232,22 +232,61 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 - 200 Response: array of `ProductDto`
 - Errors: `401`, `403`
 
+### GET /products/sync/status
+- Description: Pollable sync job status for an organization (DB-backed). Use after page refresh or alongside SSE.
+- Query: `orgId` (required)
+- 200 Response:
+```json
+{
+  "running": true,
+  "syncJobId": 42,
+  "syncType": "INCREMENTAL",
+  "status": "RUNNING",
+  "synced": 2900,
+  "total": 120584,
+  "filterFrom": "2026-06-03T14:22:00Z",
+  "startedAt": "2026-06-04T12:00:00Z",
+  "finishedAt": null,
+  "errorMessage": null
+}
+```
+- When no job exists, `running` is `false` and other fields are null/zero.
+- When idle, the most recent job for the org may be returned with `running: false` (for “last sync” UI).
+- **Stale jobs:** `RUNNING` jobs older than 2 hours are auto-failed when this endpoint is called (and on sync start).
+- Errors: `401`, `403`, `404`
+
+### POST /products/sync/cancel
+- Description: Mark the org's active product sync job as `FAILED` with message `Cancelled by user`. Idempotent when no job is running.
+- Query: `orgId` (required)
+- 204 Response: no body
+- Errors: `401`, `403`, `404`
+
 ### GET /products/sync
-- Description: Pull products from MerchantPro via `GET_PRODUCTS` template and upsert into local `product` table. Streams progress as Server-Sent Events (SSE).
+- Description: Pull products from MerchantPro via `GET_PRODUCTS` template and upsert into local `product` table. Streams progress as Server-Sent Events (SSE). Creates a `product_sync_job` row and updates it on each page.
 - Query: `orgId` (required)
 - Response: `text/event-stream` with JSON event payloads:
 ```json
-{ "synced": 0, "total": 120, "done": false }
+{ "synced": 0, "total": 120, "done": false, "syncType": "FULL" }
 ```
 ```json
-{ "synced": 120, "total": 120, "done": true }
+{ "synced": 120, "total": 120, "done": true, "syncType": "FULL" }
 ```
+```json
+{ "synced": 0, "total": 0, "done": true, "syncType": "INCREMENTAL", "error": "INCREMENTAL_FILTER_UNSUPPORTED: ..." }
+```
+- **Sync type selection (server-side):**
+  - `FULL` — no prior completed full sync for the org, or last full sync did not complete the catalog (`synced < total` or `total == 0`).
+  - `INCREMENTAL` — after a `DONE` full job with `synced >= total` and `total > 0`; MerchantPro list calls use `modified[gte]=YYYY-MM-DD` with `filter_from` = last full job `finished_at` minus 1 day (date-only safety margin).
+- **Unsupported incremental filters:** if MerchantPro returns `undefined_filter` / "No such filter", the job fails with `errorMessage` prefixed by `INCREMENTAL_FILTER_UNSUPPORTED`. The server does **not** auto-fallback to full sync.
+- **Concurrency:** at most one `RUNNING` job per org (partial unique index). Second start while running → `409` with body = current `sync/status` payload. Concurrent duplicate starts that race past the check also return `409` (unique index violation).
+- **Stale jobs:** `RUNNING` jobs older than 2 hours are auto-failed on sync start and on `GET /products/sync/status`.
 - Notes:
-  - Client should use `fetch` with `Accept: text/event-stream` and `Authorization: Bearer <token>` (native `EventSource` cannot send the Bearer header).
+  - Client should use `fetch` with `Accept: text/event-stream, application/json` and `Authorization: Bearer <token>` (native `EventSource` cannot send the Bearer header).
   - Server-side emitter has no timeout; sync may run for large catalogs (rate-limited to ~80 MP requests/min).
   - Pagination follows MerchantPro `meta.links.next` (stops when `next` is null).
   - Client must handle stream end without `done: true` as an error.
-- Errors: `401`, `403`, `404`, `429`, `502`
+  - Poll `GET /products/sync/status` every 2–3s while syncing (refresh recovery).
+- Errors: `401`, `403`, `404`, `409` (sync already running), `429`, `502`
 
 ### GET /products/lookup
 - Description: Live price lookup from MerchantPro via `GET /api/v2/inventory/{type}/{identifier}` (`type` = `sku` or `ean`). Tries SKU first, then EAN.

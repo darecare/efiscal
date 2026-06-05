@@ -643,6 +643,7 @@
     "pullFromShop": "Pull from Shop",
     "pulling": "Pulling…",
     "pullSuccess": "Synced {{count}} products from shop.",
+    "pullSuccessNone": "Your catalog is already up to date.",
     "pullError": "Failed to pull products from shop.",
     "selectOrg": "Select organization…",
     "selectOrgHint": "Select an organization to view products.",
@@ -671,7 +672,13 @@
       "editTitle": "Edit Product"
     },
     "syncStarting": "Starting sync…",
-    "syncingProgress": "Synced {{synced}} of {{total}} products…"
+    "syncingProgress": "Synced {{synced}} of {{total}} products…",
+    "syncTypeFull": "Full sync",
+    "syncTypeIncremental": "Incremental sync",
+    "syncAlreadyRunning": "Sync already in progress",
+    "syncFailed": "Sync failed",
+    "incrementalFilterUnsupported": "Incremental sync is not supported by this shop's MerchantPro API. Contact your administrator if you need a full catalog refresh.",
+    "lastSyncAt": "Last sync: {{count}} products at {{time}}"
   },
   "payTypeMap": {
     "title": "Payment Type Mapping",

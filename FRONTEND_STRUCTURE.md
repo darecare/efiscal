@@ -75,8 +75,12 @@
 **Route:** `/fiscal-bills/products` — guarded by `FISCAL_MANAGE_PRODUCTS` ([`Products.jsx`](frontend/src/pages/Products.jsx)).
 
 - Organization selector + product table (CRUD).
-- **Pull from Shop:** [`productsApi.syncStream`](frontend/src/services/api.js) calls `GET /api/v1/products/sync` using `fetch` + ReadableStream (Bearer token in header; not native `EventSource`).
-- Progress UI: `<progress>` bar with `products.syncStarting` / `products.syncingProgress` locale keys.
+- **Pull from Shop:** [`productsApi.syncStream`](frontend/src/services/api.js) calls `GET /api/v1/products/sync` using `fetch` + ReadableStream (Bearer token in header; not native `EventSource`). Handles `409` via `onConflict` (re-attaches to running job).
+- **Sync recovery:** [`SyncContext`](frontend/src/contexts/SyncContext.jsx) polls `GET /products/sync/status` every 2.5s while syncing; `checkSyncStatus` on org change restores in-progress UI after page refresh.
+- **Cancel sync:** UI cancel calls `POST /products/sync/cancel` then clears local state.
+- **Per-org sync:** user may sync different orgs concurrently; guard blocks duplicate start for the same org only.
+- Progress UI: sync type label (`products.syncTypeFull` / `products.syncTypeIncremental`), `<progress>` bar with `products.syncStarting` / `products.syncingProgress`.
+- Last sync line: `products.lastSyncAt` when latest job is `DONE` and idle.
 
 **Create Fiscal Bill** ([`CreateFiscalBill.jsx`](frontend/src/pages/CreateFiscalBill.jsx)) — guarded by `FISCAL_CREATE_BILL`.
 

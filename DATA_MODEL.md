@@ -473,6 +473,30 @@ Migrations:
 - `V31__create_product_table.sql` — creates `product` table and indexes
 - `V32__seed_fiscal_products_action.sql` — seeds `FISCAL_MANAGE_PRODUCTS` action and grants for built-in admin roles
 - `V33__drop_org_searchshopproducts.sql` — removes deprecated `org.is_searchshopproducts` (product search is no longer gated by org flag; use RBAC actions instead)
+- `V34__add_product_sku_ean_indexes.sql` — SKU/EAN lookup indexes
+- `V35__widen_mp_product_id_to_bigint.sql` — `mp_product_id` BIGINT
+- `V36__create_product_sync_job.sql` — sync job tracking table
+
+### 2.19 product_sync_job
+Table name: product_sync_job
+Persistent MerchantPro product sync runs per organization (Option B). Progress survives page refresh; enforces one active sync per org. Stale `RUNNING` jobs (>2h) are auto-failed on status poll or sync start. User cancel marks job `FAILED` with `Cancelled by user`.
+
+| Column         | Type         | Constraints              | Notes                                      |
+|----------------|--------------|--------------------------|--------------------------------------------|
+| sync_job_id    | BIGINT       | PK, IDENTITY             | Job id                                     |
+| org_id         | BIGINT       | FK → org.org_id, NOT NULL| Organization scope                         |
+| status         | VARCHAR(16)  | NOT NULL                 | `RUNNING`, `DONE`, `FAILED`                |
+| sync_type      | VARCHAR(16)  | NOT NULL                 | `FULL`, `INCREMENTAL`                      |
+| synced         | INT          | NOT NULL, DEFAULT 0      | Products upserted so far                   |
+| total          | INT          | NOT NULL, DEFAULT 0      | Reported catalog total from MP meta        |
+| error_message  | TEXT         | NULL                     | Set on `FAILED`                            |
+| filter_from    | TIMESTAMPTZ  | NULL                     | MP date filter lower bound; NULL for FULL  |
+| started_at     | TIMESTAMPTZ  | NOT NULL                 | Job start                                  |
+| finished_at    | TIMESTAMPTZ  | NULL                     | Job end                                    |
+
+Indexes:
+- `(org_id, started_at DESC)` — latest job lookup
+- `(org_id) WHERE status = 'RUNNING'` — UNIQUE partial; one running job per org
 
 ## 3. Entity Relationships
 
@@ -480,6 +504,7 @@ Migrations:
 organizations
     ├── user_orgaccess (1:N)
     ├── product (1:N)
+    ├── product_sync_job (1:N)
     ├── platform_connections (1:N)
     ├── sales_orders (1:N)
     │     └── fiscalbill (1:N)
@@ -518,6 +543,8 @@ action_catalog → role_action_access (1:N)
 | fiscal_document_audit_log  | fiscal_document_id                             | Audit trail retrieval           |
 | product                    | (org_id) WHERE deleted_at IS NULL              | Product list/search by org      |
 | product                    | (org_id, mp_product_id) UNIQUE partial         | Sync upsert key                 |
+| product_sync_job           | (org_id, started_at DESC)                        | Latest job per org              |
+| product_sync_job           | (org_id) WHERE status = 'RUNNING' UNIQUE       | One active sync per org         |
 
 ---
 

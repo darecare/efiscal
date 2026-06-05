@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
-import { orgsApi } from '../services/api'
+import { orgsApi, productsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useSyncContext } from '../contexts/SyncContext'
 
@@ -11,11 +11,37 @@ function emptyForm() {
   return { name: '', sku: '', ean: '', lastKnownPrice: '', isActive: true }
 }
 
+function mapSyncErrorMessage(raw, t) {
+  if (!raw) return t('products.pullError')
+  if (raw.includes('INCREMENTAL_FILTER_UNSUPPORTED')) {
+    return t('products.incrementalFilterUnsupported')
+  }
+  return raw
+}
+
+function formatDateTime(value, dash) {
+  if (!value) return dash
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
 export default function Products() {
   const { t } = useTranslation()
   const { user: currentUser } = useAuth()
   const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
-  const { syncing, syncOrgId, syncProgress, syncResult, startSync, cancelSync, consumeResult } = useSyncContext()
+  const {
+    syncing,
+    syncOrgId,
+    syncProgress,
+    syncType,
+    syncResult,
+    startSync,
+    cancelSync,
+    consumeResult,
+    checkSyncStatus,
+  } = useSyncContext()
 
   const [orgs, setOrgs] = useState([])
   const [selectedOrgId, setSelectedOrgId] = useState('')
@@ -32,6 +58,7 @@ export default function Products() {
   const [form, setForm] = useState(emptyForm())
   const [formError, setFormError] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [lastSync, setLastSync] = useState(null)
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
   const isSyncingThisOrg = syncing && String(syncOrgId) === String(selectedOrgId)
@@ -52,6 +79,24 @@ export default function Products() {
   }, [selectedOrgId, page])
 
   useEffect(() => {
+    if (!selectedOrgId) {
+      setLastSync(null)
+      return undefined
+    }
+    checkSyncStatus(Number(selectedOrgId))
+    productsApi.syncStatus(Number(selectedOrgId))
+      .then((status) => {
+        if (!status.running && status.status === 'DONE' && status.finishedAt) {
+          setLastSync({ synced: status.synced, finishedAt: status.finishedAt })
+        } else {
+          setLastSync(null)
+        }
+      })
+      .catch(() => setLastSync(null))
+    return undefined
+  }, [selectedOrgId, checkSyncStatus])
+
+  useEffect(() => {
     if (!success) return undefined
     const timer = setTimeout(() => setSuccess(null), 3500)
     return () => clearTimeout(timer)
@@ -64,9 +109,20 @@ export default function Products() {
     if (syncResult.ok) {
       setPage(0)
       loadProducts(0)
-      setSuccess(t('products.pullSuccess', { count: syncResult.synced }))
+      productsApi.syncStatus(Number(selectedOrgId))
+        .then((status) => {
+          if (status.finishedAt) {
+            setLastSync({ synced: status.synced, finishedAt: status.finishedAt })
+          }
+        })
+        .catch(() => {})
+      setSuccess(
+        syncResult.synced === 0
+          ? t('products.pullSuccessNone')
+          : t('products.pullSuccess', { count: syncResult.synced }),
+      )
     } else {
-      setError(syncResult.message || t('products.pullError'))
+      setError(mapSyncErrorMessage(syncResult.message, t))
     }
     consumeResult()
   }, [syncResult, selectedOrgId])
@@ -177,9 +233,13 @@ export default function Products() {
   }
 
   function handlePullFromShop() {
-    if (!selectedOrgId || syncing) return
+    if (!selectedOrgId || isSyncingThisOrg) return
     setError(null)
-    startSync(Number(selectedOrgId), t('products.pullError'))
+    startSync(
+      Number(selectedOrgId),
+      t('products.pullError'),
+      t('products.syncAlreadyRunning'),
+    )
   }
 
   function formatPrice(value) {
@@ -208,11 +268,11 @@ export default function Products() {
               type="button"
               className="secondary-button"
               onClick={handlePullFromShop}
-              disabled={syncing}
+              disabled={isSyncingThisOrg}
             >
               {isSyncingThisOrg ? t('products.pulling') : t('products.pullFromShop')}
             </button>
-            <button type="button" className="primary-button" onClick={openAdd} disabled={syncing}>
+            <button type="button" className="primary-button" onClick={openAdd} disabled={isSyncingThisOrg}>
               {t('products.addProduct')}
             </button>
           </>
@@ -236,6 +296,14 @@ export default function Products() {
             ))}
           </select>
         </div>
+        {lastSync && !isSyncingThisOrg && (
+          <p className="muted" style={{ marginTop: '0.75rem', marginBottom: 0 }}>
+            {t('products.lastSyncAt', {
+              count: lastSync.synced,
+              time: formatDateTime(lastSync.finishedAt, t('common.dash')),
+            })}
+          </p>
+        )}
       </div>
 
       {success && (
@@ -252,6 +320,13 @@ export default function Products() {
 
       {isSyncingThisOrg && syncProgress && (
         <div className="card sync-progress-card" style={{ marginBottom: '1rem' }}>
+          {syncType && (
+            <p className="muted" style={{ marginBottom: '0.25rem' }}>
+              {syncType === 'INCREMENTAL'
+                ? t('products.syncTypeIncremental')
+                : t('products.syncTypeFull')}
+            </p>
+          )}
           <p className="muted" style={{ marginBottom: '0.5rem' }}>
             {syncProgress.total > 0
               ? t('products.syncingProgress', { synced: syncProgress.synced, total: syncProgress.total })

@@ -6,9 +6,13 @@ import com.efiscal.backend.service.ProductService.LivePriceLookupResult;
 import com.efiscal.backend.service.ProductService.ProductDto;
 import com.efiscal.backend.service.ProductService.ProductPage;
 import com.efiscal.backend.service.ProductService.ProductRequest;
+import com.efiscal.backend.service.ProductSyncJobService.SyncStatusDto;
 import java.util.List;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -83,11 +87,42 @@ public class ProductController {
         return productService.search(orgId, q, name, sku, ean);
     }
 
-    @GetMapping("/sync")
-    public SseEmitter sync(@RequestParam Long orgId) {
+    @GetMapping("/sync/status")
+    public SyncStatusDto syncStatus(@RequestParam Long orgId) {
         authorizationService.requireAction("FISCAL_MANAGE_PRODUCTS");
         authorizationService.requireOrgAccess(orgId);
-        return productService.syncFromShopStream(orgId);
+        return productService.getSyncStatus(orgId);
+    }
+
+    @GetMapping(
+        value = "/sync",
+        produces = { MediaType.TEXT_EVENT_STREAM_VALUE, MediaType.APPLICATION_JSON_VALUE }
+    )
+    public Object sync(@RequestParam Long orgId) {
+        authorizationService.requireAction("FISCAL_MANAGE_PRODUCTS");
+        authorizationService.requireOrgAccess(orgId);
+        try {
+            return productService.syncFromShopStream(orgId);
+        } catch (ResponseStatusException ex) {
+            if (ex.getStatusCode() == HttpStatus.CONFLICT) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(productService.getSyncStatus(orgId));
+            }
+            throw ex;
+        } catch (DataIntegrityViolationException ex) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(productService.getSyncStatus(orgId));
+        }
+    }
+
+    @PostMapping("/sync/cancel")
+    public ResponseEntity<Void> cancelSync(@RequestParam Long orgId) {
+        authorizationService.requireAction("FISCAL_MANAGE_PRODUCTS");
+        authorizationService.requireOrgAccess(orgId);
+        productService.cancelSync(orgId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/lookup")

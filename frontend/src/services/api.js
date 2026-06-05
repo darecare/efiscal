@@ -267,10 +267,10 @@ export const taxCategoryApi = {
 
 function decodeApiError(body, fallback) {
   if (!body) return fallback
+  if (typeof body.message === 'string' && body.message.trim()) return body.message
   const err = body.error
   if (err && typeof err === 'object' && err.message) return err.message
-  if (typeof err === 'string') return err
-  if (body.message) return body.message
+  if (typeof err === 'string' && err !== 'Forbidden' && err !== 'Not Found') return err
   return fallback
 }
 
@@ -296,7 +296,14 @@ export const productsApi = {
     })
     return response.data
   },
-  syncStream(orgId, { onProgress, onDone, onError, failedMessage } = {}) {
+  async syncStatus(orgId) {
+    const response = await api.get('/products/sync/status', { params: { orgId } })
+    return response.data
+  },
+  async cancelSync(orgId) {
+    await api.post('/products/sync/cancel', null, { params: { orgId } })
+  },
+  syncStream(orgId, { onProgress, onDone, onError, onConflict, failedMessage } = {}) {
     const token = localStorage.getItem('token')
     const controller = new AbortController()
     const url = `/api/v1/products/sync?orgId=${encodeURIComponent(orgId)}`
@@ -304,7 +311,7 @@ export const productsApi = {
 
     fetch(url, {
       headers: {
-        Accept: 'text/event-stream',
+        Accept: 'text/event-stream, application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       signal: controller.signal,
@@ -313,6 +320,10 @@ export const productsApi = {
         let message = fallbackMessage
         try {
           const body = await response.json()
+          if (response.status === 409) {
+            onConflict?.(body)
+            return
+          }
           message = decodeApiError(body, fallbackMessage)
         } catch {
           message = response.statusText || fallbackMessage
@@ -327,6 +338,10 @@ export const productsApi = {
       const handleEvent = (data) => {
         if (data.done) {
           completed = true
+          if (data.error) {
+            onError?.(new Error(data.error))
+            return
+          }
           onDone?.(data)
         } else {
           onProgress?.(data)

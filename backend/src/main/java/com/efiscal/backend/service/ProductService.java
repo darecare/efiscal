@@ -7,8 +7,11 @@ import com.efiscal.backend.repository.ProductRepository;
 import com.efiscal.backend.service.MerchantProProductService.MerchantProProductRow;
 import com.efiscal.backend.service.MerchantProProductService.ProductFetchResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.efiscal.backend.service.ProductSyncJobService.SyncStartDecision;
+import com.efiscal.backend.service.ProductSyncJobService.SyncStatusDto;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -30,10 +33,12 @@ public class ProductService {
     private static final long SSE_TIMEOUT_MS = 0L;
     private static final long SYNC_PAGE_THROTTLE_MS = 750L;
     private static final int SEARCH_MAX_RESULTS = 50;
+    static final String INCREMENTAL_FILTER_UNSUPPORTED = "INCREMENTAL_FILTER_UNSUPPORTED";
 
     private final ProductRepository productRepository;
     private final OrgRepository orgRepository;
     private final MerchantProProductService merchantProProductService;
+    private final ProductSyncJobService productSyncJobService;
     private final ObjectMapper objectMapper;
     private final ProductService self;
 
@@ -41,14 +46,34 @@ public class ProductService {
         ProductRepository productRepository,
         OrgRepository orgRepository,
         MerchantProProductService merchantProProductService,
+        ProductSyncJobService productSyncJobService,
         ObjectMapper objectMapper,
         @Lazy ProductService self
     ) {
         this.productRepository = productRepository;
         this.orgRepository = orgRepository;
         this.merchantProProductService = merchantProProductService;
+        this.productSyncJobService = productSyncJobService;
         this.objectMapper = objectMapper;
         this.self = self;
+    }
+
+    @Transactional(readOnly = true)
+    public SyncStatusDto getSyncStatus(Long orgId) {
+        requireOrg(orgId);
+        return productSyncJobService.getStatus(orgId);
+    }
+
+    @Transactional
+    public void cancelSync(Long orgId) {
+        requireOrg(orgId);
+        productSyncJobService.findRunningJob(orgId).ifPresent(job ->
+            productSyncJobService.completeJob(
+                job.getSyncJobId(),
+                ProductSyncJobService.STATUS_FAILED,
+                "Cancelled by user"
+            )
+        );
     }
 
     @Transactional(readOnly = true)
@@ -123,24 +148,43 @@ public class ProductService {
     }
 
     public SseEmitter syncFromShopStream(Long orgId) {
-        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
-        emitter.onTimeout(emitter::complete);
-        emitter.onError(ex -> emitter.complete());
-
         OrgEntity org = requireOrg(orgId);
+        SyncStartDecision decision = productSyncJobService.resolveSyncStart(orgId);
+        long jobId = productSyncJobService.startJob(orgId, decision.syncType(), decision.filterFrom());
+
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+        emitter.onTimeout(() -> failJobAndComplete(emitter, jobId, "Client disconnected (timeout)"));
+        emitter.onError(ex -> failJobAndComplete(emitter, jobId, "Client disconnected"));
+
         long clientId = org.getClient().getClientId();
-        java.util.concurrent.CompletableFuture.runAsync(() -> runSyncStream(orgId, clientId, emitter));
+        LocalDate modifiedSince = decision.modifiedSince();
+        String syncType = decision.syncType();
+        java.util.concurrent.CompletableFuture.runAsync(
+            () -> runSyncStream(orgId, clientId, jobId, modifiedSince, syncType, emitter));
         return emitter;
     }
 
-    private void runSyncStream(Long orgId, long clientId, SseEmitter emitter) {
+    private void failJobAndComplete(SseEmitter emitter, long jobId, String message) {
+        productSyncJobService.completeJob(jobId, ProductSyncJobService.STATUS_FAILED, message);
+        emitter.complete();
+    }
+
+    private void runSyncStream(
+        Long orgId,
+        long clientId,
+        long jobId,
+        LocalDate modifiedSince,
+        String syncType,
+        SseEmitter emitter
+    ) {
+        int synced = 0;
+        Integer total = null;
         try {
             int start = 0;
-            int synced = 0;
-            Integer total = null;
 
             while (true) {
-                ProductFetchResult page = merchantProProductService.fetchProducts(orgId, start, SYNC_PAGE_SIZE);
+                ProductFetchResult page = merchantProProductService.fetchProducts(
+                    orgId, start, SYNC_PAGE_SIZE, modifiedSince);
 
                 if (total == null) {
                     total = page.total() > 0 ? page.total() : null;
@@ -155,7 +199,8 @@ public class ProductService {
                 }
 
                 int reportedTotal = total != null ? total : synced;
-                sendProgress(emitter, new SyncProgress(synced, reportedTotal, false));
+                productSyncJobService.updateProgress(jobId, synced, reportedTotal);
+                sendProgress(emitter, new SyncProgress(synced, reportedTotal, false, syncType));
 
                 if (page.nextLink() == null || page.data().isEmpty()) {
                     break;
@@ -165,23 +210,52 @@ public class ProductService {
             }
 
             int finalTotal = total != null ? total : synced;
-            sendProgress(emitter, new SyncProgress(synced, finalTotal, true));
+            productSyncJobService.updateProgress(jobId, synced, finalTotal);
+            productSyncJobService.completeJob(jobId, ProductSyncJobService.STATUS_DONE, null);
+            sendProgress(emitter, new SyncProgress(synced, finalTotal, true, syncType));
             emitter.complete();
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            completeWithError(emitter, new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "Product sync interrupted"));
+            failSyncJob(emitter, jobId, synced, total, syncType, "Product sync interrupted");
+        } catch (ResponseStatusException ex) {
+            failSyncJob(emitter, jobId, synced, total, syncType, mapSyncFailureMessage(ex));
         } catch (Exception ex) {
-            completeWithError(emitter, ex);
+            String message = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+            failSyncJob(emitter, jobId, synced, total, syncType, message);
         }
     }
 
-    private void completeWithError(SseEmitter emitter, Exception ex) {
+    private void failSyncJob(
+        SseEmitter emitter,
+        long jobId,
+        int synced,
+        Integer total,
+        String syncType,
+        String message
+    ) {
+        productSyncJobService.completeJob(jobId, ProductSyncJobService.STATUS_FAILED, message);
         try {
-            emitter.completeWithError(ex);
-        } catch (Exception ignored) {
+            int reportedTotal = total != null ? total : synced;
+            sendProgress(emitter, new SyncProgress(synced, reportedTotal, true, syncType, message));
+            emitter.complete();
+        } catch (IOException ignored) {
             emitter.complete();
         }
+    }
+
+    private static String mapSyncFailureMessage(ResponseStatusException ex) {
+        String reason = ex.getReason();
+        if (reason == null || reason.isBlank()) {
+            return ex.getClass().getSimpleName();
+        }
+        if (isUndefinedFilterError(reason)) {
+            return INCREMENTAL_FILTER_UNSUPPORTED + ": " + reason;
+        }
+        return reason;
+    }
+
+    private static boolean isUndefinedFilterError(String message) {
+        return message.contains("No such filter") || message.contains("undefined_filter");
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -351,7 +425,11 @@ public class ProductService {
         Boolean isActive
     ) {}
 
-    public record SyncProgress(int synced, int total, boolean done) {}
+    public record SyncProgress(int synced, int total, boolean done, String syncType, String error) {
+        public SyncProgress(int synced, int total, boolean done, String syncType) {
+            this(synced, total, done, syncType, null);
+        }
+    }
 
     public record LivePriceLookupResult(
         String name,

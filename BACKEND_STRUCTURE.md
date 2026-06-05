@@ -181,11 +181,16 @@ Reference-only guidance:
 
 ### 6.6 MerchantPro Products Integration (Implemented)
 - Service: `MerchantProProductService` — resolves `MP` apiconn + `GET_PRODUCTS` apitemplate, executes GET with Basic auth.
-- Query params: `fields=id,name,sku,ean,price_gross`, `start`, `limit`, optional `sku_equals`, `ean_equals`.
-- Service: `ProductService` — local CRUD; catalog search via `q` (`ProductRepository.searchByTerm`: name LIKE OR exact SKU/EAN; active, non-deleted only); legacy `name`/`sku`/`ean` AND filters when `q` omitted; `validateRequest` enforces non-blank name; paginated sync with per-page `REQUIRES_NEW` (`upsertPage`); SSE progress (`syncFromShopStream`); live lookup SKU-first then EAN.
+- Query params: `fields=id,name,sku,ean,price_gross`, `start`, `limit`, optional `modified[gte]` (incremental sync), optional `sku_equals`, `ean_equals`.
+- Entity: `ProductSyncJobEntity` — JPA entity for `product_sync_job` table (sync lifecycle per org).
+- Repository: `ProductSyncJobRepository` — derived queries by org+status, latest by org+type+status, latest by org.
+- Service: `ProductSyncJobService` — sync job lifecycle: `resolveSyncStart` (stale cleanup + FULL/INCREMENTAL decision), `startJob`, `updateProgress`, `completeJob`, `getStatus` (also triggers stale cleanup); stale threshold 2h.
+- Service: `ProductService` — local CRUD; catalog search via `q` (`ProductRepository.searchByTerm`: name LIKE OR exact SKU/EAN; active, non-deleted only); legacy `name`/`sku`/`ean` AND filters when `q` omitted; `validateRequest` enforces non-blank name; paginated sync with per-page `REQUIRES_NEW` (`upsertPage`); SSE progress (`syncFromShopStream`, includes `syncType` in events); `cancelSync` marks running job failed; live lookup SKU-first then EAN.
 - Upsert match order: `mp_product_id` → SKU (case-insensitive) → EAN; clears `deleted_at` on match.
 - Controller: `ProductController` at `/api/v1/products`.
-  - `GET /products/sync` — `SseEmitter`, 5 min timeout, events `{ synced, total, done }`
+  - `GET /products/sync/status` — pollable DB-backed sync status (stale cleanup on read)
+  - `GET /products/sync` — `SseEmitter`, no timeout, events `{ synced, total, done, syncType, error? }`; 409 when sync already running
+  - `POST /products/sync/cancel` — cancel in-progress sync for org
   - `GET /products/search` — optional `q` or legacy filters
   - `GET /products/lookup` — live MerchantPro price for selected SKU/EAN
 - Required apitemplate: `operation_key = GET_PRODUCTS`, `endpoint_path` relative to MerchantPro base (e.g. `api/v2/products`).

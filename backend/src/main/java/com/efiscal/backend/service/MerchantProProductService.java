@@ -7,6 +7,7 @@ import com.efiscal.backend.repository.ApiTemplateRepository;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
@@ -46,17 +47,28 @@ public class MerchantProProductService {
 
     @Transactional(readOnly = true)
     public ProductFetchResult fetchProducts(Long orgId, int start, int limit) {
+        return fetchProducts(orgId, start, limit, null);
+    }
+
+    /**
+     * @param modifiedSince when non-null, appends MerchantPro incremental filter {@code modified[gte]}.
+     */
+    @Transactional(readOnly = true)
+    public ProductFetchResult fetchProducts(Long orgId, int start, int limit, LocalDate modifiedSince) {
         ApiConnEntity conn = resolveConnection(orgId);
         ApiTemplateEntity template = resolveTemplate(conn);
 
         String apiBase = normalizeApiBase(conn.getApiBaseUrl());
-        String url = apiBase
-            + template.getEndpointPath()
-            + "?fields=" + FIELDS
-            + "&start=" + start
-            + "&limit=" + limit;
+        StringBuilder url = new StringBuilder(apiBase)
+            .append(template.getEndpointPath())
+            .append("?fields=").append(FIELDS)
+            .append("&start=").append(start)
+            .append("&limit=").append(limit);
+        if (modifiedSince != null) {
+            url.append("&modified%5Bgte%5D=").append(modifiedSince);
+        }
 
-        URI uri = buildUri(url);
+        URI uri = buildUri(url.toString());
         Map<?, ?> body = executeGet(conn, uri);
         return parseCollectionResponse(body);
     }

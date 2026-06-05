@@ -92,8 +92,11 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 ### 6.4A Product catalog management
 1. User with `FISCAL_MANAGE_PRODUCTS` opens Products screen under Fiscal Bills menu
 2. User selects organization and views/edits local product catalog (name, SKU, EAN, last known price)
-3. User may click "Pull from Shop" to sync products from MerchantPro into local `product` table; UI shows sync progress (synced / total)
-4. At least one of SKU or EAN is required per product for live price lookup
+3. User may click "Pull from Shop" to sync products from MerchantPro into local `product` table; UI shows sync progress (synced / total) and sync type (full vs incremental)
+4. After a completed full catalog sync, subsequent pulls use incremental sync (MerchantPro `modified[gte]` filter) when supported
+5. Sync progress survives page refresh via status polling; user may cancel an in-progress sync
+6. When idle, UI shows last successful sync timestamp and product count
+7. At least one of SKU or EAN is required per product for live price lookup
 
 ### 6.5 Role and Access Management
 1. SuperAdmin/Admin opens Role Definition page.
