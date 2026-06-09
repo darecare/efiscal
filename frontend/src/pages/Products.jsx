@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useSyncContext } from '../contexts/SyncContext'
 
 const PAGE_SIZE = 100
+const SYNC_LIVE_REFRESH_MS = 4000
 
 function emptyForm() {
   return { name: '', sku: '', ean: '', lastKnownPrice: '', isActive: true }
@@ -160,6 +161,12 @@ export default function Products() {
     consumeResult()
   }, [syncResult, selectedOrgId])
 
+  useEffect(() => {
+    if (!isSyncingThisOrg) return undefined
+    const id = setInterval(() => silentRefreshProducts(), SYNC_LIVE_REFRESH_MS)
+    return () => clearInterval(id)
+  }, [isSyncingThisOrg, page, debouncedQuery, selectedOrgId])
+
   function clearSelection() {
     setSelectedIds(new Set())
     setIsAllPagesSelected(false)
@@ -222,6 +229,20 @@ export default function Products() {
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function silentRefreshProducts(pageOverride) {
+    if (!selectedOrgId) return
+    const currentPage = pageOverride ?? page
+    try {
+      const listParams = { page: currentPage, size: PAGE_SIZE }
+      if (debouncedQuery) listParams.q = debouncedQuery
+      const data = await productsApi.list(Number(selectedOrgId), listParams)
+      setProducts(data.items || [])
+      setTotalCount(data.totalCount ?? 0)
+    } catch {
+      // silent — don't surface transient errors during background refresh
     }
   }
 
