@@ -170,7 +170,7 @@ const getNavItems = (user) => {
 export default function AppShell({ title, subtitle, actions, children }) {
   const { t } = useTranslation()
   const { user, logout } = useAuth()
-  const { syncing, syncProgress } = useSyncContext()
+  const { syncing, syncProgress, syncOrgName } = useSyncContext()
   const location = useLocation()
   const navigate = useNavigate()
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -235,8 +235,12 @@ export default function AppShell({ title, subtitle, actions, children }) {
             <span className="sync-indicator" aria-label={t('products.pulling')}>
               <span className="sync-indicator__spinner" aria-hidden="true" />
               {syncProgress && syncProgress.total > 0
-                ? t('products.syncingProgress', { synced: syncProgress.synced, total: syncProgress.total })
-                : t('products.pulling')}
+                ? syncOrgName
+                  ? t('products.syncingProgressOrg', { org: syncOrgName, synced: syncProgress.synced, total: syncProgress.total })
+                  : t('products.syncingProgress', { synced: syncProgress.synced, total: syncProgress.total })
+                : syncOrgName
+                  ? t('products.pullingOrg', { org: syncOrgName })
+                  : t('products.pulling')}
             </span>
           )}
           <LanguageSwitcher />

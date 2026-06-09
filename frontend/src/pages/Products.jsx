@@ -115,7 +115,8 @@ export default function Products() {
       setLastSync(null)
       return undefined
     }
-    checkSyncStatus(Number(selectedOrgId))
+    const selectedOrgName = orgs.find((o) => String(o.orgId) === String(selectedOrgId))?.name
+    checkSyncStatus(Number(selectedOrgId), selectedOrgName)
     productsApi.syncStatus(Number(selectedOrgId))
       .then((status) => {
         if (!status.running && status.status === 'DONE' && status.finishedAt) {
@@ -369,11 +370,13 @@ export default function Products() {
   function handlePullFromShop() {
     if (!selectedOrgId || isSyncingThisOrg) return
     setError(null)
+    const orgName = orgs.find((o) => String(o.orgId) === String(selectedOrgId))?.name
     startSync(
       Number(selectedOrgId),
       t('products.pullError'),
       t('products.syncAlreadyRunning'),
       'AUTO',
+      orgName,
     )
   }
 
@@ -381,11 +384,13 @@ export default function Products() {
     if (!selectedOrgId || isSyncingThisOrg) return
     if (!window.confirm(t('products.fullRefreshConfirm'))) return
     setError(null)
+    const orgName = orgs.find((o) => String(o.orgId) === String(selectedOrgId))?.name
     startSync(
       Number(selectedOrgId),
       t('products.pullError'),
       t('products.syncAlreadyRunning'),
       'RESET_FULL',
+      orgName,
     )
   }
 

@@ -12,7 +12,6 @@ import com.efiscal.backend.service.MerchantProProductService.ProductFetchResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.efiscal.backend.service.ProductSyncJobService.SyncStartDecision;
 import com.efiscal.backend.service.ProductSyncJobService.SyncStatusDto;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -215,8 +214,8 @@ public class ProductService {
         long jobId = productSyncJobService.startJob(orgId, decision.syncType(), decision.filterFrom());
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
-        emitter.onTimeout(() -> failJobAndComplete(emitter, jobId, "Client disconnected (timeout)"));
-        emitter.onError(ex -> failJobAndComplete(emitter, jobId, "Client disconnected"));
+        emitter.onTimeout(() -> {});
+        emitter.onError(ex -> {});
 
         long clientId = org.getClient().getClientId();
         LocalDate modifiedSince = decision.modifiedSince();
@@ -224,11 +223,6 @@ public class ProductService {
         java.util.concurrent.CompletableFuture.runAsync(
             () -> runSyncStream(orgId, clientId, jobId, modifiedSince, syncType, emitter));
         return emitter;
-    }
-
-    private void failJobAndComplete(SseEmitter emitter, long jobId, String message) {
-        productSyncJobService.completeJob(jobId, ProductSyncJobService.STATUS_FAILED, message);
-        emitter.complete();
     }
 
     private void runSyncStream(
@@ -283,7 +277,7 @@ public class ProductService {
             productSyncJobService.updateProgress(jobId, synced, finalTotal);
             productSyncJobService.completeJob(jobId, ProductSyncJobService.STATUS_DONE, null);
             sendProgress(emitter, new SyncProgress(synced, finalTotal, true, syncType));
-            emitter.complete();
+            try { emitter.complete(); } catch (Exception ignored) {}
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             failSyncJob(emitter, jobId, synced, total, syncType, "Product sync interrupted");
@@ -304,13 +298,9 @@ public class ProductService {
         String message
     ) {
         productSyncJobService.completeJob(jobId, ProductSyncJobService.STATUS_FAILED, message);
-        try {
-            int reportedTotal = total != null ? total : synced;
-            sendProgress(emitter, new SyncProgress(synced, reportedTotal, true, syncType, message));
-            emitter.complete();
-        } catch (IOException ignored) {
-            emitter.complete();
-        }
+        int reportedTotal = total != null ? total : synced;
+        sendProgress(emitter, new SyncProgress(synced, reportedTotal, true, syncType, message));
+        try { emitter.complete(); } catch (Exception ignored) {}
     }
 
     private static String mapSyncFailureMessage(ResponseStatusException ex) {
@@ -389,9 +379,13 @@ public class ProductService {
         );
     }
 
-    private void sendProgress(SseEmitter emitter, SyncProgress progress) throws IOException {
-        String json = objectMapper.writeValueAsString(progress);
-        emitter.send(SseEmitter.event().data(json, MediaType.APPLICATION_JSON));
+    private void sendProgress(SseEmitter emitter, SyncProgress progress) {
+        try {
+            String json = objectMapper.writeValueAsString(progress);
+            emitter.send(SseEmitter.event().data(json, MediaType.APPLICATION_JSON));
+        } catch (Exception ignored) {
+            // Client disconnected; worker continues and job stays RUNNING in DB
+        }
     }
 
     private Long upsertFromMerchantPro(
