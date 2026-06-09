@@ -1,10 +1,12 @@
 package com.efiscal.backend.service;
 
 import com.efiscal.backend.model.ProductSyncJobEntity;
+import com.efiscal.backend.repository.ProductRepository;
 import com.efiscal.backend.repository.ProductSyncJobRepository;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -18,15 +20,26 @@ public class ProductSyncJobService {
     public static final String STATUS_DONE = "DONE";
     public static final String STATUS_FAILED = "FAILED";
 
+    public static final String SYNC_MODE_AUTO = "AUTO";
+    public static final String SYNC_MODE_INCREMENTAL = "INCREMENTAL";
+    public static final String SYNC_MODE_FULL = "FULL";
+    public static final String SYNC_MODE_RESET_FULL = "RESET_FULL";
+
     public static final String SYNC_TYPE_FULL = "FULL";
     public static final String SYNC_TYPE_INCREMENTAL = "INCREMENTAL";
+    public static final String SYNC_TYPE_RESET_FULL = "RESET_FULL";
 
     private static final long STALE_JOB_HOURS = 2L;
 
     private final ProductSyncJobRepository productSyncJobRepository;
+    private final ProductRepository productRepository;
 
-    public ProductSyncJobService(ProductSyncJobRepository productSyncJobRepository) {
+    public ProductSyncJobService(
+        ProductSyncJobRepository productSyncJobRepository,
+        ProductRepository productRepository
+    ) {
         this.productSyncJobRepository = productSyncJobRepository;
+        this.productRepository = productRepository;
     }
 
     @Transactional
@@ -46,33 +59,88 @@ public class ProductSyncJobService {
 
     @Transactional(readOnly = true)
     public Optional<ProductSyncJobEntity> findLastCompletedFullJob(Long orgId) {
-        return productSyncJobRepository.findTopByOrgIdAndSyncTypeAndStatusOrderByStartedAtDesc(
-            orgId, SYNC_TYPE_FULL, STATUS_DONE);
+        return productSyncJobRepository.findTopByOrgIdAndSyncTypeInAndStatusOrderByStartedAtDesc(
+            orgId,
+            List.of(SYNC_TYPE_FULL, SYNC_TYPE_RESET_FULL),
+            STATUS_DONE
+        );
     }
 
-    @Transactional
-    public SyncStartDecision resolveSyncStart(Long orgId) {
+    @Transactional(readOnly = true)
+    public SyncStartDecision resolveSyncStart(Long orgId, String requestedMode) {
         failStaleRunningJobs(orgId);
         Optional<ProductSyncJobEntity> running = findRunningJob(orgId);
         if (running.isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Sync already in progress");
         }
 
-        String syncType = SYNC_TYPE_FULL;
-        OffsetDateTime filterFrom = null;
-        LocalDate modifiedSince = null;
+        String mode = normalizeMode(requestedMode);
+        long visibleCount = productRepository.countVisibleByOrgId(orgId);
 
-        Optional<ProductSyncJobEntity> lastFull = findLastCompletedFullJob(orgId);
-        if (lastFull.isPresent()) {
-            ProductSyncJobEntity job = lastFull.get();
-            if (job.getSynced() >= job.getTotal() && job.getTotal() > 0 && job.getFinishedAt() != null) {
-                syncType = SYNC_TYPE_INCREMENTAL;
-                filterFrom = job.getFinishedAt();
-                modifiedSince = filterFrom.atZoneSameInstant(ZoneOffset.UTC).toLocalDate().minusDays(1);
-            }
+        if (SYNC_MODE_RESET_FULL.equals(mode)) {
+            return new SyncStartDecision(SYNC_TYPE_RESET_FULL, null, null);
+        }
+        if (SYNC_MODE_FULL.equals(mode)) {
+            return new SyncStartDecision(SYNC_TYPE_FULL, null, null);
+        }
+        if (SYNC_MODE_INCREMENTAL.equals(mode)) {
+            return resolveIncrementalStart(orgId);
         }
 
-        return new SyncStartDecision(syncType, filterFrom, modifiedSince);
+        // AUTO: force full when catalog is empty; otherwise infer incremental vs full
+        if (visibleCount == 0) {
+            return new SyncStartDecision(SYNC_TYPE_FULL, null, null);
+        }
+        return resolveAutoStart(orgId);
+    }
+
+    private SyncStartDecision resolveAutoStart(Long orgId) {
+        Optional<ProductSyncJobEntity> lastFull = findLastCompletedFullJob(orgId);
+        if (lastFull.isEmpty()) {
+            return new SyncStartDecision(SYNC_TYPE_FULL, null, null);
+        }
+        ProductSyncJobEntity job = lastFull.get();
+        if (job.getSynced() >= job.getTotal() && job.getTotal() > 0 && job.getFinishedAt() != null) {
+            OffsetDateTime filterFrom = job.getFinishedAt();
+            LocalDate modifiedSince = filterFrom.atZoneSameInstant(ZoneOffset.UTC).toLocalDate().minusDays(1);
+            return new SyncStartDecision(SYNC_TYPE_INCREMENTAL, filterFrom, modifiedSince);
+        }
+        return new SyncStartDecision(SYNC_TYPE_FULL, null, null);
+    }
+
+    private SyncStartDecision resolveIncrementalStart(Long orgId) {
+        Optional<ProductSyncJobEntity> lastFull = findLastCompletedFullJob(orgId);
+        if (lastFull.isEmpty()) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Incremental sync requires a prior completed full sync"
+            );
+        }
+        ProductSyncJobEntity job = lastFull.get();
+        if (job.getFinishedAt() == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Incremental sync requires a prior completed full sync"
+            );
+        }
+        OffsetDateTime filterFrom = job.getFinishedAt();
+        LocalDate modifiedSince = filterFrom.atZoneSameInstant(ZoneOffset.UTC).toLocalDate().minusDays(1);
+        return new SyncStartDecision(SYNC_TYPE_INCREMENTAL, filterFrom, modifiedSince);
+    }
+
+    private static String normalizeMode(String requestedMode) {
+        if (requestedMode == null || requestedMode.isBlank()) {
+            return SYNC_MODE_AUTO;
+        }
+        return requestedMode.trim().toUpperCase();
+    }
+
+    public static boolean isFullCatalogSync(String syncType) {
+        return SYNC_TYPE_FULL.equals(syncType) || SYNC_TYPE_RESET_FULL.equals(syncType);
+    }
+
+    public static boolean isResetFullSync(String syncType) {
+        return SYNC_TYPE_RESET_FULL.equals(syncType);
     }
 
     @Transactional

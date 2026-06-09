@@ -461,13 +461,19 @@ Organization-scoped product catalog for fiscal bill line item lookup. Populated 
 | is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                             |
 | created_at          | TIMESTAMPTZ  | NOT NULL                 |                             |
 | updated_at          | TIMESTAMPTZ  | NOT NULL                 |                             |
-| deleted_at          | TIMESTAMPTZ  | NULL                     | Soft delete                   |
+| deleted_at          | TIMESTAMPTZ  | NULL                     | True delete for `MANUAL` products |
+| source_type         | VARCHAR(16)  | NOT NULL, DEFAULT `MANUAL` | `MANUAL` or `MERCHANTPRO` |
+| sync_status         | VARCHAR(20)  | NOT NULL, DEFAULT `ACTIVE` | `ACTIVE` or `MISSING_IN_SOURCE` (synced rows only) |
+| hidden_at           | TIMESTAMPTZ  | NULL                     | Local hide/archive for `MERCHANTPRO` products |
 
 Rules:
 - At least one of `sku` or `ean` is required for manual create and for live shop price lookup.
 - `last_known_price` is not authoritative for fiscal bills; use live lookup at line-item selection.
-- Catalog search (API `q` param): matches active, non-deleted rows where `name` contains the term OR `sku`/`ean` equals the term (case-insensitive).
-- Sync upsert match order: `mp_product_id` → `sku` (case-insensitive) → `ean`; restores soft-deleted rows on match.
+- Visible catalog rows: `deleted_at IS NULL AND hidden_at IS NULL`.
+- Local delete: `MANUAL` → set `deleted_at`; `MERCHANTPRO` → set `hidden_at` (restorable via `RESET_FULL` sync).
+- Catalog list/search (API `q` param on Products screen): matches visible rows across name, SKU, EAN, IDs, and price fields.
+- Fiscal bill autocomplete (`GET /products/search`): matches visible, active rows where `name` contains the term OR `sku`/`ean` equals the term (case-insensitive).
+- Sync upsert match order: `mp_product_id` → `sku` (case-insensitive, `MERCHANTPRO` only) → `ean` (`MERCHANTPRO` only); matches hidden rows; `RESET_FULL` clears `hidden_at`.
 
 Migrations:
 - `V31__create_product_table.sql` — creates `product` table and indexes
@@ -476,6 +482,7 @@ Migrations:
 - `V34__add_product_sku_ean_indexes.sql` — SKU/EAN lookup indexes
 - `V35__widen_mp_product_id_to_bigint.sql` — `mp_product_id` BIGINT
 - `V36__create_product_sync_job.sql` — sync job tracking table
+- `V37__add_product_source_ownership.sql` — `source_type`, `sync_status`, `hidden_at`; backfill synced rows; visibility indexes
 
 ### 2.19 product_sync_job
 Table name: product_sync_job

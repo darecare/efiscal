@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
 import { orgsApi, productsApi } from '../services/api'
@@ -60,13 +60,39 @@ export default function Products() {
   const [saving, setSaving] = useState(false)
   const [lastSync, setLastSync] = useState(null)
 
+  const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [isAllPagesSelected, setIsAllPagesSelected] = useState(false)
+  const [bulkActionInFlight, setBulkActionInFlight] = useState(false)
+
+  const headerCheckboxRef = useRef(null)
+
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
   const isSyncingThisOrg = syncing && String(syncOrgId) === String(selectedOrgId)
+  const visibleProductIds = products.map((p) => p.productId)
+  const allVisibleSelected = visibleProductIds.length > 0
+    && visibleProductIds.every((id) => selectedIds.has(id) || isAllPagesSelected)
+  const someVisibleSelected = visibleProductIds.some((id) => selectedIds.has(id) || isAllPagesSelected)
+  const selectedCount = isAllPagesSelected ? totalCount : selectedIds.size
+  const hasSelection = selectedCount > 0
+  const bulkActionsDisabled = isSyncingThisOrg || bulkActionInFlight
 
   useEffect(() => {
     const loadOrgs = isSuperAdmin ? orgsApi.list() : orgsApi.myAccess()
     loadOrgs.then(setOrgs).catch(() => setOrgs([]))
   }, [isSuperAdmin])
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  useEffect(() => {
+    setPage(0)
+    setSelectedIds(new Set())
+    setIsAllPagesSelected(false)
+  }, [debouncedQuery, selectedOrgId])
 
   useEffect(() => {
     if (!selectedOrgId) {
@@ -76,7 +102,13 @@ export default function Products() {
     }
     loadProducts()
     return undefined
-  }, [selectedOrgId, page])
+  }, [selectedOrgId, page, debouncedQuery])
+
+  useEffect(() => {
+    const el = headerCheckboxRef.current
+    if (!el) return
+    el.indeterminate = someVisibleSelected && !allVisibleSelected
+  }, [someVisibleSelected, allVisibleSelected])
 
   useEffect(() => {
     if (!selectedOrgId) {
@@ -127,12 +159,61 @@ export default function Products() {
     consumeResult()
   }, [syncResult, selectedOrgId])
 
+  function clearSelection() {
+    setSelectedIds(new Set())
+    setIsAllPagesSelected(false)
+  }
+
+  function toggleProductSelection(productId) {
+    if (isAllPagesSelected) {
+      setIsAllPagesSelected(false)
+      setSelectedIds(new Set(visibleProductIds.filter((id) => id !== productId)))
+      return
+    }
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(productId)) {
+        next.delete(productId)
+      } else {
+        next.add(productId)
+      }
+      return next
+    })
+  }
+
+  function toggleSelectAllVisible() {
+    if (allVisibleSelected) {
+      if (isAllPagesSelected) {
+        clearSelection()
+        return
+      }
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        visibleProductIds.forEach((id) => next.delete(id))
+        return next
+      })
+      return
+    }
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      visibleProductIds.forEach((id) => next.add(id))
+      return next
+    })
+  }
+
+  function handleSelectAllPages() {
+    if (!selectedOrgId) return
+    setIsAllPagesSelected(true)
+  }
+
   async function loadProducts(pageOverride) {
     const currentPage = pageOverride ?? page
     setLoading(true)
     setError(null)
     try {
-      const data = await productsApi.list(Number(selectedOrgId), { page: currentPage, size: PAGE_SIZE })
+      const listParams = { page: currentPage, size: PAGE_SIZE }
+      if (debouncedQuery) listParams.q = debouncedQuery
+      const data = await productsApi.list(Number(selectedOrgId), listParams)
       setProducts(data.items || [])
       setTotalCount(data.totalCount ?? 0)
     } catch (err) {
@@ -228,6 +309,59 @@ export default function Products() {
     }
   }
 
+  async function handleBulkDelete() {
+    const count = selectedCount
+    if (count === 0) return
+    if (!window.confirm(t('products.deleteSelectedConfirm', { count }))) return
+    setBulkActionInFlight(true)
+    setError(null)
+    try {
+      const bulkOptions = { selectAll: isAllPagesSelected, q: debouncedQuery || undefined }
+      const result = isAllPagesSelected
+        ? await productsApi.removeMany(Number(selectedOrgId), [], bulkOptions)
+        : await productsApi.removeMany(Number(selectedOrgId), [...selectedIds], bulkOptions)
+      const deleted = result.deleted ?? count
+      clearSelection()
+      const remaining = totalCount - deleted
+      if (remaining <= page * PAGE_SIZE && page > 0) {
+        setPage((p) => Math.max(0, p - 1))
+      } else {
+        await loadProducts()
+      }
+      setSuccess(t('products.deletedMany', { count: deleted }))
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data || t('products.bulkActionFailed')
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setBulkActionInFlight(false)
+    }
+  }
+
+  async function handleBulkStatus(isActive) {
+    const count = selectedCount
+    if (count === 0) return
+    const confirmKey = isActive ? 'products.activateSelectedConfirm' : 'products.deactivateSelectedConfirm'
+    if (!window.confirm(t(confirmKey, { count }))) return
+    setBulkActionInFlight(true)
+    setError(null)
+    try {
+      const bulkOptions = { selectAll: isAllPagesSelected, q: debouncedQuery || undefined }
+      const result = isAllPagesSelected
+        ? await productsApi.updateStatusMany(Number(selectedOrgId), [], isActive, bulkOptions)
+        : await productsApi.updateStatusMany(Number(selectedOrgId), [...selectedIds], isActive, bulkOptions)
+      const updated = result.updated ?? count
+      clearSelection()
+      await loadProducts()
+      const successKey = isActive ? 'products.activatedMany' : 'products.deactivatedMany'
+      setSuccess(t(successKey, { count: updated }))
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data || t('products.bulkActionFailed')
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setBulkActionInFlight(false)
+    }
+  }
+
   function handleCancelSync() {
     cancelSync()
   }
@@ -239,13 +373,36 @@ export default function Products() {
       Number(selectedOrgId),
       t('products.pullError'),
       t('products.syncAlreadyRunning'),
+      'AUTO',
     )
+  }
+
+  function handleFullRefresh() {
+    if (!selectedOrgId || isSyncingThisOrg) return
+    if (!window.confirm(t('products.fullRefreshConfirm'))) return
+    setError(null)
+    startSync(
+      Number(selectedOrgId),
+      t('products.pullError'),
+      t('products.syncAlreadyRunning'),
+      'RESET_FULL',
+    )
+  }
+
+  function syncTypeLabel(type) {
+    if (type === 'INCREMENTAL') return t('products.syncTypeIncremental')
+    if (type === 'RESET_FULL') return t('products.syncTypeResetFull')
+    return t('products.syncTypeFull')
   }
 
   function formatPrice(value) {
     if (value == null || value === '') return t('common.dash')
     const n = Number(value)
     return Number.isNaN(n) ? value : n.toFixed(2)
+  }
+
+  function formatCount(value) {
+    return Number(value).toLocaleString()
   }
 
   return (
@@ -272,6 +429,14 @@ export default function Products() {
             >
               {isSyncingThisOrg ? t('products.pulling') : t('products.pullFromShop')}
             </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleFullRefresh}
+              disabled={isSyncingThisOrg}
+            >
+              {t('products.fullRefresh')}
+            </button>
             <button type="button" className="primary-button" onClick={openAdd} disabled={isSyncingThisOrg}>
               {t('products.addProduct')}
             </button>
@@ -288,6 +453,9 @@ export default function Products() {
             onChange={(e) => {
               setSelectedOrgId(e.target.value)
               setPage(0)
+              setSearchQuery('')
+              setDebouncedQuery('')
+              clearSelection()
             }}
           >
             <option value="">{t('products.selectOrg')}</option>
@@ -306,25 +474,15 @@ export default function Products() {
         )}
       </div>
 
-      {success && (
-        <div className="card" style={{ marginBottom: '1rem', borderLeft: '4px solid green', background: '#f0fff4' }}>
-          {success}
-        </div>
-      )}
+      {success && <div className="success-banner">{success}</div>}
 
-      {error && (
-        <div className="card" style={{ marginBottom: '1rem', borderLeft: '4px solid red', background: '#fff5f5' }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="error-banner">{error}</div>}
 
       {isSyncingThisOrg && syncProgress && (
         <div className="card sync-progress-card" style={{ marginBottom: '1rem' }}>
           {syncType && (
             <p className="muted" style={{ marginBottom: '0.25rem' }}>
-              {syncType === 'INCREMENTAL'
-                ? t('products.syncTypeIncremental')
-                : t('products.syncTypeFull')}
+              {syncTypeLabel(syncType)}
             </p>
           )}
           <p className="muted" style={{ marginBottom: '0.5rem' }}>
@@ -340,16 +498,105 @@ export default function Products() {
         </div>
       )}
 
-      <section className="table-card">
+      <section className={`table-card products-table-card${hasSelection ? ' products-table-card--has-selection' : ''}`}>
         {!selectedOrgId ? (
           <p className="muted">{t('products.selectOrgHint')}</p>
-        ) : loading ? (
-          <p className="muted">{t('common.loadingDots')}</p>
         ) : (
           <>
-            <table>
+            <div className="products-table-toolbar">
+              <div className="products-search-field">
+                <span className="products-search-field__icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+                    <path d="M20 20L16.5 16.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <input
+                  type="search"
+                  className="products-search-field__input"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={t('products.search')}
+                  aria-label={t('products.search')}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="products-search-field__clear"
+                    onClick={() => setSearchQuery('')}
+                    aria-label={t('products.clearSearch')}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {totalCount > 0 && (
+                <span className="badge products-catalog-badge">
+                  {t('products.catalogCount', { count: formatCount(totalCount) })}
+                </span>
+              )}
+            </div>
+
+            {loading ? (
+              <p className="muted products-loading">{t('common.loadingDots')}</p>
+            ) : (
+              <>
+            {allVisibleSelected && !isAllPagesSelected && totalCount > visibleProductIds.length && (
+              <div className="products-info-banner">
+                <span className="products-info-banner__icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                    <path d="M12 8V12M12 16H12.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <p className="products-info-banner__text">
+                  {t('products.allOnPageSelected', { count: visibleProductIds.length })}
+                </p>
+                <button
+                  type="button"
+                  className="products-info-banner__action"
+                  onClick={handleSelectAllPages}
+                  disabled={bulkActionsDisabled}
+                >
+                  {t('products.selectAllPages', { total: formatCount(totalCount) })}
+                </button>
+              </div>
+            )}
+            {isAllPagesSelected && (
+              <div className="products-info-banner products-info-banner--active">
+                <span className="products-info-banner__icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <p className="products-info-banner__text">
+                  {t('products.allPagesSelected', { total: formatCount(selectedCount) })}
+                </p>
+                <button type="button" className="products-info-banner__action" onClick={clearSelection}>
+                  {t('products.clearSelection')}
+                </button>
+              </div>
+            )}
+            <div className="products-table-wrap">
+            <table className="products-table">
               <thead>
                 <tr>
+                  <th className="col-checkbox">
+                    <label className="products-checkbox">
+                      <input
+                        ref={headerCheckboxRef}
+                        type="checkbox"
+                        className="products-checkbox__input"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectAllVisible}
+                        disabled={products.length === 0 || bulkActionsDisabled}
+                        aria-label={t('products.selectAllAria')}
+                      />
+                      <span className="products-checkbox__box" aria-hidden="true" />
+                    </label>
+                  </th>
                   <th>{t('products.columns.id')}</th>
                   <th>{t('products.columns.name')}</th>
                   <th>{t('products.columns.sku')}</th>
@@ -362,13 +609,31 @@ export default function Products() {
               <tbody>
                 {products.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="muted">{t('products.empty')}</td>
+                    <td colSpan={8} className="products-empty-cell">{t('products.empty')}</td>
                   </tr>
                 ) : (
-                  products.map((p) => (
-                    <tr key={p.productId}>
-                      <td>{p.productId}</td>
-                      <td>{p.name}</td>
+                  products.map((p) => {
+                    const isSelected = isAllPagesSelected || selectedIds.has(p.productId)
+                    return (
+                    <tr
+                      key={p.productId}
+                      className={isSelected ? 'products-row--selected' : undefined}
+                    >
+                      <td className="col-checkbox">
+                        <label className="products-checkbox">
+                          <input
+                            type="checkbox"
+                            className="products-checkbox__input"
+                            checked={isSelected}
+                            onChange={() => toggleProductSelection(p.productId)}
+                            disabled={bulkActionsDisabled}
+                            aria-label={t('products.selectProductAria', { name: p.name })}
+                          />
+                          <span className="products-checkbox__box" aria-hidden="true" />
+                        </label>
+                      </td>
+                      <td className="products-cell-id">{p.productId}</td>
+                      <td className="products-cell-name">{p.name}</td>
                       <td>{p.sku || t('common.dash')}</td>
                       <td>{p.ean || t('common.dash')}</td>
                       <td>{formatPrice(p.lastKnownPrice)}</td>
@@ -378,28 +643,24 @@ export default function Products() {
                         </span>
                       </td>
                       <td>
-                        <button type="button" className="secondary-button" onClick={() => openEdit(p)}>
-                          {t('common.edit')}
-                        </button>
-                        {' '}
-                        <button type="button" className="secondary-button" onClick={() => handleDelete(p)}>
-                          {t('common.delete')}
-                        </button>
+                        <div className="table-row-actions">
+                          <button type="button" className="secondary-button" onClick={() => openEdit(p)}>
+                            {t('common.edit')}
+                          </button>
+                          <button type="button" className="secondary-button danger" onClick={() => handleDelete(p)}>
+                            {t('common.delete')}
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ))
+                    )
+                  })
                 )}
               </tbody>
             </table>
+            </div>
             {totalCount > 0 && (
-              <div className="pagination-bar" style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <span className="muted">
-                  {t('common.paginationInfo', {
-                    current: page + 1,
-                    total: totalPages,
-                    records: totalCount,
-                  })}
-                </span>
+              <div className="pagination">
                 <button
                   type="button"
                   className="secondary-button"
@@ -408,6 +669,13 @@ export default function Products() {
                 >
                   {t('common.prev')}
                 </button>
+                <span className="pagination-info">
+                  {t('common.paginationInfo', {
+                    current: page + 1,
+                    total: totalPages,
+                    records: formatCount(totalCount),
+                  })}
+                </span>
                 <button
                   type="button"
                   className="secondary-button"
@@ -418,9 +686,57 @@ export default function Products() {
                 </button>
               </div>
             )}
+              </>
+            )}
           </>
         )}
       </section>
+
+      {hasSelection && (
+        <div className="products-bulk-bar" role="region" aria-label={t('common.actions')}>
+          <div className="products-bulk-bar__summary">
+            <span className="products-bulk-bar__badge">{formatCount(selectedCount)}</span>
+            <span className="products-bulk-bar__label">{t('products.selectedLabel')}</span>
+          </div>
+          <div className="products-bulk-bar__actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => handleBulkStatus(true)}
+              disabled={bulkActionsDisabled}
+            >
+              {t('products.bulkActivate')}
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => handleBulkStatus(false)}
+              disabled={bulkActionsDisabled}
+            >
+              {t('products.bulkDeactivate')}
+            </button>
+            <button
+              type="button"
+              className="secondary-button danger"
+              onClick={handleBulkDelete}
+              disabled={bulkActionsDisabled}
+            >
+              {t('products.bulkDelete')}
+            </button>
+          </div>
+          <button
+            type="button"
+            className="products-bulk-bar__close"
+            onClick={clearSelection}
+            disabled={bulkActionsDisabled}
+            aria-label={t('products.clearSelection')}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {modalOpen && (
         <div className="modal-overlay" onClick={closeModal}>

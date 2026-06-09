@@ -2,6 +2,9 @@ package com.efiscal.backend.service;
 
 import com.efiscal.backend.model.OrgEntity;
 import com.efiscal.backend.model.ProductEntity;
+import static com.efiscal.backend.model.ProductEntity.SOURCE_TYPE_MANUAL;
+import static com.efiscal.backend.model.ProductEntity.SOURCE_TYPE_MERCHANTPRO;
+import static com.efiscal.backend.model.ProductEntity.SYNC_STATUS_ACTIVE;
 import com.efiscal.backend.repository.OrgRepository;
 import com.efiscal.backend.repository.ProductRepository;
 import com.efiscal.backend.service.MerchantProProductService.MerchantProProductRow;
@@ -14,8 +17,11 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -33,6 +39,8 @@ public class ProductService {
     private static final long SSE_TIMEOUT_MS = 0L;
     private static final long SYNC_PAGE_THROTTLE_MS = 750L;
     private static final int SEARCH_MAX_RESULTS = 50;
+    private static final int LIST_IDS_MAX = 5000;
+    private static final int BULK_MAX_IDS = 500;
     static final String INCREMENTAL_FILTER_UNSUPPORTED = "INCREMENTAL_FILTER_UNSUPPORTED";
 
     private final ProductRepository productRepository;
@@ -77,14 +85,28 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
-    public ProductPage listByOrg(Long orgId, int page, int size) {
+    public ProductPage listByOrg(Long orgId, int page, int size, String q) {
         requireOrg(orgId);
         int safeSize = Math.min(Math.max(size, 1), 500);
         int safePage = Math.max(page, 0);
         var pageable = PageRequest.of(safePage, safeSize);
-        var result = productRepository.findAllByOrgIdAndDeletedAtIsNullOrderByNameAsc(orgId, pageable);
+        String term = normalizeSearchTerm(q);
+        var result = term == null
+            ? productRepository.findAllVisibleByOrgIdOrderByNameAsc(orgId, pageable)
+            : productRepository.findAllVisibleByOrgIdAndSearchTerm(orgId, term, pageable);
         List<ProductDto> items = result.getContent().stream().map(this::toDto).toList();
         return new ProductPage(items, result.getTotalElements(), safePage, safeSize);
+    }
+
+    @Transactional(readOnly = true)
+    public ProductIdsResponse listIdsByOrg(Long orgId, String q) {
+        requireOrg(orgId);
+        String term = normalizeSearchTerm(q);
+        var pageable = PageRequest.of(0, LIST_IDS_MAX);
+        List<Long> ids = term == null
+            ? productRepository.findVisibleIdsByOrgId(orgId, pageable)
+            : productRepository.findVisibleIdsByOrgIdAndSearchTerm(orgId, term, pageable);
+        return new ProductIdsResponse(ids);
     }
 
     @Transactional(readOnly = true)
@@ -122,6 +144,8 @@ public class ProductService {
         entity.setEan(trimOrNull(req.ean()));
         entity.setLastKnownPrice(req.lastKnownPrice());
         entity.setActive(req.isActive() == null || req.isActive());
+        entity.setSourceType(SOURCE_TYPE_MANUAL);
+        entity.setSyncStatus(SYNC_STATUS_ACTIVE);
         return toDto(productRepository.save(entity));
     }
 
@@ -143,13 +167,51 @@ public class ProductService {
     @Transactional
     public void softDelete(Long productId) {
         ProductEntity entity = requireProduct(productId);
-        entity.setDeletedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        if (SOURCE_TYPE_MERCHANTPRO.equals(entity.getSourceType())) {
+            entity.setHiddenAt(now);
+        } else {
+            entity.setDeletedAt(now);
+        }
         productRepository.save(entity);
     }
 
-    public SseEmitter syncFromShopStream(Long orgId) {
+    @Transactional
+    public BulkDeleteResult softDeleteMany(Long orgId, BulkProductIdsRequest req) {
+        requireOrg(orgId);
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        if (Boolean.TRUE.equals(req.selectAll())) {
+            String term = normalizeSearchTerm(req.q());
+            int hidden = productRepository.hideAllSyncedByOrgIdAndOptionalSearchTerm(orgId, term, now);
+            int deleted = productRepository.softDeleteAllManualByOrgIdAndOptionalSearchTerm(orgId, term, now);
+            return new BulkDeleteResult(hidden + deleted);
+        }
+        List<Long> safeIds = validateBulkIds(req.productIds());
+        int hidden = productRepository.hideSyncedByIdsAndOrgId(safeIds, orgId, now);
+        int deleted = productRepository.softDeleteManualByIdsAndOrgId(safeIds, orgId, now);
+        return new BulkDeleteResult(hidden + deleted);
+    }
+
+    @Transactional
+    public BulkStatusResult updateStatusMany(Long orgId, BulkStatusRequest req) {
+        requireOrg(orgId);
+        if (Boolean.TRUE.equals(req.selectAll())) {
+            String term = normalizeSearchTerm(req.q());
+            int updated = productRepository.updateStatusAllVisibleByOrgIdAndOptionalSearchTerm(
+                orgId,
+                term,
+                req.isActive()
+            );
+            return new BulkStatusResult(updated);
+        }
+        List<Long> safeIds = validateBulkIds(req.productIds());
+        int updated = productRepository.updateStatusVisibleByIdsAndOrgId(safeIds, orgId, req.isActive());
+        return new BulkStatusResult(updated);
+    }
+
+    public SseEmitter syncFromShopStream(Long orgId, String mode) {
         OrgEntity org = requireOrg(orgId);
-        SyncStartDecision decision = productSyncJobService.resolveSyncStart(orgId);
+        SyncStartDecision decision = productSyncJobService.resolveSyncStart(orgId, mode);
         long jobId = productSyncJobService.startJob(orgId, decision.syncType(), decision.filterFrom());
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
@@ -179,6 +241,8 @@ public class ProductService {
     ) {
         int synced = 0;
         Integer total = null;
+        Set<Long> seenMpProductIds = new HashSet<>();
+        boolean fullCatalogSync = ProductSyncJobService.isFullCatalogSync(syncType);
         try {
             int start = 0;
 
@@ -195,7 +259,9 @@ public class ProductService {
                     .toList();
 
                 if (!rows.isEmpty()) {
-                    synced += self.upsertPage(orgId, clientId, rows);
+                    UpsertPageResult pageResult = self.upsertPage(orgId, clientId, rows, syncType);
+                    synced += pageResult.count();
+                    seenMpProductIds.addAll(pageResult.seenMpProductIds());
                 }
 
                 int reportedTotal = total != null ? total : synced;
@@ -207,6 +273,10 @@ public class ProductService {
                 }
                 start += SYNC_PAGE_SIZE;
                 Thread.sleep(SYNC_PAGE_THROTTLE_MS);
+            }
+
+            if (fullCatalogSync) {
+                self.markMissingAfterFullSync(orgId, seenMpProductIds);
             }
 
             int finalTotal = total != null ? total : synced;
@@ -259,13 +329,32 @@ public class ProductService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public int upsertPage(Long orgId, long clientId, List<MerchantProProductRow> rows) {
+    public UpsertPageResult upsertPage(
+        Long orgId,
+        long clientId,
+        List<MerchantProProductRow> rows,
+        String syncType
+    ) {
+        boolean resetFull = ProductSyncJobService.isResetFullSync(syncType);
+        List<Long> seenMpProductIds = new ArrayList<>();
         int count = 0;
         for (MerchantProProductRow row : rows) {
-            upsertFromMerchantPro(orgId, clientId, row);
+            Long mpProductId = upsertFromMerchantPro(orgId, clientId, row, resetFull);
+            if (mpProductId != null) {
+                seenMpProductIds.add(mpProductId);
+            }
             count++;
         }
-        return count;
+        return new UpsertPageResult(count, seenMpProductIds);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markMissingAfterFullSync(Long orgId, Set<Long> seenMpProductIds) {
+        if (seenMpProductIds.isEmpty()) {
+            productRepository.markAllMerchantProMissingInSource(orgId);
+        } else {
+            productRepository.markMissingInSourceExcept(orgId, seenMpProductIds);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -305,25 +394,30 @@ public class ProductService {
         emitter.send(SseEmitter.event().data(json, MediaType.APPLICATION_JSON));
     }
 
-    private void upsertFromMerchantPro(Long orgId, long clientId, MerchantProProductRow row) {
+    private Long upsertFromMerchantPro(
+        Long orgId,
+        long clientId,
+        MerchantProProductRow row,
+        boolean resetFull
+    ) {
         ProductEntity entity = null;
         if (row.mpProductId() != null) {
             entity = productRepository
-                .findByOrgIdAndMpProductIdAndDeletedAtIsNull(orgId, row.mpProductId())
+                .findByOrgIdAndMpProductIdIncludingHidden(orgId, row.mpProductId())
                 .orElse(null);
         }
 
         String skuVal = trimOrNull(row.sku());
         if (entity == null && skuVal != null) {
             entity = productRepository
-                .findByOrgIdAndSkuIgnoreCaseAndDeletedAtIsNull(orgId, skuVal)
+                .findMerchantProByOrgIdAndSkuIncludingHidden(orgId, skuVal)
                 .orElse(null);
         }
 
         String eanVal = trimOrNull(row.ean());
         if (entity == null && eanVal != null) {
             entity = productRepository
-                .findByOrgIdAndEanAndDeletedAtIsNull(orgId, eanVal)
+                .findMerchantProByOrgIdAndEanIncludingHidden(orgId, eanVal)
                 .orElse(null);
         }
 
@@ -331,16 +425,23 @@ public class ProductService {
             entity = new ProductEntity();
             entity.setClientId(clientId);
             entity.setOrgId(orgId);
-            entity.setMpProductId(row.mpProductId());
+            entity.setSourceType(SOURCE_TYPE_MERCHANTPRO);
         }
 
+        entity.setMpProductId(row.mpProductId());
+        entity.setSourceType(SOURCE_TYPE_MERCHANTPRO);
         entity.setName(row.name());
         entity.setSku(skuVal);
         entity.setEan(eanVal);
         entity.setLastKnownPrice(row.priceGross());
         entity.setActive(true);
+        entity.setSyncStatus(SYNC_STATUS_ACTIVE);
         entity.setDeletedAt(null);
+        if (resetFull) {
+            entity.setHiddenAt(null);
+        }
         productRepository.save(entity);
+        return row.mpProductId();
     }
 
     private OrgEntity requireOrg(Long orgId) {
@@ -350,7 +451,7 @@ public class ProductService {
     }
 
     private ProductEntity requireProduct(Long productId) {
-        return productRepository.findByProductIdAndDeletedAtIsNull(productId)
+        return productRepository.findVisibleByProductId(productId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
     }
 
@@ -389,6 +490,28 @@ public class ProductService {
             return null;
         }
         return value.trim();
+    }
+
+    private static String normalizeSearchTerm(String q) {
+        String trimmed = blankToNull(q);
+        if (trimmed == null) {
+            return null;
+        }
+        return "%" + trimmed.toLowerCase() + "%";
+    }
+
+    private static List<Long> validateBulkIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one product ID is required");
+        }
+        List<Long> distinct = ids.stream().distinct().toList();
+        if (distinct.size() > BULK_MAX_IDS) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Too many product IDs (max " + BULK_MAX_IDS + ")"
+            );
+        }
+        return distinct;
     }
 
     private static String trimOrNull(String value) {
@@ -438,4 +561,16 @@ public class ProductService {
         BigDecimal priceGross,
         Long mpProductId
     ) {}
+
+    public record ProductIdsResponse(List<Long> productIds) {}
+
+    public record BulkProductIdsRequest(List<Long> productIds, Boolean selectAll, String q) {}
+
+    public record BulkStatusRequest(List<Long> productIds, boolean isActive, Boolean selectAll, String q) {}
+
+    public record BulkDeleteResult(int deleted) {}
+
+    public record BulkStatusResult(int updated) {}
+
+    public record UpsertPageResult(int count, List<Long> seenMpProductIds) {}
 }

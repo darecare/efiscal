@@ -74,12 +74,14 @@
 
 **Route:** `/fiscal-bills/products` — guarded by `FISCAL_MANAGE_PRODUCTS` ([`Products.jsx`](frontend/src/pages/Products.jsx)).
 
-- Organization selector + product table (CRUD).
-- **Pull from Shop:** [`productsApi.syncStream`](frontend/src/services/api.js) calls `GET /api/v1/products/sync` using `fetch` + ReadableStream (Bearer token in header; not native `EventSource`). Handles `409` via `onConflict` (re-attaches to running job).
+- Organization selector + product table (CRUD, search, bulk actions).
+- **Pull from Shop:** [`productsApi.syncStream`](frontend/src/services/api.js) calls `GET /api/v1/products/sync?mode=AUTO` using `fetch` + ReadableStream (Bearer token in header; not native `EventSource`). Handles `409` via `onConflict` (re-attaches to running job).
+- **Rebuild from Shop:** secondary action calls `GET /api/v1/products/sync?mode=RESET_FULL` after confirmation; restores hidden shop-synced products and refreshes the full catalog.
 - **Sync recovery:** [`SyncContext`](frontend/src/contexts/SyncContext.jsx) polls `GET /products/sync/status` every 2.5s while syncing; `checkSyncStatus` on org change restores in-progress UI after page refresh.
 - **Cancel sync:** UI cancel calls `POST /products/sync/cancel` then clears local state.
 - **Per-org sync:** user may sync different orgs concurrently; guard blocks duplicate start for the same org only.
-- Progress UI: sync type label (`products.syncTypeFull` / `products.syncTypeIncremental`), `<progress>` bar with `products.syncStarting` / `products.syncingProgress`.
+- Progress UI: sync type label (`products.syncTypeFull` / `products.syncTypeIncremental` / `products.syncTypeResetFull`), `<progress>` bar with `products.syncStarting` / `products.syncingProgress`.
+- Local delete copy: removing shop-synced products hides them from the catalog; use Rebuild from Shop to restore (`products.deleteConfirm`, `products.deleteSelectedConfirm`, `products.fullRefreshConfirm`).
 - Last sync line: `products.lastSyncAt` when latest job is `DONE` and idle.
 
 **Create Fiscal Bill** ([`CreateFiscalBill.jsx`](frontend/src/pages/CreateFiscalBill.jsx)) — guarded by `FISCAL_CREATE_BILL`.

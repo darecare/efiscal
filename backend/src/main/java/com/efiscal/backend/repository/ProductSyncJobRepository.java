@@ -1,6 +1,7 @@
 package com.efiscal.backend.repository;
 
 import com.efiscal.backend.model.ProductSyncJobEntity;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -11,6 +12,12 @@ public interface ProductSyncJobRepository extends JpaRepository<ProductSyncJobEn
     Optional<ProductSyncJobEntity> findTopByOrgIdAndSyncTypeAndStatusOrderByStartedAtDesc(
         Long orgId,
         String syncType,
+        String status
+    );
+
+    Optional<ProductSyncJobEntity> findTopByOrgIdAndSyncTypeInAndStatusOrderByStartedAtDesc(
+        Long orgId,
+        List<String> syncTypes,
         String status
     );
 

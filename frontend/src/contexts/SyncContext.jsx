@@ -89,7 +89,7 @@ export function SyncProvider({ children }) {
     }
   }, [applyRunningStatus, startPolling])
 
-  const startSync = useCallback((orgId, failedMessage, alreadyRunningMessage) => {
+  const startSync = useCallback((orgId, failedMessage, alreadyRunningMessage, mode = 'AUTO') => {
     if (syncing && syncOrgId === orgId) return
     setSyncOrgId(orgId)
     setSyncing(true)
@@ -99,6 +99,7 @@ export function SyncProvider({ children }) {
     startPolling(orgId)
 
     const stream = productsApi.syncStream(orgId, {
+      mode,
       failedMessage,
       onProgress: (data) => {
         setSyncProgress({ synced: data.synced, total: data.total })

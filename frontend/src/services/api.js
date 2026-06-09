@@ -274,9 +274,36 @@ function decodeApiError(body, fallback) {
   return fallback
 }
 
+const PRODUCTS_BULK_CHUNK_SIZE = 500
+
+async function productsBulkChunked(method, url, orgId, productIds, extraBody = {}) {
+  let total = 0
+  for (let i = 0; i < productIds.length; i += PRODUCTS_BULK_CHUNK_SIZE) {
+    const chunk = productIds.slice(i, i + PRODUCTS_BULK_CHUNK_SIZE)
+    const response = await api.request({
+      method,
+      url,
+      params: { orgId },
+      data: { productIds: chunk, ...extraBody },
+    })
+    const countKey = method === 'delete' ? 'deleted' : 'updated'
+    total += response.data?.[countKey] ?? 0
+  }
+  const countKey = method === 'delete' ? 'deleted' : 'updated'
+  return { [countKey]: total }
+}
+
 export const productsApi = {
-  async list(orgId, { page = 0, size = 100 } = {}) {
-    const response = await api.get('/products', { params: { orgId, page, size } })
+  async list(orgId, { page = 0, size = 100, q } = {}) {
+    const params = { orgId, page, size }
+    if (q) params.q = q
+    const response = await api.get('/products', { params })
+    return response.data
+  },
+  async listIds(orgId, q) {
+    const params = { orgId }
+    if (q) params.q = q
+    const response = await api.get('/products/ids', { params })
     return response.data
   },
   async create(orgId, payload) {
@@ -289,6 +316,27 @@ export const productsApi = {
   },
   async remove(productId) {
     await api.delete(`/products/${productId}`)
+  },
+  async removeMany(orgId, productIds, { selectAll = false, q } = {}) {
+    if (selectAll) {
+      const response = await api.delete('/products/bulk', {
+        params: { orgId },
+        data: { selectAll: true, q: q || undefined },
+      })
+      return response.data
+    }
+    return productsBulkChunked('delete', '/products/bulk', orgId, productIds)
+  },
+  async updateStatusMany(orgId, productIds, isActive, { selectAll = false, q } = {}) {
+    if (selectAll) {
+      const response = await api.patch('/products/bulk/status', {
+        selectAll: true,
+        isActive,
+        q: q || undefined,
+      }, { params: { orgId } })
+      return response.data
+    }
+    return productsBulkChunked('patch', '/products/bulk/status', orgId, productIds, { isActive })
   },
   async search(orgId, { q, name, sku, ean } = {}) {
     const response = await api.get('/products/search', {
@@ -303,10 +351,11 @@ export const productsApi = {
   async cancelSync(orgId) {
     await api.post('/products/sync/cancel', null, { params: { orgId } })
   },
-  syncStream(orgId, { onProgress, onDone, onError, onConflict, failedMessage } = {}) {
+  syncStream(orgId, { mode = 'AUTO', onProgress, onDone, onError, onConflict, failedMessage } = {}) {
     const token = localStorage.getItem('token')
     const controller = new AbortController()
-    const url = `/api/v1/products/sync?orgId=${encodeURIComponent(orgId)}`
+    const modeParam = mode ? `&mode=${encodeURIComponent(mode)}` : ''
+    const url = `/api/v1/products/sync?orgId=${encodeURIComponent(orgId)}${modeParam}`
     const fallbackMessage = failedMessage || 'Sync failed'
 
     fetch(url, {

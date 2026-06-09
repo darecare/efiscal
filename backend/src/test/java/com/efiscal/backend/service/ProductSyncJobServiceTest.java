@@ -1,10 +1,12 @@
 package com.efiscal.backend.service;
 
 import com.efiscal.backend.model.ProductSyncJobEntity;
+import com.efiscal.backend.repository.ProductRepository;
 import com.efiscal.backend.repository.ProductSyncJobRepository;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,22 +36,29 @@ class ProductSyncJobServiceTest {
     @Mock
     private ProductSyncJobRepository productSyncJobRepository;
 
+    @Mock
+    private ProductRepository productRepository;
+
     private ProductSyncJobService productSyncJobService;
 
     @BeforeEach
     void setUp() {
-        productSyncJobService = new ProductSyncJobService(productSyncJobRepository);
+        productSyncJobService = new ProductSyncJobService(productSyncJobRepository, productRepository);
     }
 
     @Test
     void resolveSyncStart_returnsFullWhenNoPriorFullJob() {
         when(productSyncJobRepository.findByOrgIdAndStatus(ORG_ID, ProductSyncJobService.STATUS_RUNNING))
             .thenReturn(Optional.empty());
-        when(productSyncJobRepository.findTopByOrgIdAndSyncTypeAndStatusOrderByStartedAtDesc(
-            ORG_ID, ProductSyncJobService.SYNC_TYPE_FULL, ProductSyncJobService.STATUS_DONE))
+        when(productRepository.countVisibleByOrgId(ORG_ID)).thenReturn(10L);
+        when(productSyncJobRepository.findTopByOrgIdAndSyncTypeInAndStatusOrderByStartedAtDesc(
+            eq(ORG_ID),
+            eq(List.of(ProductSyncJobService.SYNC_TYPE_FULL, ProductSyncJobService.SYNC_TYPE_RESET_FULL)),
+            eq(ProductSyncJobService.STATUS_DONE)))
             .thenReturn(Optional.empty());
 
-        ProductSyncJobService.SyncStartDecision decision = productSyncJobService.resolveSyncStart(ORG_ID);
+        ProductSyncJobService.SyncStartDecision decision =
+            productSyncJobService.resolveSyncStart(ORG_ID, ProductSyncJobService.SYNC_MODE_AUTO);
 
         assertEquals(ProductSyncJobService.SYNC_TYPE_FULL, decision.syncType());
         assertNull(decision.filterFrom());
@@ -60,6 +69,7 @@ class ProductSyncJobServiceTest {
     void resolveSyncStart_returnsIncrementalAfterCompletedFullSync() {
         when(productSyncJobRepository.findByOrgIdAndStatus(ORG_ID, ProductSyncJobService.STATUS_RUNNING))
             .thenReturn(Optional.empty());
+        when(productRepository.countVisibleByOrgId(ORG_ID)).thenReturn(10L);
 
         OffsetDateTime finishedAt = OffsetDateTime.of(2026, 6, 4, 12, 0, 0, 0, ZoneOffset.UTC);
         ProductSyncJobEntity lastFull = job(10L, ProductSyncJobService.SYNC_TYPE_FULL, ProductSyncJobService.STATUS_DONE);
@@ -67,11 +77,14 @@ class ProductSyncJobServiceTest {
         lastFull.setTotal(120);
         lastFull.setFinishedAt(finishedAt);
 
-        when(productSyncJobRepository.findTopByOrgIdAndSyncTypeAndStatusOrderByStartedAtDesc(
-            ORG_ID, ProductSyncJobService.SYNC_TYPE_FULL, ProductSyncJobService.STATUS_DONE))
+        when(productSyncJobRepository.findTopByOrgIdAndSyncTypeInAndStatusOrderByStartedAtDesc(
+            eq(ORG_ID),
+            eq(List.of(ProductSyncJobService.SYNC_TYPE_FULL, ProductSyncJobService.SYNC_TYPE_RESET_FULL)),
+            eq(ProductSyncJobService.STATUS_DONE)))
             .thenReturn(Optional.of(lastFull));
 
-        ProductSyncJobService.SyncStartDecision decision = productSyncJobService.resolveSyncStart(ORG_ID);
+        ProductSyncJobService.SyncStartDecision decision =
+            productSyncJobService.resolveSyncStart(ORG_ID, ProductSyncJobService.SYNC_MODE_AUTO);
 
         assertEquals(ProductSyncJobService.SYNC_TYPE_INCREMENTAL, decision.syncType());
         assertEquals(finishedAt, decision.filterFrom());
@@ -82,19 +95,60 @@ class ProductSyncJobServiceTest {
     void resolveSyncStart_returnsFullWhenLastFullSyncIncomplete() {
         when(productSyncJobRepository.findByOrgIdAndStatus(ORG_ID, ProductSyncJobService.STATUS_RUNNING))
             .thenReturn(Optional.empty());
+        when(productRepository.countVisibleByOrgId(ORG_ID)).thenReturn(10L);
 
         ProductSyncJobEntity lastFull = job(11L, ProductSyncJobService.SYNC_TYPE_FULL, ProductSyncJobService.STATUS_DONE);
         lastFull.setSynced(50);
         lastFull.setTotal(120);
         lastFull.setFinishedAt(OffsetDateTime.now(ZoneOffset.UTC));
 
-        when(productSyncJobRepository.findTopByOrgIdAndSyncTypeAndStatusOrderByStartedAtDesc(
-            ORG_ID, ProductSyncJobService.SYNC_TYPE_FULL, ProductSyncJobService.STATUS_DONE))
+        when(productSyncJobRepository.findTopByOrgIdAndSyncTypeInAndStatusOrderByStartedAtDesc(
+            eq(ORG_ID),
+            eq(List.of(ProductSyncJobService.SYNC_TYPE_FULL, ProductSyncJobService.SYNC_TYPE_RESET_FULL)),
+            eq(ProductSyncJobService.STATUS_DONE)))
             .thenReturn(Optional.of(lastFull));
 
-        ProductSyncJobService.SyncStartDecision decision = productSyncJobService.resolveSyncStart(ORG_ID);
+        ProductSyncJobService.SyncStartDecision decision =
+            productSyncJobService.resolveSyncStart(ORG_ID, ProductSyncJobService.SYNC_MODE_AUTO);
 
         assertEquals(ProductSyncJobService.SYNC_TYPE_FULL, decision.syncType());
+    }
+
+    @Test
+    void resolveSyncStart_forcesFullWhenCatalogEmpty() {
+        when(productSyncJobRepository.findByOrgIdAndStatus(ORG_ID, ProductSyncJobService.STATUS_RUNNING))
+            .thenReturn(Optional.empty());
+        when(productRepository.countVisibleByOrgId(ORG_ID)).thenReturn(0L);
+
+        ProductSyncJobService.SyncStartDecision decision =
+            productSyncJobService.resolveSyncStart(ORG_ID, ProductSyncJobService.SYNC_MODE_AUTO);
+
+        assertEquals(ProductSyncJobService.SYNC_TYPE_FULL, decision.syncType());
+        assertNull(decision.modifiedSince());
+    }
+
+    @Test
+    void resolveSyncStart_honorsExplicitResetFull() {
+        when(productSyncJobRepository.findByOrgIdAndStatus(ORG_ID, ProductSyncJobService.STATUS_RUNNING))
+            .thenReturn(Optional.empty());
+
+        ProductSyncJobService.SyncStartDecision decision =
+            productSyncJobService.resolveSyncStart(ORG_ID, ProductSyncJobService.SYNC_MODE_RESET_FULL);
+
+        assertEquals(ProductSyncJobService.SYNC_TYPE_RESET_FULL, decision.syncType());
+        assertNull(decision.modifiedSince());
+    }
+
+    @Test
+    void resolveSyncStart_honorsExplicitFull() {
+        when(productSyncJobRepository.findByOrgIdAndStatus(ORG_ID, ProductSyncJobService.STATUS_RUNNING))
+            .thenReturn(Optional.empty());
+
+        ProductSyncJobService.SyncStartDecision decision =
+            productSyncJobService.resolveSyncStart(ORG_ID, ProductSyncJobService.SYNC_MODE_FULL);
+
+        assertEquals(ProductSyncJobService.SYNC_TYPE_FULL, decision.syncType());
+        assertNull(decision.modifiedSince());
     }
 
     @Test
@@ -105,7 +159,7 @@ class ProductSyncJobServiceTest {
 
         ResponseStatusException ex = assertThrows(
             ResponseStatusException.class,
-            () -> productSyncJobService.resolveSyncStart(ORG_ID)
+            () -> productSyncJobService.resolveSyncStart(ORG_ID, ProductSyncJobService.SYNC_MODE_AUTO)
         );
 
         assertEquals(409, ex.getStatusCode().value());

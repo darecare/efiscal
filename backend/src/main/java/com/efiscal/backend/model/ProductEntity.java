@@ -15,6 +15,11 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Table(name = "product")
 public class ProductEntity {
 
+    public static final String SOURCE_TYPE_MANUAL = "MANUAL";
+    public static final String SOURCE_TYPE_MERCHANTPRO = "MERCHANTPRO";
+    public static final String SYNC_STATUS_ACTIVE = "ACTIVE";
+    public static final String SYNC_STATUS_MISSING_IN_SOURCE = "MISSING_IN_SOURCE";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "product_id", nullable = false, updatable = false)
@@ -55,6 +60,15 @@ public class ProductEntity {
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
 
+    @Column(name = "source_type", nullable = false, length = 16)
+    private String sourceType = SOURCE_TYPE_MANUAL;
+
+    @Column(name = "sync_status", nullable = false, length = 20)
+    private String syncStatus = SYNC_STATUS_ACTIVE;
+
+    @Column(name = "hidden_at")
+    private OffsetDateTime hiddenAt;
+
     public Long getProductId() { return productId; }
     public void setProductId(Long productId) { this.productId = productId; }
     public Long getClientId() { return clientId; }
@@ -77,4 +91,10 @@ public class ProductEntity {
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public OffsetDateTime getDeletedAt() { return deletedAt; }
     public void setDeletedAt(OffsetDateTime deletedAt) { this.deletedAt = deletedAt; }
+    public String getSourceType() { return sourceType; }
+    public void setSourceType(String sourceType) { this.sourceType = sourceType; }
+    public String getSyncStatus() { return syncStatus; }
+    public void setSyncStatus(String syncStatus) { this.syncStatus = syncStatus; }
+    public OffsetDateTime getHiddenAt() { return hiddenAt; }
+    public void setHiddenAt(OffsetDateTime hiddenAt) { this.hiddenAt = hiddenAt; }
 }

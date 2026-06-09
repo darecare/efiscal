@@ -184,12 +184,14 @@ Reference-only guidance:
 - Query params: `fields=id,name,sku,ean,price_gross`, `start`, `limit`, optional `modified[gte]` (incremental sync), optional `sku_equals`, `ean_equals`.
 - Entity: `ProductSyncJobEntity` — JPA entity for `product_sync_job` table (sync lifecycle per org).
 - Repository: `ProductSyncJobRepository` — derived queries by org+status, latest by org+type+status, latest by org.
-- Service: `ProductSyncJobService` — sync job lifecycle: `resolveSyncStart` (stale cleanup + FULL/INCREMENTAL decision), `startJob`, `updateProgress`, `completeJob`, `getStatus` (also triggers stale cleanup); stale threshold 2h.
-- Service: `ProductService` — local CRUD; catalog search via `q` (`ProductRepository.searchByTerm`: name LIKE OR exact SKU/EAN; active, non-deleted only); legacy `name`/`sku`/`ean` AND filters when `q` omitted; `validateRequest` enforces non-blank name; paginated sync with per-page `REQUIRES_NEW` (`upsertPage`); SSE progress (`syncFromShopStream`, includes `syncType` in events); `cancelSync` marks running job failed; live lookup SKU-first then EAN.
-- Upsert match order: `mp_product_id` → SKU (case-insensitive) → EAN; clears `deleted_at` on match.
+- Service: `ProductSyncJobService` — sync job lifecycle: `resolveSyncStart(orgId, mode)` (stale cleanup + `AUTO`/`FULL`/`INCREMENTAL`/`RESET_FULL` decision; forces `FULL` when visible catalog count is 0), `startJob`, `updateProgress`, `completeJob`, `getStatus` (also triggers stale cleanup); stale threshold 2h.
+- Service: `ProductService` — local CRUD; Products list/search via `q` on visible rows (`deleted_at` and `hidden_at` null); fiscal bill search via `searchByTerm` (active, visible only); legacy `name`/`sku`/`ean` AND filters when `q` omitted; `validateRequest` enforces non-blank name; paginated sync with per-page `REQUIRES_NEW` (`upsertPage`); SSE progress (`syncFromShopStream(orgId, mode)`, includes `syncType` in events); `cancelSync` marks running job failed; live lookup SKU-first then EAN.
+- Source ownership: `source_type` (`MANUAL` | `MERCHANTPRO`), `sync_status` (`ACTIVE` | `MISSING_IN_SOURCE`), `hidden_at` for local hide of synced products.
+- Upsert match order: `mp_product_id` → SKU (case-insensitive, `MERCHANTPRO` only) → EAN (`MERCHANTPRO` only); matches hidden rows; `RESET_FULL` clears `hidden_at`; full sync marks unseen synced rows `MISSING_IN_SOURCE`.
+- Local delete routing: `MERCHANTPRO` → `hidden_at`; `MANUAL` → `deleted_at`.
 - Controller: `ProductController` at `/api/v1/products`.
   - `GET /products/sync/status` — pollable DB-backed sync status (stale cleanup on read)
-  - `GET /products/sync` — `SseEmitter`, no timeout, events `{ synced, total, done, syncType, error? }`; 409 when sync already running
+  - `GET /products/sync` — optional `mode` query (`AUTO` default); `SseEmitter`, no timeout, events `{ synced, total, done, syncType, error? }`; 409 when sync already running
   - `POST /products/sync/cancel` — cancel in-progress sync for org
   - `GET /products/search` — optional `q` or legacy filters
   - `GET /products/lookup` — live MerchantPro price for selected SKU/EAN

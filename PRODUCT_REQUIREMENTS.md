@@ -92,11 +92,14 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 ### 6.4A Product catalog management
 1. User with `FISCAL_MANAGE_PRODUCTS` opens Products screen under Fiscal Bills menu
 2. User selects organization and views/edits local product catalog (name, SKU, EAN, last known price)
-3. User may click "Pull from Shop" to sync products from MerchantPro into local `product` table; UI shows sync progress (synced / total) and sync type (full vs incremental)
-4. After a completed full catalog sync, subsequent pulls use incremental sync (MerchantPro `modified[gte]` filter) when supported
-5. Sync progress survives page refresh via status polling; user may cancel an in-progress sync
-6. When idle, UI shows last successful sync timestamp and product count
-7. At least one of SKU or EAN is required per product for live price lookup
+3. User may search the catalog with a debounced text box; search matches name, SKU, EAN, IDs, and price fields simultaneously
+4. User may select products on the current page or select all products (including across pages / filtered results) for bulk delete, bulk activate, or bulk deactivate
+5. User may click "Pull from Shop" to sync products from MerchantPro into local `product` table; UI shows sync progress (synced / total) and sync type (full vs incremental)
+6. After a completed full catalog sync, subsequent pulls use incremental sync (MerchantPro `modified[gte]` filter) when supported
+7. Sync progress survives page refresh via status polling; user may cancel an in-progress sync
+8. When idle, UI shows last successful sync timestamp and product count
+9. At least one of SKU or EAN is required per product for live price lookup
+10. Removing shop-synced products hides them locally; user may restore the full shop catalog via "Rebuild from Shop" (`RESET_FULL` sync). Manually created products are truly deleted.
 
 ### 6.5 Role and Access Management
 1. SuperAdmin/Admin opens Role Definition page.
