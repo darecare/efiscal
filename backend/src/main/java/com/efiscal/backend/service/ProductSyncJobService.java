@@ -66,7 +66,7 @@ public class ProductSyncJobService {
         );
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public SyncStartDecision resolveSyncStart(Long orgId, String requestedMode) {
         failStaleRunningJobs(orgId);
         Optional<ProductSyncJobEntity> running = findRunningJob(orgId);
@@ -87,9 +87,11 @@ public class ProductSyncJobService {
             return resolveIncrementalStart(orgId);
         }
 
-        // AUTO: force full when catalog is empty; otherwise infer incremental vs full
+        // AUTO: force full when catalog is empty; use RESET_FULL if products are only hidden locally
         if (visibleCount == 0) {
-            return new SyncStartDecision(SYNC_TYPE_FULL, null, null);
+            long hiddenCount = productRepository.countHiddenMerchantProByOrgId(orgId);
+            String type = hiddenCount > 0 ? SYNC_TYPE_RESET_FULL : SYNC_TYPE_FULL;
+            return new SyncStartDecision(type, null, null);
         }
         return resolveAutoStart(orgId);
     }
@@ -117,7 +119,9 @@ public class ProductSyncJobService {
             );
         }
         ProductSyncJobEntity job = lastFull.get();
-        if (job.getFinishedAt() == null) {
+        if (job.getFinishedAt() == null
+                || job.getTotal() == 0
+                || job.getSynced() < job.getTotal()) {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "Incremental sync requires a prior completed full sync"

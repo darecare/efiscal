@@ -119,12 +119,69 @@ class ProductSyncJobServiceTest {
         when(productSyncJobRepository.findByOrgIdAndStatus(ORG_ID, ProductSyncJobService.STATUS_RUNNING))
             .thenReturn(Optional.empty());
         when(productRepository.countVisibleByOrgId(ORG_ID)).thenReturn(0L);
+        when(productRepository.countHiddenMerchantProByOrgId(ORG_ID)).thenReturn(0L);
 
         ProductSyncJobService.SyncStartDecision decision =
             productSyncJobService.resolveSyncStart(ORG_ID, ProductSyncJobService.SYNC_MODE_AUTO);
 
         assertEquals(ProductSyncJobService.SYNC_TYPE_FULL, decision.syncType());
         assertNull(decision.modifiedSince());
+    }
+
+    @Test
+    void resolveSyncStart_forcesResetFullWhenCatalogEmptyDueToHiddenProducts() {
+        when(productSyncJobRepository.findByOrgIdAndStatus(ORG_ID, ProductSyncJobService.STATUS_RUNNING))
+            .thenReturn(Optional.empty());
+        when(productRepository.countVisibleByOrgId(ORG_ID)).thenReturn(0L);
+        when(productRepository.countHiddenMerchantProByOrgId(ORG_ID)).thenReturn(5L);
+
+        ProductSyncJobService.SyncStartDecision decision =
+            productSyncJobService.resolveSyncStart(ORG_ID, ProductSyncJobService.SYNC_MODE_AUTO);
+
+        assertEquals(ProductSyncJobService.SYNC_TYPE_RESET_FULL, decision.syncType());
+        assertNull(decision.modifiedSince());
+    }
+
+    @Test
+    void resolveSyncStart_throwsBadRequestForIncrementalWhenLastFullIncomplete() {
+        when(productSyncJobRepository.findByOrgIdAndStatus(ORG_ID, ProductSyncJobService.STATUS_RUNNING))
+            .thenReturn(Optional.empty());
+
+        ProductSyncJobEntity lastFull = job(16L, ProductSyncJobService.SYNC_TYPE_FULL, ProductSyncJobService.STATUS_DONE);
+        lastFull.setSynced(50);
+        lastFull.setTotal(120);
+        lastFull.setFinishedAt(OffsetDateTime.now(ZoneOffset.UTC));
+
+        when(productSyncJobRepository.findTopByOrgIdAndSyncTypeInAndStatusOrderByStartedAtDesc(
+            eq(ORG_ID),
+            eq(List.of(ProductSyncJobService.SYNC_TYPE_FULL, ProductSyncJobService.SYNC_TYPE_RESET_FULL)),
+            eq(ProductSyncJobService.STATUS_DONE)))
+            .thenReturn(Optional.of(lastFull));
+
+        ResponseStatusException ex = assertThrows(
+            ResponseStatusException.class,
+            () -> productSyncJobService.resolveSyncStart(ORG_ID, ProductSyncJobService.SYNC_MODE_INCREMENTAL)
+        );
+
+        assertEquals(400, ex.getStatusCode().value());
+    }
+
+    @Test
+    void resolveSyncStart_throwsBadRequestForIncrementalWhenNoFullJobExists() {
+        when(productSyncJobRepository.findByOrgIdAndStatus(ORG_ID, ProductSyncJobService.STATUS_RUNNING))
+            .thenReturn(Optional.empty());
+        when(productSyncJobRepository.findTopByOrgIdAndSyncTypeInAndStatusOrderByStartedAtDesc(
+            eq(ORG_ID),
+            eq(List.of(ProductSyncJobService.SYNC_TYPE_FULL, ProductSyncJobService.SYNC_TYPE_RESET_FULL)),
+            eq(ProductSyncJobService.STATUS_DONE)))
+            .thenReturn(Optional.empty());
+
+        ResponseStatusException ex = assertThrows(
+            ResponseStatusException.class,
+            () -> productSyncJobService.resolveSyncStart(ORG_ID, ProductSyncJobService.SYNC_MODE_INCREMENTAL)
+        );
+
+        assertEquals(400, ex.getStatusCode().value());
     }
 
     @Test

@@ -173,6 +173,13 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long> {
     long countVisibleByOrgId(@Param("orgId") Long orgId);
 
     @Query("""
+        SELECT COUNT(p) FROM ProductEntity p
+        WHERE p.orgId = :orgId AND p.sourceType = 'MERCHANTPRO'
+        AND p.deletedAt IS NULL AND p.hiddenAt IS NOT NULL
+        """)
+    long countHiddenMerchantProByOrgId(@Param("orgId") Long orgId);
+
+    @Query("""
         SELECT p FROM ProductEntity p
         WHERE p.productId = :productId AND p.deletedAt IS NULL AND p.hiddenAt IS NULL
         """)
