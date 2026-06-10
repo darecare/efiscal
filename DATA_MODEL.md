@@ -453,7 +453,7 @@ Organization-scoped product catalog for fiscal bill line item lookup. Populated 
 | product_id          | BIGINT       | PK, NOT NULL, IDENTITY(1000,1) | Auto-generated integer        |
 | client_id           | BIGINT       | FK → client.client_id, NOT NULL | Client scope                  |
 | org_id              | BIGINT       | FK → org.org_id, NOT NULL           | Organization scope          |
-| mp_product_id       | INTEGER      | NULL                     | MerchantPro product id (sync key) |
+| mp_product_id       | BIGINT       | NULL                     | MerchantPro product id (sync key) |
 | name                | VARCHAR(500) | NOT NULL                 | Product name                  |
 | sku                 | VARCHAR(255) | NULL                     | Optional SKU                  |
 | ean                 | VARCHAR(100) | NULL                     | Optional EAN/barcode          |
@@ -473,7 +473,7 @@ Rules:
 - Local delete: `MANUAL` → set `deleted_at`; `MERCHANTPRO` → set `hidden_at` (restorable via `RESET_FULL` sync).
 - Catalog list/search (API `q` param on Products screen): matches visible rows across name, SKU, EAN, IDs, and price fields.
 - Fiscal bill autocomplete (`GET /products/search`): matches visible, active rows where `name` contains the term OR `sku`/`ean` equals the term (case-insensitive).
-- Sync upsert match order: `mp_product_id` → `sku` (case-insensitive, `MERCHANTPRO` only) → `ean` (`MERCHANTPRO` only); matches hidden rows; `RESET_FULL` clears `hidden_at`.
+- Sync upsert match order: `mp_product_id` → `sku` (case-insensitive, `MERCHANTPRO` only) → `ean` (`MERCHANTPRO` only); matches hidden rows; `RESET_FULL` clears `hidden_at`. If a `MANUAL` product already holds the same SKU or EAN, the shop row is skipped (no duplicate insert).
 
 Migrations:
 - `V31__create_product_table.sql` — creates `product` table and indexes
@@ -493,7 +493,7 @@ Persistent MerchantPro product sync runs per organization (Option B). Progress s
 | sync_job_id    | BIGINT       | PK, IDENTITY             | Job id                                     |
 | org_id         | BIGINT       | FK → org.org_id, NOT NULL| Organization scope                         |
 | status         | VARCHAR(16)  | NOT NULL                 | `RUNNING`, `DONE`, `FAILED`                |
-| sync_type      | VARCHAR(16)  | NOT NULL                 | `FULL`, `INCREMENTAL`                      |
+| sync_type      | VARCHAR(16)  | NOT NULL                 | `FULL`, `INCREMENTAL`, `RESET_FULL`        |
 | synced         | INT          | NOT NULL, DEFAULT 0      | Products upserted so far                   |
 | total          | INT          | NOT NULL, DEFAULT 0      | Reported catalog total from MP meta        |
 | error_message  | TEXT         | NULL                     | Set on `FAILED`                            |

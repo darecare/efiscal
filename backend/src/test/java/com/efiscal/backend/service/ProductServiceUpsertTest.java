@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -118,6 +119,8 @@ class ProductServiceUpsertTest {
             .thenReturn(Optional.empty());
         when(productRepository.findMerchantProByOrgIdAndSkuIncludingHidden(ORG_ID, "SKU-MANUAL"))
             .thenReturn(Optional.empty());
+        when(productRepository.findManualByOrgIdAndSku(ORG_ID, "SKU-MANUAL"))
+            .thenReturn(Optional.empty());
         when(productRepository.save(any(ProductEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
         MerchantProProductRow row = new MerchantProProductRow(503L, "Shop Item", "SKU-MANUAL", null, new BigDecimal("5.00"));
@@ -133,6 +136,39 @@ class ProductServiceUpsertTest {
         ProductEntity saved = captor.getValue();
         assertEquals(SOURCE_TYPE_MERCHANTPRO, saved.getSourceType());
         assertNull(saved.getProductId());
+    }
+
+    @Test
+    void upsertPage_skipsWhenManualProductHasMatchingSku() {
+        when(productRepository.findByOrgIdAndMpProductIdIncludingHidden(ORG_ID, 504L))
+            .thenReturn(Optional.empty());
+        when(productRepository.findMerchantProByOrgIdAndSkuIncludingHidden(ORG_ID, "SKU-MANUAL"))
+            .thenReturn(Optional.empty());
+        when(productRepository.findManualByOrgIdAndSku(ORG_ID, "SKU-MANUAL"))
+            .thenReturn(Optional.of(manualProduct(200L, "SKU-MANUAL")));
+
+        MerchantProProductRow row = new MerchantProProductRow(504L, "Shop Item", "SKU-MANUAL", null, new BigDecimal("5.00"));
+        ProductService.UpsertPageResult result = productService.upsertPage(
+            ORG_ID,
+            CLIENT_ID,
+            List.of(row),
+            ProductSyncJobService.SYNC_TYPE_FULL
+        );
+
+        assertEquals(1, result.count());
+        assertEquals(List.of(), result.seenMpProductIds());
+        verify(productRepository, never()).save(any(ProductEntity.class));
+    }
+
+    private static ProductEntity manualProduct(long productId, String sku) {
+        ProductEntity entity = new ProductEntity();
+        entity.setProductId(productId);
+        entity.setOrgId(ORG_ID);
+        entity.setClientId(CLIENT_ID);
+        entity.setSourceType("MANUAL");
+        entity.setName("Manual");
+        entity.setSku(sku);
+        return entity;
     }
 
     private static ProductEntity syncedProduct(long productId, long mpProductId) {

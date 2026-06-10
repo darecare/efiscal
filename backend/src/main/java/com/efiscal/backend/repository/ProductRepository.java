@@ -216,6 +216,26 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long> {
         @Param("ean") String ean
     );
 
+    @Query("""
+        SELECT p FROM ProductEntity p
+        WHERE p.orgId = :orgId AND p.deletedAt IS NULL AND p.sourceType = 'MANUAL'
+        AND LOWER(p.sku) = LOWER(:sku)
+        """)
+    Optional<ProductEntity> findManualByOrgIdAndSku(
+        @Param("orgId") Long orgId,
+        @Param("sku") String sku
+    );
+
+    @Query("""
+        SELECT p FROM ProductEntity p
+        WHERE p.orgId = :orgId AND p.deletedAt IS NULL AND p.sourceType = 'MANUAL'
+        AND p.ean = :ean
+        """)
+    Optional<ProductEntity> findManualByOrgIdAndEan(
+        @Param("orgId") Long orgId,
+        @Param("ean") String ean
+    );
+
     @Modifying(clearAutomatically = true)
     @Query("""
         UPDATE ProductEntity p SET p.syncStatus = 'MISSING_IN_SOURCE'

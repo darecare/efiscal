@@ -655,6 +655,7 @@
     "deleteConfirm": "Remove product \"{{name}}\" from the catalog? Shop-synced products can be restored with Rebuild from Shop.",
     "nameRequired": "Product name is required.",
     "skuOrEanRequired": "At least one of SKU or EAN is required.",
+    "invalidPrice": "Please enter a valid price.",
     "skuOrEanHint": "At least one of SKU or EAN is required for shop price lookup.",
     "created": "Product created.",
     "updated": "Product updated.",

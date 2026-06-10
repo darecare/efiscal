@@ -283,6 +283,10 @@ export default function Products() {
       setFormError(t('products.skuOrEanRequired'))
       return
     }
+    if (form.lastKnownPrice.trim() && Number.isNaN(parseFloat(form.lastKnownPrice))) {
+      setFormError(t('products.invalidPrice'))
+      return
+    }
     if (!selectedOrgId) {
       setFormError(t('products.selectOrgRequired'))
       return
@@ -670,9 +674,11 @@ export default function Products() {
                       </td>
                       <td>
                         <div className="table-row-actions">
-                          <button type="button" className="secondary-button" onClick={() => openEdit(p)}>
-                            {t('common.edit')}
-                          </button>
+                          {p.sourceType !== 'MERCHANTPRO' && (
+                            <button type="button" className="secondary-button" onClick={() => openEdit(p)}>
+                              {t('common.edit')}
+                            </button>
+                          )}
                           <button type="button" className="secondary-button danger" onClick={() => handleDelete(p)}>
                             {t('common.delete')}
                           </button>

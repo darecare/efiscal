@@ -374,7 +374,7 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 ```
 - Errors: `400`, `401`, `403`, `404`, `429`, `502`
 
-`ProductDto` fields: `productId`, `clientId`, `orgId`, `mpProductId` (number), `name`, `sku`, `ean`, `lastKnownPrice`, `isActive`
+`ProductDto` fields: `productId`, `clientId`, `orgId`, `mpProductId` (number), `name`, `sku`, `ean`, `lastKnownPrice`, `isActive`, `sourceType` (`MANUAL` | `MERCHANTPRO`), `syncStatus` (`ACTIVE` | `MISSING_IN_SOURCE`), `hiddenAt` (ISO-8601 timestamp or null)
 
 ## 5A. Access Control Endpoints (Role and Action Management)
 

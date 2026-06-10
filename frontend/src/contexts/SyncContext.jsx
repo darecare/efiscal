@@ -127,6 +127,8 @@ export function SyncProvider({ children }) {
     setSyncResult(null)
     startPolling(orgId)
 
+    abortRef.current?.abort()
+
     const stream = productsApi.syncStream(orgId, {
       mode,
       failedMessage,

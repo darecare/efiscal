@@ -13,7 +13,6 @@ import com.efiscal.backend.service.ProductService.ProductPage;
 import com.efiscal.backend.service.ProductService.ProductRequest;
 import com.efiscal.backend.service.ProductSyncJobService.SyncStatusDto;
 import java.util.List;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -150,10 +149,6 @@ public class ProductController {
                     .body(productService.getSyncStatus(orgId));
             }
             throw ex;
-        } catch (DataIntegrityViolationException ex) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(productService.getSyncStatus(orgId));
         }
     }
 

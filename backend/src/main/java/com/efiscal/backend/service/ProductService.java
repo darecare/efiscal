@@ -21,6 +21,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -33,6 +37,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @Service
 public class ProductService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProductService.class);
 
     private static final int SYNC_PAGE_SIZE = 100;
     private static final long SSE_TIMEOUT_MS = 0L;
@@ -48,6 +54,7 @@ public class ProductService {
     private final ProductSyncJobService productSyncJobService;
     private final ObjectMapper objectMapper;
     private final ProductService self;
+    private final ConcurrentHashMap<Long, AtomicBoolean> cancelFlags = new ConcurrentHashMap<>();
 
     public ProductService(
         ProductRepository productRepository,
@@ -74,13 +81,15 @@ public class ProductService {
     @Transactional
     public void cancelSync(Long orgId) {
         requireOrg(orgId);
-        productSyncJobService.findRunningJob(orgId).ifPresent(job ->
+        productSyncJobService.findRunningJob(orgId).ifPresent(job -> {
+            long jobId = job.getSyncJobId();
+            cancelFlags.computeIfAbsent(jobId, id -> new AtomicBoolean(false)).set(true);
             productSyncJobService.completeJob(
-                job.getSyncJobId(),
+                jobId,
                 ProductSyncJobService.STATUS_FAILED,
                 "Cancelled by user"
-            )
-        );
+            );
+        });
     }
 
     @Transactional(readOnly = true)
@@ -151,6 +160,12 @@ public class ProductService {
     @Transactional
     public ProductDto update(Long productId, ProductRequest req) {
         ProductEntity entity = requireProduct(productId);
+        if (SOURCE_TYPE_MERCHANTPRO.equals(entity.getSourceType())) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Shop products cannot be edited directly"
+            );
+        }
         validateRequest(req);
 
         entity.setName(req.name().trim());
@@ -220,6 +235,7 @@ public class ProductService {
         long clientId = org.getClient().getClientId();
         LocalDate modifiedSince = decision.modifiedSince();
         String syncType = decision.syncType();
+        cancelFlags.put(jobId, new AtomicBoolean(false));
         java.util.concurrent.CompletableFuture.runAsync(
             () -> runSyncStream(orgId, clientId, jobId, modifiedSince, syncType, emitter));
         return emitter;
@@ -241,6 +257,11 @@ public class ProductService {
             int start = 0;
 
             while (true) {
+                if (isCancelled(jobId)) {
+                    failSyncJob(emitter, jobId, synced, total, syncType, "Cancelled by user");
+                    return;
+                }
+
                 ProductFetchResult page = merchantProProductService.fetchProducts(
                     orgId, start, SYNC_PAGE_SIZE, modifiedSince);
 
@@ -270,7 +291,12 @@ public class ProductService {
             }
 
             if (fullCatalogSync) {
-                self.markMissingAfterFullSync(orgId, seenMpProductIds);
+                self.markMissingAfterFullSync(orgId, seenMpProductIds, total);
+            }
+
+            if (isCancelled(jobId)) {
+                failSyncJob(emitter, jobId, synced, total, syncType, "Cancelled by user");
+                return;
             }
 
             int finalTotal = total != null ? total : synced;
@@ -286,7 +312,14 @@ public class ProductService {
         } catch (Exception ex) {
             String message = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
             failSyncJob(emitter, jobId, synced, total, syncType, message);
+        } finally {
+            cancelFlags.remove(jobId);
         }
+    }
+
+    private boolean isCancelled(long jobId) {
+        AtomicBoolean flag = cancelFlags.get(jobId);
+        return flag != null && flag.get();
     }
 
     private void failSyncJob(
@@ -339,9 +372,17 @@ public class ProductService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markMissingAfterFullSync(Long orgId, Set<Long> seenMpProductIds) {
+    public void markMissingAfterFullSync(Long orgId, Set<Long> seenMpProductIds, Integer apiReportedTotal) {
         if (seenMpProductIds.isEmpty()) {
-            productRepository.markAllMerchantProMissingInSource(orgId);
+            if (apiReportedTotal != null && apiReportedTotal == 0) {
+                productRepository.markAllMerchantProMissingInSource(orgId);
+            } else {
+                log.warn(
+                    "Skipping mark-missing after full sync for org {}: no products seen and API total is {}",
+                    orgId,
+                    apiReportedTotal
+                );
+            }
         } else {
             productRepository.markMissingInSourceExcept(orgId, seenMpProductIds);
         }
@@ -415,6 +456,16 @@ public class ProductService {
                 .orElse(null);
         }
 
+        if (entity == null && skuVal != null
+                && productRepository.findManualByOrgIdAndSku(orgId, skuVal).isPresent()) {
+            return null;
+        }
+
+        if (entity == null && eanVal != null
+                && productRepository.findManualByOrgIdAndEan(orgId, eanVal).isPresent()) {
+            return null;
+        }
+
         if (entity == null) {
             entity = new ProductEntity();
             entity.setClientId(clientId);
@@ -475,7 +526,10 @@ public class ProductService {
             entity.getSku(),
             entity.getEan(),
             entity.getLastKnownPrice(),
-            entity.isActive()
+            entity.isActive(),
+            entity.getSourceType(),
+            entity.getSyncStatus(),
+            entity.getHiddenAt()
         );
     }
 
@@ -524,7 +578,10 @@ public class ProductService {
         String sku,
         String ean,
         BigDecimal lastKnownPrice,
-        boolean isActive
+        boolean isActive,
+        String sourceType,
+        String syncStatus,
+        OffsetDateTime hiddenAt
     ) {}
 
     public record ProductPage(

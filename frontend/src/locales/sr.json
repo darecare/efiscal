@@ -664,6 +664,7 @@
     "deleteConfirm": "Ukloniti proizvod \"{{name}}\" iz kataloga? Proizvodi sinhronizovani iz prodavnice mogu se vratiti opcijom Ponovo izgradi iz prodavnice.",
     "nameRequired": "Naziv proizvoda je obavezan.",
     "skuOrEanRequired": "Potreban je najmanje SKU ili EAN.",
+    "invalidPrice": "Unesite ispravnu cenu.",
     "skuOrEanHint": "Za proveru cene u prodavnici potreban je najmanje SKU ili EAN.",
     "created": "Proizvod je kreiran.",
     "updated": "Proizvod je ažuriran.",

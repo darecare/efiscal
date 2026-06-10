@@ -356,7 +356,7 @@ export const productsApi = {
     const controller = new AbortController()
     const modeParam = mode ? `&mode=${encodeURIComponent(mode)}` : ''
     const url = `/api/v1/products/sync?orgId=${encodeURIComponent(orgId)}${modeParam}`
-    const fallbackMessage = failedMessage || 'Sync failed'
+    const fallbackMessage = failedMessage || ''
 
     fetch(url, {
       headers: {

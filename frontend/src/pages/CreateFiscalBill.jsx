@@ -178,6 +178,7 @@ export default function CreateFiscalBill() {
       productId: product.productId ? String(product.productId) : '',
       sku: product.sku || '',
       ean: product.ean || '',
+      gtin: product.ean || '',
       priceStatus: '',
       priceVerifying: true,
       suggestions: [],
