@@ -168,6 +168,214 @@ Subscription behavior:
 ```
 - Errors: `401`, `429`, `500`, `502`, `504`
 
+## 5B. Products Endpoints
+
+Base path: `/products`
+
+Required action codes:
+- `FISCAL_MANAGE_PRODUCTS` — list, create, update, delete, sync
+- `FISCAL_CREATE_BILL` — catalog search (inline autocomplete), live lookup (price verification)
+
+All endpoints require `orgId` scope validation via user's `allowedOrgIds` (except superadmin).
+
+### GET /products
+- Description: List products for an organization (paginated). Optional text search across name, SKU, EAN, product ID, MerchantPro product ID, and last known price.
+- Query:
+  - `orgId` (required)
+  - `page` (int, default `0`)
+  - `size` (int, default `100`, max `500`)
+  - `q` (optional): case-insensitive substring match across catalog fields (OR logic)
+- 200 Response:
+```json
+{
+  "items": [ /* ProductDto[] */ ],
+  "totalCount": 1250,
+  "page": 0,
+  "size": 100
+}
+```
+- Errors: `401`, `403`, `404`
+
+### POST /products
+- Description: Create a product manually.
+- Query: `orgId` (required)
+- Request:
+```json
+{
+  "name": "Widget A",
+  "sku": "W-001",
+  "ean": "1234567890123",
+  "lastKnownPrice": 1200.00,
+  "isActive": true
+}
+```
+- 201 Response: `ProductDto`
+- Errors: `400` (missing/blank name, or both sku/ean missing), `401`, `403`
+
+### PUT /products/{id}
+- Description: Update a product.
+- Request: same shape as POST body
+- 200 Response: `ProductDto`
+- Errors: `400`, `401`, `403`, `404`
+
+### GET /products/ids
+- Description: Return product IDs for an organization (for cross-page bulk selection). Uses the same optional `q` filter as `GET /products`. Capped at 5000 IDs.
+- Query:
+  - `orgId` (required)
+  - `q` (optional): same semantics as `GET /products`
+- 200 Response:
+```json
+{
+  "productIds": [1, 2, 3]
+}
+```
+- Errors: `401`, `403`, `404`
+
+### DELETE /products/bulk
+- Description: Soft-delete multiple products in one request. Only non-deleted products in the given org are affected. Either pass explicit `productIds` or set `selectAll: true` to target all products (optionally filtered by `q`, same semantics as `GET /products`).
+- Query: `orgId` (required)
+- Request (by IDs):
+```json
+{
+  "productIds": [1, 2, 3]
+}
+```
+- Request (select all matching):
+```json
+{
+  "selectAll": true,
+  "q": "widget"
+}
+```
+- Limits: 1–500 distinct IDs per request when using `productIds`; no ID limit when using `selectAll`
+- 200 Response:
+```json
+{
+  "deleted": 3
+}
+```
+- Errors: `400` (empty list or too many IDs), `401`, `403`, `404`
+
+### PATCH /products/bulk/status
+- Description: Activate or deactivate multiple products in one request. Either pass explicit `productIds` or set `selectAll: true` with optional `q` filter (same semantics as `GET /products`).
+- Query: `orgId` (required)
+- Request (by IDs):
+```json
+{
+  "productIds": [1, 2, 3],
+  "isActive": false
+}
+```
+- Request (select all matching):
+```json
+{
+  "selectAll": true,
+  "isActive": false,
+  "q": "widget"
+}
+```
+- Limits: 1–500 distinct IDs per request when using `productIds`; no ID limit when using `selectAll`
+- 200 Response:
+```json
+{
+  "updated": 3
+}
+```
+- Errors: `400` (empty list or too many IDs), `401`, `403`, `404`
+
+### DELETE /products/{id}
+- Description: Remove a product from the visible catalog. `MANUAL` products are soft-deleted (`deleted_at`). `MERCHANTPRO` products are hidden locally (`hidden_at`) and can be restored via `GET /products/sync?mode=RESET_FULL`.
+- 204 Response: empty
+- Errors: `401`, `403`, `404`
+
+### GET /products/search
+- Description: Search local product catalog (used by Create Fiscal Bill inline autocomplete on line item Name). Returns active products only.
+- Query:
+  - `orgId` (required)
+  - `q` (recommended): single term matched with OR logic — `name` contains term (case-insensitive), or exact `sku`/`ean`
+  - Legacy filters: `name`, `sku`, `ean` (combined with AND when `q` is omitted)
+- Minimum client query length for autocomplete: 2 characters (enforced in UI, not API)
+- 200 Response: array of `ProductDto`
+- Errors: `401`, `403`
+
+### GET /products/sync/status
+- Description: Pollable sync job status for an organization (DB-backed). Use after page refresh or alongside SSE.
+- Query: `orgId` (required)
+- 200 Response:
+```json
+{
+  "running": true,
+  "syncJobId": 42,
+  "syncType": "INCREMENTAL",
+  "status": "RUNNING",
+  "synced": 2900,
+  "total": 120584,
+  "filterFrom": "2026-06-03T14:22:00Z",
+  "startedAt": "2026-06-04T12:00:00Z",
+  "finishedAt": null,
+  "errorMessage": null
+}
+```
+- When no job exists, `running` is `false` and other fields are null/zero.
+- When idle, the most recent job for the org may be returned with `running: false` (for “last sync” UI).
+- **Stale jobs:** `RUNNING` jobs older than 2 hours are auto-failed when this endpoint is called (and on sync start).
+- Errors: `401`, `403`, `404`
+
+### POST /products/sync/cancel
+- Description: Mark the org's active product sync job as `FAILED` with message `Cancelled by user`. Idempotent when no job is running.
+- Query: `orgId` (required)
+- 204 Response: no body
+- Errors: `401`, `403`, `404`
+
+### GET /products/sync
+- Description: Pull products from MerchantPro via `GET_PRODUCTS` template and upsert into local `product` table. Streams progress as Server-Sent Events (SSE). Creates a `product_sync_job` row and updates it on each page.
+- Query:
+  - `orgId` (required)
+  - `mode` (optional, default `AUTO`): `AUTO` | `INCREMENTAL` | `FULL` | `RESET_FULL`
+- Response: `text/event-stream` with JSON event payloads:
+```json
+{ "synced": 0, "total": 120, "done": false, "syncType": "FULL" }
+```
+```json
+{ "synced": 120, "total": 120, "done": true, "syncType": "FULL" }
+```
+```json
+{ "synced": 0, "total": 0, "done": true, "syncType": "INCREMENTAL", "error": "INCREMENTAL_FILTER_UNSUPPORTED: ..." }
+```
+- **Sync mode / type selection (server-side):**
+  - `AUTO` (default) — `INCREMENTAL` when a prior completed `FULL` or `RESET_FULL` job exists and catalog has visible products; otherwise `FULL`. Forces `FULL` when the org has zero visible products (empty catalog safety net).
+  - `FULL` — full MerchantPro catalog fetch; updates hidden synced rows in place but does not unhide them; marks unseen synced rows `sync_status = MISSING_IN_SOURCE`.
+  - `RESET_FULL` — same as `FULL` but clears `hidden_at` on matched `MERCHANTPRO` rows (rebuild from shop).
+  - `INCREMENTAL` — requires a prior completed `FULL` or `RESET_FULL` job; MerchantPro list calls use `modified[gte]=YYYY-MM-DD` with `filter_from` = last full job `finished_at` minus 1 day.
+  - Job `syncType` values: `FULL`, `INCREMENTAL`, `RESET_FULL`.
+- **Unsupported incremental filters:** if MerchantPro returns `undefined_filter` / "No such filter", the job fails with `errorMessage` prefixed by `INCREMENTAL_FILTER_UNSUPPORTED`. The server does **not** auto-fallback to full sync.
+- **Concurrency:** at most one `RUNNING` job per org (partial unique index). Second start while running → `409` with body = current `sync/status` payload. Concurrent duplicate starts that race past the check also return `409` (unique index violation).
+- **Stale jobs:** `RUNNING` jobs older than 2 hours are auto-failed on sync start and on `GET /products/sync/status`.
+- Notes:
+  - Client should use `fetch` with `Accept: text/event-stream, application/json` and `Authorization: Bearer <token>` (native `EventSource` cannot send the Bearer header).
+  - Server-side emitter has no timeout; sync may run for large catalogs (rate-limited to ~80 MP requests/min).
+  - Pagination follows MerchantPro `meta.links.next` (stops when `next` is null).
+  - Client must handle stream end without `done: true` as an error.
+  - Poll `GET /products/sync/status` every 2–3s while syncing (refresh recovery).
+- Errors: `401`, `403`, `404`, `409` (sync already running), `429`, `502`
+
+### GET /products/lookup
+- Description: Live price lookup from MerchantPro via `GET /api/v2/inventory/{type}/{identifier}` (`type` = `sku` or `ean`). Tries SKU first, then EAN.
+- Query: `orgId` (required), `sku` and/or `ean`
+- 200 Response:
+```json
+{
+  "name": "Widget A",
+  "sku": "W-001",
+  "ean": "1234567890123",
+  "priceGross": 1250.00,
+  "mpProductId": 1001
+}
+```
+- Errors: `400`, `401`, `403`, `404`, `429`, `502`
+
+`ProductDto` fields: `productId`, `clientId`, `orgId`, `mpProductId` (number), `name`, `sku`, `ean`, `lastKnownPrice`, `isActive`, `sourceType` (`MANUAL` | `MERCHANTPRO`), `syncStatus` (`ACTIVE` | `MISSING_IN_SOURCE`), `hiddenAt` (ISO-8601 timestamp or null)
+
 ## 5A. Access Control Endpoints (Role and Action Management)
 
 ### GET /roles
@@ -398,7 +606,6 @@ Subscription behavior:
     "status": "ACTIVE",
     "currency": "RSD",
     "isActive": true,
-    "isSearchshopproducts": false,
     "smtpServer": "smtp.example.com",
     "smtpPort": 587,
     "emailFrom": "no-reply@example.com",
@@ -428,7 +635,6 @@ Subscription behavior:
   "status": "ACTIVE",
   "currency": "RSD",
   "isActive": true,
-  "isSearchshopproducts": false,
   "smtpServer": "smtp.example.com",
   "smtpPort": 587,
   "emailFrom": "no-reply@example.com",

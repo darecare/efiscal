@@ -37,6 +37,12 @@ MERCHANTPRO FETCH PARAMETERIZATION:
 - Additional parameters must be added through metadata/config extension (template + parameter definitions), not hardcoded endpoint redesign.
 - Fetch pipeline should support pagination parameters (limit/start) and future provider-specific filters.
 
+MERCHANTPRO PRODUCTS (catalog):
+- Local `product` table per organization stores catalog rows for fiscal bill line-item lookup (manual entry or sync).
+- Sync: `GET_PRODUCTS` apitemplate on `MP` apiconn; paginated fetch with per-page DB commits; progress streamed to UI via SSE (`GET /api/v1/products/sync`).
+- Create Fiscal Bill: inline autocomplete searches local catalog (`q` = name/SKU/EAN); selection triggers live price lookup from MerchantPro before submit.
+- Access: `FISCAL_MANAGE_PRODUCTS` (catalog admin), `FISCAL_CREATE_BILL` (search + lookup). No per-organization feature flag.
+
 INTEGRATION NOTE:
 - Java backend calls MerchantPro API directly.
 - Java backend calls Serbian Tax Authority API directly.

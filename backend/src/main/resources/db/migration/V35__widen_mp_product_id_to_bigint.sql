@@ -1,0 +1,1 @@
+ALTER TABLE product ALTER COLUMN mp_product_id TYPE BIGINT;

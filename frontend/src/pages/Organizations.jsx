@@ -11,7 +11,6 @@ const emptyForm = {
   status: 'ACTIVE',
   currency: 'RSD',
   isActive: true,
-  isSearchshopproducts: false,
   smtpServer: '',
   smtpPort: '',
   emailFrom: '',
@@ -91,7 +90,6 @@ export default function Organizations() {
       status: o.status,
       currency: o.currency,
       isActive: o.isActive,
-      isSearchshopproducts: Boolean(o.isSearchshopproducts),
       smtpServer: o.smtpServer || '',
       smtpPort: o.smtpPort ?? '',
       emailFrom: o.emailFrom || '',
@@ -336,17 +334,6 @@ export default function Organizations() {
                       </select>
                     </div>
                   )}
-                  <div className="field" style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <input
-                        type="checkbox"
-                        checked={form.isSearchshopproducts}
-                        onChange={(e) => handleChange('isSearchshopproducts', e.target.checked)}
-                      />
-                      <span>{t('organizations.searchShopProductsLabel')}</span>
-                    </label>
-                    <small className="muted">{t('organizations.searchShopProductsHelp')}</small>
-                  </div>
                 </div>
               )}
 

@@ -265,6 +265,179 @@ export const taxCategoryApi = {
   },
 }
 
+function decodeApiError(body, fallback) {
+  if (!body) return fallback
+  if (typeof body.message === 'string' && body.message.trim()) return body.message
+  const err = body.error
+  if (err && typeof err === 'object' && err.message) return err.message
+  if (typeof err === 'string' && err !== 'Forbidden' && err !== 'Not Found') return err
+  return fallback
+}
+
+const PRODUCTS_BULK_CHUNK_SIZE = 500
+
+async function productsBulkChunked(method, url, orgId, productIds, extraBody = {}) {
+  let total = 0
+  for (let i = 0; i < productIds.length; i += PRODUCTS_BULK_CHUNK_SIZE) {
+    const chunk = productIds.slice(i, i + PRODUCTS_BULK_CHUNK_SIZE)
+    const response = await api.request({
+      method,
+      url,
+      params: { orgId },
+      data: { productIds: chunk, ...extraBody },
+    })
+    const countKey = method === 'delete' ? 'deleted' : 'updated'
+    total += response.data?.[countKey] ?? 0
+  }
+  const countKey = method === 'delete' ? 'deleted' : 'updated'
+  return { [countKey]: total }
+}
+
+export const productsApi = {
+  async list(orgId, { page = 0, size = 100, q } = {}) {
+    const params = { orgId, page, size }
+    if (q) params.q = q
+    const response = await api.get('/products', { params })
+    return response.data
+  },
+  async listIds(orgId, q) {
+    const params = { orgId }
+    if (q) params.q = q
+    const response = await api.get('/products/ids', { params })
+    return response.data
+  },
+  async create(orgId, payload) {
+    const response = await api.post('/products', payload, { params: { orgId } })
+    return response.data
+  },
+  async update(productId, payload) {
+    const response = await api.put(`/products/${productId}`, payload)
+    return response.data
+  },
+  async remove(productId) {
+    await api.delete(`/products/${productId}`)
+  },
+  async removeMany(orgId, productIds, { selectAll = false, q } = {}) {
+    if (selectAll) {
+      const response = await api.delete('/products/bulk', {
+        params: { orgId },
+        data: { selectAll: true, q: q || undefined },
+      })
+      return response.data
+    }
+    return productsBulkChunked('delete', '/products/bulk', orgId, productIds)
+  },
+  async updateStatusMany(orgId, productIds, isActive, { selectAll = false, q } = {}) {
+    if (selectAll) {
+      const response = await api.patch('/products/bulk/status', {
+        selectAll: true,
+        isActive,
+        q: q || undefined,
+      }, { params: { orgId } })
+      return response.data
+    }
+    return productsBulkChunked('patch', '/products/bulk/status', orgId, productIds, { isActive })
+  },
+  async search(orgId, { q, name, sku, ean } = {}) {
+    const response = await api.get('/products/search', {
+      params: { orgId, q, name, sku, ean },
+    })
+    return response.data
+  },
+  async syncStatus(orgId) {
+    const response = await api.get('/products/sync/status', { params: { orgId } })
+    return response.data
+  },
+  async cancelSync(orgId) {
+    await api.post('/products/sync/cancel', null, { params: { orgId } })
+  },
+  syncStream(orgId, { mode = 'AUTO', onProgress, onDone, onError, onConflict, failedMessage } = {}) {
+    const token = localStorage.getItem('token')
+    const controller = new AbortController()
+    const modeParam = mode ? `&mode=${encodeURIComponent(mode)}` : ''
+    const url = `/api/v1/products/sync?orgId=${encodeURIComponent(orgId)}${modeParam}`
+    const fallbackMessage = failedMessage || ''
+
+    fetch(url, {
+      headers: {
+        Accept: 'text/event-stream, application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) {
+        let message = fallbackMessage
+        try {
+          const body = await response.json()
+          if (response.status === 409) {
+            onConflict?.(body)
+            return
+          }
+          message = decodeApiError(body, fallbackMessage)
+        } catch {
+          message = response.statusText || fallbackMessage
+        }
+        onError?.(new Error(message))
+        return
+      }
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let completed = false
+      const handleEvent = (data) => {
+        if (data.done) {
+          completed = true
+          if (data.error) {
+            onError?.(new Error(data.error))
+            return
+          }
+          onDone?.(data)
+        } else {
+          onProgress?.(data)
+        }
+      }
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue
+          const payload = line.slice(5).trim()
+          if (!payload) continue
+          try {
+            handleEvent(JSON.parse(payload))
+          } catch {
+            /* ignore malformed chunks */
+          }
+        }
+      }
+      if (buffer.startsWith('data:')) {
+        const payload = buffer.slice(5).trim()
+        if (payload) {
+          try {
+            handleEvent(JSON.parse(payload))
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      if (!completed) {
+        onError?.(new Error(fallbackMessage))
+      }
+    }).catch((err) => {
+      if (err.name !== 'AbortError') onError?.(err)
+    })
+
+    return { abort: () => controller.abort() }
+  },
+  async lookup(orgId, { sku, ean } = {}) {
+    const response = await api.get('/products/lookup', { params: { orgId, sku, ean } })
+    return response.data
+  },
+}
+
 export const taxApi = {
   async list() {
     const response = await api.get('/taxes')

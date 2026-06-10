@@ -70,7 +70,6 @@ On Organization level is defined connection to mail server. From this mail addre
 | status         | VARCHAR(50)  | NOT NULL, DEFAULT 'ACTIVE' | ACTIVE, SETUP, SUSPENDED, INACTIVE |
 | currency       | VARCHAR(10)  | NOT NULL, DEFAULT 'RSD'  |                               |
 | is_active      | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                               |
-| is_searchshopproducts | BOOLEAN | NOT NULL, DEFAULT FALSE | Search product data directly from shop |
 | smtp_server    | VARCHAR(255) | NULL                     | SMTP host/server name         |
 | smtp_port      | INTEGER      | NULL                     | SMTP port (`1..65535`)        |
 | email_from     | VARCHAR(255) | NULL                     | Sender email displayed to recipients |
@@ -445,12 +444,74 @@ Organization-level fiscal configuration used during fiscal bill creation.
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_fiscalbillconfig_org ON fiscalbillconfig (org_id) WHERE isactive = 'Y';
 
+### 2.18 product
+Table name: product
+Organization-scoped product catalog for fiscal bill line item lookup. Populated manually or via MerchantPro sync (`GET_PRODUCTS`).
+
+| Column              | Type         | Constraints              | Notes                                    |
+|---------------------|--------------|--------------------------|------------------------------------------|
+| product_id          | BIGINT       | PK, NOT NULL, IDENTITY(1000,1) | Auto-generated integer        |
+| client_id           | BIGINT       | FK → client.client_id, NOT NULL | Client scope                  |
+| org_id              | BIGINT       | FK → org.org_id, NOT NULL           | Organization scope          |
+| mp_product_id       | BIGINT       | NULL                     | MerchantPro product id (sync key) |
+| name                | VARCHAR(500) | NOT NULL                 | Product name                  |
+| sku                 | VARCHAR(255) | NULL                     | Optional SKU                  |
+| ean                 | VARCHAR(100) | NULL                     | Optional EAN/barcode          |
+| last_known_price    | NUMERIC(14,2)| NULL                     | Informational; live price verified at selection |
+| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                             |
+| created_at          | TIMESTAMPTZ  | NOT NULL                 |                             |
+| updated_at          | TIMESTAMPTZ  | NOT NULL                 |                             |
+| deleted_at          | TIMESTAMPTZ  | NULL                     | True delete for `MANUAL` products |
+| source_type         | VARCHAR(16)  | NOT NULL, DEFAULT `MANUAL` | `MANUAL` or `MERCHANTPRO` |
+| sync_status         | VARCHAR(20)  | NOT NULL, DEFAULT `ACTIVE` | `ACTIVE` or `MISSING_IN_SOURCE` (synced rows only) |
+| hidden_at           | TIMESTAMPTZ  | NULL                     | Local hide/archive for `MERCHANTPRO` products |
+
+Rules:
+- At least one of `sku` or `ean` is required for manual create and for live shop price lookup.
+- `last_known_price` is not authoritative for fiscal bills; use live lookup at line-item selection.
+- Visible catalog rows: `deleted_at IS NULL AND hidden_at IS NULL`.
+- Local delete: `MANUAL` → set `deleted_at`; `MERCHANTPRO` → set `hidden_at` (restorable via `RESET_FULL` sync).
+- Catalog list/search (API `q` param on Products screen): matches visible rows across name, SKU, EAN, IDs, and price fields.
+- Fiscal bill autocomplete (`GET /products/search`): matches visible, active rows where `name` contains the term OR `sku`/`ean` equals the term (case-insensitive).
+- Sync upsert match order: `mp_product_id` → `sku` (case-insensitive, `MERCHANTPRO` only) → `ean` (`MERCHANTPRO` only); matches hidden rows; `RESET_FULL` clears `hidden_at`. If a `MANUAL` product already holds the same SKU or EAN, the shop row is skipped (no duplicate insert).
+
+Migrations:
+- `V31__create_product_table.sql` — creates `product` table and indexes
+- `V32__seed_fiscal_products_action.sql` — seeds `FISCAL_MANAGE_PRODUCTS` action and grants for built-in admin roles
+- `V33__drop_org_searchshopproducts.sql` — removes deprecated `org.is_searchshopproducts` (product search is no longer gated by org flag; use RBAC actions instead)
+- `V34__add_product_sku_ean_indexes.sql` — SKU/EAN lookup indexes
+- `V35__widen_mp_product_id_to_bigint.sql` — `mp_product_id` BIGINT
+- `V36__create_product_sync_job.sql` — sync job tracking table
+- `V37__add_product_source_ownership.sql` — `source_type`, `sync_status`, `hidden_at`; backfill synced rows; visibility indexes
+
+### 2.19 product_sync_job
+Table name: product_sync_job
+Persistent MerchantPro product sync runs per organization (Option B). Progress survives page refresh; enforces one active sync per org. Stale `RUNNING` jobs (>2h) are auto-failed on status poll or sync start. User cancel marks job `FAILED` with `Cancelled by user`.
+
+| Column         | Type         | Constraints              | Notes                                      |
+|----------------|--------------|--------------------------|--------------------------------------------|
+| sync_job_id    | BIGINT       | PK, IDENTITY             | Job id                                     |
+| org_id         | BIGINT       | FK → org.org_id, NOT NULL| Organization scope                         |
+| status         | VARCHAR(16)  | NOT NULL                 | `RUNNING`, `DONE`, `FAILED`                |
+| sync_type      | VARCHAR(16)  | NOT NULL                 | `FULL`, `INCREMENTAL`, `RESET_FULL`        |
+| synced         | INT          | NOT NULL, DEFAULT 0      | Products upserted so far                   |
+| total          | INT          | NOT NULL, DEFAULT 0      | Reported catalog total from MP meta        |
+| error_message  | TEXT         | NULL                     | Set on `FAILED`                            |
+| filter_from    | TIMESTAMPTZ  | NULL                     | MP date filter lower bound; NULL for FULL  |
+| started_at     | TIMESTAMPTZ  | NOT NULL                 | Job start                                  |
+| finished_at    | TIMESTAMPTZ  | NULL                     | Job end                                    |
+
+Indexes:
+- `(org_id, started_at DESC)` — latest job lookup
+- `(org_id) WHERE status = 'RUNNING'` — UNIQUE partial; one running job per org
 
 ## 3. Entity Relationships
 
 ```
 organizations
     ├── user_orgaccess (1:N)
+    ├── product (1:N)
+    ├── product_sync_job (1:N)
     ├── platform_connections (1:N)
     ├── sales_orders (1:N)
     │     └── fiscalbill (1:N)
@@ -487,6 +548,10 @@ action_catalog → role_action_access (1:N)
 | fiscal_documents           | (organization_id, status)                      | Status dashboards               |
 | fiscal_documents           | idempotency_key                                | Idempotent submission check     |
 | fiscal_document_audit_log  | fiscal_document_id                             | Audit trail retrieval           |
+| product                    | (org_id) WHERE deleted_at IS NULL              | Product list/search by org      |
+| product                    | (org_id, mp_product_id) UNIQUE partial         | Sync upsert key                 |
+| product_sync_job           | (org_id, started_at DESC)                        | Latest job per org              |
+| product_sync_job           | (org_id) WHERE status = 'RUNNING' UNIQUE       | One active sync per org         |
 
 ---
 

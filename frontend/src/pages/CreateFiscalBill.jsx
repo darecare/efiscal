@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
-import { fiscalBillApi, orgsApi } from '../services/api'
+import { fiscalBillApi, orgsApi, productsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const INVOICE_TYPE_VALUES = [0, 4]
@@ -22,6 +22,13 @@ function emptyItem() {
     gtin: '',
     productId: '',
     sku: '',
+    ean: '',
+    priceStatus: '',
+    priceVerifying: false,
+    suggestions: [],
+    suggestLoading: false,
+    showSuggestions: false,
+    suggestError: null,
   }
 }
 
@@ -57,6 +64,8 @@ export default function CreateFiscalBill() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
 
+  const suggestDebounceRef = useRef({})
+
   useEffect(() => {
     const loadOrgs = isSuperAdmin ? orgsApi.list() : orgsApi.myAccess()
     loadOrgs.then(setOrgs).catch(() => setOrgs([]))
@@ -79,6 +88,10 @@ export default function CreateFiscalBill() {
 
   function setItemField(id, field, value) {
     setItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item))
+  }
+
+  function patchItem(id, patch) {
+    setItems(prev => prev.map(item => (item.id === id ? { ...item, ...patch } : item)))
   }
 
   function addItem() {
@@ -107,6 +120,91 @@ export default function CreateFiscalBill() {
 
   function paymentsTotal() {
     return payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0).toFixed(2)
+  }
+
+  function handleNameChange(itemId, value) {
+    patchItem(itemId, {
+      name: value,
+      showSuggestions: true,
+      suggestError: null,
+    })
+
+    if (suggestDebounceRef.current[itemId]) {
+      clearTimeout(suggestDebounceRef.current[itemId])
+    }
+
+    const q = value.trim()
+    if (!selectedOrgId || q.length < 2) {
+      patchItem(itemId, { suggestions: [], suggestLoading: false })
+      return
+    }
+
+    patchItem(itemId, { suggestLoading: true })
+    suggestDebounceRef.current[itemId] = setTimeout(async () => {
+      try {
+        const data = await productsApi.search(Number(selectedOrgId), { q })
+        setItems((prev) => prev.map((item) => {
+          if (item.id !== itemId || item.name.trim() !== q) return item
+          return {
+            ...item,
+            suggestions: data,
+            suggestLoading: false,
+            showSuggestions: true,
+            suggestError: null,
+          }
+        }))
+      } catch (err) {
+        const msg = err?.response?.data?.message || err?.response?.data || t('createFiscalBill.searchLoadFailed')
+        setItems((prev) => prev.map((item) => {
+          if (item.id !== itemId || item.name.trim() !== q) return item
+          return {
+            ...item,
+            suggestions: [],
+            suggestLoading: false,
+            suggestError: typeof msg === 'string' ? msg : JSON.stringify(msg),
+          }
+        }))
+      }
+    }, 300)
+  }
+
+  function hideSuggestions(itemId) {
+    patchItem(itemId, { showSuggestions: false })
+  }
+
+  async function selectProduct(itemId, product) {
+    patchItem(itemId, {
+      name: product.name || '',
+      productId: product.productId ? String(product.productId) : '',
+      sku: product.sku || '',
+      ean: product.ean || '',
+      gtin: product.ean || '',
+      priceStatus: '',
+      priceVerifying: true,
+      suggestions: [],
+      showSuggestions: false,
+      suggestLoading: false,
+      suggestError: null,
+    })
+
+    try {
+      const live = await productsApi.lookup(Number(selectedOrgId), {
+        sku: product.sku || undefined,
+        ean: product.ean || undefined,
+      })
+      const price = live.priceGross != null ? String(live.priceGross) : ''
+      patchItem(itemId, {
+        name: live.name || product.name || '',
+        unitPrice: price,
+        priceVerifying: false,
+        priceStatus: 'verified',
+      })
+    } catch {
+      patchItem(itemId, {
+        priceVerifying: false,
+        priceStatus: 'unverified',
+      })
+    }
   }
 
   async function handleSubmit() {
@@ -271,9 +369,74 @@ export default function CreateFiscalBill() {
                     </button>
                   </div>
                   <div className="fiscal-item-grid">
-                    <div className="fiscal-field">
+                    <div className="fiscal-field fiscal-field--with-search">
                       <label className="fiscal-field-label">{t('common.name')}</label>
-                      <input className="fiscal-input fiscal-input--text" value={item.name} onChange={e => setItemField(item.id, 'name', e.target.value)} placeholder={t('createFiscalBill.productName')} />
+                      <div className="product-name-combobox">
+                        <input
+                          className="fiscal-input fiscal-input--text"
+                          value={item.name}
+                          onChange={e => handleNameChange(item.id, e.target.value)}
+                          onFocus={() => {
+                            if (item.name.trim().length >= 2) {
+                              patchItem(item.id, { showSuggestions: true })
+                            }
+                          }}
+                          onBlur={() => {
+                            setTimeout(() => hideSuggestions(item.id), 150)
+                          }}
+                          placeholder={t('createFiscalBill.searchPlaceholder')}
+                          disabled={!selectedOrgId}
+                          autoComplete="off"
+                          aria-autocomplete="list"
+                          aria-expanded={item.showSuggestions && item.suggestions.length > 0}
+                        />
+                        {item.showSuggestions && selectedOrgId && item.name.trim().length >= 2 && (
+                          <ul className="product-suggest-list" role="listbox">
+                            {item.suggestLoading && (
+                              <li className="product-suggest-item product-suggest-item--muted">{t('common.loadingDots')}</li>
+                            )}
+                            {item.suggestError && (
+                              <li className="product-suggest-item product-suggest-item--error">{item.suggestError}</li>
+                            )}
+                            {!item.suggestLoading && !item.suggestError && item.suggestions.length === 0 && (
+                              <li className="product-suggest-item product-suggest-item--muted">{t('createFiscalBill.searchNoResults')}</li>
+                            )}
+                            {!item.suggestLoading && item.suggestions.map((p) => (
+                              <li key={p.productId} role="option">
+                                <button
+                                  type="button"
+                                  className="product-suggest-option"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => selectProduct(item.id, p)}
+                                >
+                                  <span className="product-suggest-name">{p.name}</span>
+                                  <span className="product-suggest-meta">
+                                    {p.sku ? `${t('products.columns.sku')}: ${p.sku}` : ''}
+                                    {p.sku && p.ean ? ' · ' : ''}
+                                    {p.ean ? `${t('products.columns.ean')}: ${p.ean}` : ''}
+                                    {!p.sku && !p.ean ? t('common.dash') : ''}
+                                  </span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {!selectedOrgId && (
+                          <span className="muted fiscal-price-hint">{t('createFiscalBill.selectOrgRequired')}</span>
+                        )}
+                        {selectedOrgId && item.name.trim().length > 0 && item.name.trim().length < 2 && (
+                          <span className="muted fiscal-price-hint">{t('createFiscalBill.searchMinChars')}</span>
+                        )}
+                      </div>
+                      {item.priceVerifying && (
+                        <span className="muted fiscal-price-hint">{t('createFiscalBill.priceVerifying')}</span>
+                      )}
+                      {!item.priceVerifying && item.priceStatus === 'verified' && (
+                        <span className="fiscal-price-hint">{t('createFiscalBill.priceVerified')}</span>
+                      )}
+                      {!item.priceVerifying && item.priceStatus === 'unverified' && (
+                        <span className="fiscal-price-hint fiscal-price-hint--warn">{t('createFiscalBill.priceUnverified')}</span>
+                      )}
                     </div>
                     <div className="fiscal-field">
                       <label className="fiscal-field-label">{t('createFiscalBill.quantity')}</label>
@@ -376,6 +539,7 @@ export default function CreateFiscalBill() {
           {result.lastError && <p style={{ color: 'red' }}><strong>{t('createFiscalBill.errorLabel')}:</strong> {result.lastError}</p>}
         </div>
       )}
+
     </AppShell>
   )
 }
