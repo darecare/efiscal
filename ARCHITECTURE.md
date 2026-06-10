@@ -70,11 +70,10 @@ OPERATIONAL BASELINE (MVP):
 • External API Reliability: timeout + retry with exponential backoff + circuit breaker
 • Observability: request correlation ID, structured logs, masked sensitive fields
 
-FRONTEND REFERENCE ADAPTATION (KLIKLAK DASHBOARD):
-• Reference source path: kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/pages
-• Reuse target pages: Account.jsx, Users.jsx, Orders.jsx
-• Reuse mode: visual/interaction baseline only, with clean reimplementation in eFiscal frontend
-• No direct code copy from reference pages; preserve behavior and structure while adapting domain fields/actions
+FRONTEND UI BASELINE (historical Kliklak adaptation — reference tree removed):
+• Living guidance: FRONTEND_STRUCTURE.md, PRODUCT_REQUIREMENTS.md (FR-007–FR-009), LEGACY_REFERENCE.md
+• Target pages: Account, Users, Orders (partial)
+• Reuse mode: visual/interaction baseline only, clean reimplementation in eFiscal frontend
 
 Required reuse scope:
 • Account page: keep baseline page shell (navbar + sidebar + content card) and account form interaction pattern, then extend with eFiscal-specific fields.

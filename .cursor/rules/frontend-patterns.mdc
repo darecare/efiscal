@@ -1,37 +1,64 @@
 ---
-description: React frontend patterns (auth, API client, routing)
+description: React frontend patterns (structure, auth, API client, UI patterns, i18n)
 globs: frontend/src/**/*.{jsx,tsx,js,ts}
 alwaysApply: false
 ---
 
 # Frontend Patterns
 
-## Structure
-- Pages in `frontend/src/pages/`
-- Components in `frontend/src/components/`
-- Auth in `frontend/src/contexts/AuthContext.jsx`
-- API client in `frontend/src/services/api.js`
+> For full detail see `FRONTEND_STRUCTURE.md`. This rule captures the constraints agents most commonly get wrong.
 
-## Auth Flow
-- JWT stored in localStorage after login
-- Axios interceptor adds `Authorization: Bearer <token>` to requests
-- ProtectedRoute wraps pages requiring auth
-- UI elements should reflect RBAC and subscription limits where appropriate
+## Structure
+
+```
+frontend/src/
+  pages/          # One file per route/page
+  components/     # Shared reusable components
+  contexts/       # AuthContext.jsx, SyncContext.jsx
+  services/       # api.js — single Axios instance
+  locales/        # en.json, sr.json
+  i18n/           # index.js — language registration
+  styles.css      # Global styles
+```
+
+## Auth & RBAC
+
+- JWT stored in `localStorage` after login. Axios interceptor in `api.js` adds `Authorization: Bearer <token>`.
+- Wrap protected pages with `ProtectedRoute`. Wrap action-gated sections with `ActionProtectedRoute` (uses action code, not role name).
+- Show/hide actions and sensitive fields based on role action codes. Never branch on role name strings in UI logic.
+- Respect active client/organization scope — hide or disable actions outside the user's org access.
+- Self-deletion: always disable or hide the delete action for the currently logged-in user.
 
 ## API Client
-- Base URL is proxied via Vite in development (`/api`)
-- Centralized Axios instance in `api.js`
-- Handles 401 (redirect to login) and 403 (show access denied)
 
-## UI Conventions
-- Adapt baseline design patterns from `Kliklak_Dashboard` reference (Account, Users, Orders sections)
-- Use modal dialogs for critical actions/errors
-- Loading spinners during API calls
-- Data views (like Orders and Fiscal Bills) should clearly present related status details and action bars
+- All API calls go through the centralized Axios instance in `services/api.js`. Do not create separate `fetch` or Axios instances except for SSE streams (use `fetch` + `ReadableStream` with Bearer token in header for SSE — `EventSource` does not support custom headers).
+- Base URL proxied via Vite in development (`/api`).
+- Global handlers: `401` → redirect to login, `403` → show access denied.
+
+## UI Patterns
+
+Apply these patterns consistently across all pages — see `FRONTEND_STRUCTURE.md` §3 for full specs:
+
+- **App Shell:** Header (top) + collapsible sidebar (left) + main content area. Header and sidebar are separate reusable components included on every authenticated page.
+- **List Workspace:** Fetch Filters → Actions Bar → Table → Pagination. Use for Orders, Fiscal Bills, Products, Users.
+- **Two-Phase Filtering:** Phase 1 = server-side fetch filters; Phase 2 = client-side narrowing on loaded data.
+- **Summary-to-Detail:** Grouped summary rows first; expand or open detail pane for line-level data.
+- **Bulk Action:** Select rows → select action → confirmation modal with affected count → execute → show result summary.
+- **Status Chip:** Consistent color + label chip across all modules. Same status always uses the same chip style.
+- **State Feedback:** Every async view must handle all three states explicitly: loading (skeleton/spinner), empty (explain why + next action), error (clear message + retry + reference ID if available).
+- **Role Deletion:** Confirmation modal always opens. Include optional reassignment selector. Show `409` inline in modal if role is in use and no reassignment is chosen. Block built-in system roles client-side before sending a request.
+- **Table row actions:** Wrap Edit/Delete buttons in `.table-row-actions` inside the `<td>`. Destructive row actions use `.secondary-button.danger`; modal confirm buttons use `.primary-button.danger`.
 
 ## Internationalization
-- All user-visible strings go through `react-i18next` (`useTranslation` / `t()`); catalogs in `frontend/src/locales/en.json` and `sr.json`
-- Register new languages in `frontend/src/i18n/index.js`; keep locale key sets aligned across files
-- RBAC UI: translate display text via `roles.actionLabels`, `roles.permissionDescriptions`, and `roles.permissionModules` keyed by `actionCode`; keep API permission codes untranslated
-- Run `npm run lint` in `frontend/` — `eslint-plugin-i18next` flags hardcoded JSX text and relevant attributes
-- Modal close and other icon-only controls need localized `aria-label` keys (for example `common.close`)
+
+**Never hardcode user-visible text in JSX.** This includes labels, placeholders, `title`, `alt`, and `aria-label`.
+
+- Use `useTranslation()` + `t('key')` in components; `i18next.t()` in non-React code (e.g. `AuthContext`).
+- Catalogs: `frontend/src/locales/en.json` and `sr.json`. Key sets must be identical across both files (same keys, same `{{placeholder}}` names).
+- Any label/message change must update both locale files in the same change.
+- **Serbian plurals:** English uses `*_one` / `*_other`. Serbian adds `*_few` for Slavic plural rules (2–4). Define all three suffixes in `sr.json` when adding new counted strings.
+- **RBAC display names:** Translate via `roles.actionLabels`, `roles.permissionDescriptions`, `roles.permissionModules` keyed by `actionCode`. Never translate the action code itself.
+- **Icon-only controls:** Keep the glyph but provide a localized `aria-label` (e.g. `common.close`) in every supported language.
+- **Do not translate:** `className`, `id`, API paths, enum/code `value` attributes, object keys, `console` output, MerchantPro/Tax API field names.
+- **Lint:** Run `npm run lint` in `frontend/` before finishing. `eslint-plugin-i18next` flags hardcoded text in JSX, `title`, `placeholder`, `aria-label`, and `alt` attributes.
+- **After large English catalog changes:** run `node frontend/scripts/build-sr-locale.mjs` to regenerate `sr.json`, then hand-edit domain-specific Serbian strings as needed.
