@@ -38,6 +38,7 @@ export default function Orders() {
   // Fiscalize modal state
   const [fiscalModal, setFiscalModal] = useState(null) // { orders } or null
   const [fiscalInvoiceType, setFiscalInvoiceType] = useState(0)
+  const [sendEmail, setSendEmail] = useState(true)
   const [fiscalError, setFiscalError] = useState(null)
   const [fiscalSubmitting, setFiscalSubmitting] = useState(false)
 
@@ -133,6 +134,7 @@ export default function Orders() {
     if (!ordersToSubmit || ordersToSubmit.length === 0) return
     setFiscalModal({ orders: ordersToSubmit })
     setFiscalInvoiceType(0)
+    setSendEmail(true)
     setFiscalError(null)
   }
 
@@ -203,6 +205,8 @@ export default function Orders() {
       const payload = {
         orderId: String(order.id),
         customerName: order.customerName || null,
+        customerEmail: order.customerEmail || null,
+        sendEmail,
         invoiceType: parseInt(fiscalInvoiceType),
         transactionType: 0,
         billingType: order.billingType || null,
@@ -511,6 +515,14 @@ export default function Orders() {
               {t('orders.ordersSelected')} <strong>{fiscalModal.orders.length}</strong>
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <label className="form-group" style={{ display: 'flex', flexDirection: 'row', gap: '0.75rem', alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={sendEmail}
+                  onChange={(e) => setSendEmail(e.target.checked)}
+                />
+                <span className="form-label" style={{ marginBottom: 0 }}>{t('orders.sendEmail')}</span>
+              </label>
               <div className="form-group">
                 <label className="form-label">{t('orders.invoiceType')}</label>
                 <select className="form-input" value={fiscalInvoiceType} onChange={(e) => setFiscalInvoiceType(e.target.value)}>

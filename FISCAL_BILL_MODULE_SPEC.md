@@ -189,6 +189,32 @@ Payment Type enumeration value: 0 - Other, 1 - Cash, 2 - Card, 3 - Check, 4 - Wi
   - total amount
   - created timestamp
 
+### 4.5 Fiscal Bill PDF Rendering (A4 default template)
+1. System must provide PDF download for an existing fiscal bill.
+2. PDF is rendered from HTML template file: `backend/src/main/resources/pdf-templates/default-a4.html`.
+3. Default template format is A4.
+4. Template must include the following content groups:
+  - Header/meta section (issuer data, invoice metadata, order/customer context)
+  - Line items area sourced from `fiscalbillline`
+  - Tax items area sourced from `fiscalbilltax`
+  - Payments area sourced from `fiscalbillpay`
+5. Textual formatting should follow "Текстуални приказ фискалног рачуна" guidance:
+  - clear start line marking beginning of fiscal section
+  - clear end line marking end of fiscal section
+  - grouped receipt metadata and totals shown in printable form
+
+### 4.6 Fiscal Bill PDF Rendering (57mm–80mm roll template)
+1. System must support an additional roll-format template for paper roll style printouts.
+2. Roll template file: `backend/src/main/resources/pdf-templates/default-roll80.html`.
+3. PDF endpoint supports format selection with query parameter:
+  - `format=a4` (default)
+  - `format=roll80`
+4. Roll template includes same required content groups as A4 template:
+  - Header/meta
+  - Line items from `fiscalbillline`
+  - Tax items from `fiscalbilltax`
+  - Payment items from `fiscalbillpay`
+
 ## 5. Supported Invoice and Transaction Types
 
 Invoice types to support:

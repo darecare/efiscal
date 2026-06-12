@@ -28,6 +28,7 @@
 - **Plurals:** English uses `*_one` / `*_other` suffix keys (for example `common.counts.orders_one`). Serbian adds `*_few` for Slavic plural rules (2–4); define all three suffixes in `sr.json` when adding new counted strings
 - **Language switcher:** [`LanguageSwitcher`](frontend/src/components/AppShell.jsx) in the top bar — custom dropdown with `aria-expanded`, `role="listbox"`, and localized option labels (`common.languages.*`). Persists choice via detector `localStorage` key `efiscal_lang` (also honors browser language on first visit)
 - **About modal:** Header help menu exposes an About modal with manufacturer, serial number, and software version pulled from backend app info endpoint.
+- **Settings menu:** [`AppShell`](frontend/src/components/AppShell.jsx) groups organization-facing admin tools under a Settings menu, including API Configuration, Email Templates, and Payment Type Mapping.
 - **RBAC labels:** Backend action codes stay stable API identifiers. Display names and tooltips come from locale maps keyed by `actionCode`: `roles.actionLabels`, `roles.permissionDescriptions`, and `roles.permissionModules` (see [`Roles.jsx`](frontend/src/pages/Roles.jsx)); use `defaultValue` from API metadata when a new action has no catalog entry yet
 - **Lint:** `npm run lint` in `frontend/` runs ESLint with `eslint-plugin-i18next` (`jsx-text-only` mode; also checks `title`, `placeholder`, `aria-label`, `alt`). Fix hardcoded user-visible strings before merge
 - **Serbian maintenance script:** [`frontend/scripts/build-sr-locale.mjs`](frontend/scripts/build-sr-locale.mjs) regenerates `sr.json` from `en.json` plus translation tables (run manually: `node frontend/scripts/build-sr-locale.mjs` after large English catalog changes; review output and hand-edit domain-specific strings as needed)
@@ -130,6 +131,7 @@
 	- Fetch Filters section
 	- Actions Bar section
 	- Summary Table view (grouped by order, expandable details)
+	- Issue Fiscal Bill modal includes a default-checked `Send email` checkbox for order-linked issuance.
 
 ## 4A. Access Management Pages
 - Add dedicated Role Definition page:
@@ -153,6 +155,7 @@
 	- **Main** tab: general organization data (`clientId`, `name`, `taxId`, status/currency/active flags).
 	- **Payment Types** tab: allowed payment type mapping.
 	- **Email Settings** tab: SMTP server, SMTP port, from email, username, password, and connection security (`STARTTLS` or `SSL/TLS`).
+- Email Templates page should provide org-scoped Add/Edit/Delete forms with a raw HTML textarea for the body field. The body editor does not need WYSIWYG in the first version, but it must preserve HTML markup and placeholder tokens such as `{{ customername }}`.
 - Email settings form behavior:
 	- All email settings fields are optional.
 	- SMTP port input is numeric and constrained to valid SMTP range (`1..65535`).

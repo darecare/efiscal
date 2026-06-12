@@ -81,6 +81,7 @@ public class FiscalBillService {
     private final PayTypeMapRepository payTypeMapRepository;
     private final TaxRepository taxRepository;
     private final TaxAuthorityService taxAuthorityService;
+    private final FiscalBillEmailService fiscalBillEmailService;
     private final ObjectMapper objectMapper;
 
     public FiscalBillService(
@@ -93,6 +94,7 @@ public class FiscalBillService {
             PayTypeMapRepository payTypeMapRepository,
             TaxRepository taxRepository,
             TaxAuthorityService taxAuthorityService,
+            FiscalBillEmailService fiscalBillEmailService,
             ObjectMapper objectMapper) {
         this.fiscalBillRepository = fiscalBillRepository;
         this.fiscalBillTaxRepository = fiscalBillTaxRepository;
@@ -103,6 +105,7 @@ public class FiscalBillService {
         this.payTypeMapRepository = payTypeMapRepository;
         this.taxRepository = taxRepository;
         this.taxAuthorityService = taxAuthorityService;
+        this.fiscalBillEmailService = fiscalBillEmailService;
         this.objectMapper = objectMapper;
     }
 
@@ -176,7 +179,8 @@ public class FiscalBillService {
             savePaymentRecords(entity.getFiscalbillId(), clientId, orgId, orderData.paymentMethodCode(),
                     entity.getEfiscalTotalamount());
             // Save line items after successful fiscalization
-                saveLineItems(entity.getFiscalbillId(), clientId, orgId, resolvedItems);
+            saveLineItems(entity.getFiscalbillId(), clientId, orgId, resolvedItems);
+            fiscalBillEmailService.sendIfRequested(orgId, entity, orderData.sendEmail(), orderData.customerEmail(), orderData.customerName(), orderId);
         } catch (ResponseStatusException rse) {
             entity.setStatus(STATUS_FAILED);
             entity.setLastError(rse.getReason());
@@ -264,6 +268,7 @@ public class FiscalBillService {
             saveManualPaymentRecords(entity.getFiscalbillId(), clientId, orgId, request.payments());
             // Save line items
             saveLineItems(entity.getFiscalbillId(), clientId, orgId, request.items());
+            fiscalBillEmailService.sendIfRequested(orgId, entity, request.sendEmail(), request.customerEmail(), request.customerName(), orderId);
         } catch (ResponseStatusException rse) {
             entity.setStatus(STATUS_FAILED);
             entity.setLastError(rse.getReason());
@@ -1239,6 +1244,8 @@ public class FiscalBillService {
         return new OrderFiscalizeRequest(
                 request.orderId(),
                 request.customerName(),
+            request.customerEmail(),
+            request.sendEmail(),
                 null, // no billing type
                 null, // no billing VAT
                 null, // no payment method code
@@ -1309,6 +1316,8 @@ public class FiscalBillService {
     public record OrderFiscalizeRequest(
             String orderId,
             String customerName,
+            String customerEmail,
+            boolean sendEmail,
             String billingType,          // "company" or individual
             String billingCompanyVat,
             String paymentMethodCode,    // e.g. cash_delivery, wire
@@ -1319,6 +1328,8 @@ public class FiscalBillService {
     public record ManualFiscalBillRequest(
             String orderId,             // Optional — if set, applies order-based checks
             String customerName,
+            String customerEmail,
+            boolean sendEmail,
             int invoiceType,
             int transactionType,
             String buyerType,           // Optional buyer type prefix (e.g. "10")

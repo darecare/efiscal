@@ -90,7 +90,7 @@ public class MerchantProOrderService {
 
         // 5. Execute HTTP call
         HttpEntity<Void> entity = new HttpEntity<>(headers);
-        ResponseEntity<Map> response;
+        ResponseEntity<?> response;
         try {
             response = restTemplate.exchange(uri, HttpMethod.GET, entity, Map.class);
         } catch (Exception ex) {
@@ -99,18 +99,14 @@ public class MerchantProOrderService {
         }
 
         // 6. Parse response { data: [...], meta: { count: { total: N, ... }, links: {...} } }
-        Map<?, ?> body = response.getBody();
-        if (body == null) {
+        Object bodyObj = response.getBody();
+        if (!(bodyObj instanceof Map<?, ?> body)) {
             return new OrderFetchResult(Collections.emptyList(), 0);
         }
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> rawOrders = body.containsKey("data")
-            ? (List<Map<String, Object>>) body.get("data")
-            : Collections.emptyList();
+        List<Map<String, Object>> rawOrders = toMapList(body.get("data"));
         int total = rawOrders.size();
         if (body.containsKey("meta")) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> meta = (Map<String, Object>) body.get("meta");
+            Map<String, Object> meta = toStringObjectMap(body.get("meta"));
             // MerchantPro nests total under meta.count.total
             Object countObj = meta.get("count");
             if (countObj instanceof Map<?, ?> count) {
@@ -127,7 +123,6 @@ public class MerchantProOrderService {
         return new OrderFetchResult(orders, total);
     }
 
-    @SuppressWarnings("unchecked")
     private DemoDataService.OrderView mapOrder(Map<String, Object> raw) {
         String id = str(raw.getOrDefault("id", raw.getOrDefault("order_id", "")));
         String orderNo = str(raw.getOrDefault("order_number", raw.getOrDefault("reference", id)));
@@ -146,6 +141,7 @@ public class MerchantProOrderService {
         if (customer.isEmpty()) {
             customer = str(raw.getOrDefault("customer_name", raw.getOrDefault("customer", "")));
         }
+        String customerEmail = extractCustomerEmail(raw);
         String paymentMethodCode = str(raw.getOrDefault("payment_method_code", raw.getOrDefault("paymentMethodCode", "")));
 
         // Extract order lines — MerchantPro returns them under 'line_items' when include=line_items
@@ -154,8 +150,7 @@ public class MerchantProOrderService {
         if (linesObj instanceof List<?> rawLines) {
             for (Object lineObj : rawLines) {
                 if (lineObj instanceof Map<?, ?> line) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> l = (Map<String, Object>) line;
+                    Map<String, Object> l = toStringObjectMap(line);
                     String productId   = str(l.getOrDefault("product_id", l.getOrDefault("id", "")));
                     String productName = str(l.getOrDefault("product_name", l.getOrDefault("name", "")));
                     String sku         = str(l.getOrDefault("product_sku", l.getOrDefault("sku", "")));
@@ -169,7 +164,42 @@ public class MerchantProOrderService {
             }
         }
 
-        return new DemoDataService.OrderView(id, orderNo, customer, shippingStatus, total, createdAt, paymentMethodCode, orderLines);
+        return new DemoDataService.OrderView(id, orderNo, customer, customerEmail, shippingStatus, total, createdAt, paymentMethodCode, orderLines);
+    }
+
+    private String extractCustomerEmail(Map<String, Object> raw) {
+        String email = str(raw.getOrDefault("billing_email", ""));
+        if (!email.isBlank()) return email;
+
+        email = str(raw.getOrDefault("customer_email", raw.getOrDefault("email", "")));
+        if (!email.isBlank()) return email;
+
+        return str(raw.getOrDefault("billing_email_address", raw.getOrDefault("customerEmail", "")));
+    }
+
+    private List<Map<String, Object>> toMapList(Object value) {
+        if (!(value instanceof List<?> rawList)) {
+            return Collections.emptyList();
+        }
+        List<Map<String, Object>> result = new java.util.ArrayList<>();
+        for (Object element : rawList) {
+            Map<String, Object> map = toStringObjectMap(element);
+            if (!map.isEmpty()) {
+                result.add(map);
+            }
+        }
+        return result;
+    }
+
+    private Map<String, Object> toStringObjectMap(Object value) {
+        if (!(value instanceof Map<?, ?> rawMap)) {
+            return Collections.emptyMap();
+        }
+        Map<String, Object> result = new java.util.HashMap<>();
+        for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+            result.put(String.valueOf(entry.getKey()), entry.getValue());
+        }
+        return result;
     }
 
     private static String str(Object o) {

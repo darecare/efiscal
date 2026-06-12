@@ -6,10 +6,13 @@ import com.efiscal.backend.service.FiscalBillService.FiscalBillItemRequest;
 import com.efiscal.backend.service.FiscalBillService.ManualFiscalBillRequest;
 import com.efiscal.backend.service.FiscalBillService.OrderFiscalizeRequest;
 import com.efiscal.backend.service.FiscalBillService.PaymentRequest;
+import com.efiscal.backend.service.FiscalBillPdfService;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,18 +28,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class FiscalBillController {
 
     private final FiscalBillService fiscalBillService;
+    private final FiscalBillPdfService fiscalBillPdfService;
     private final AuthorizationService authorizationService;
-    private final com.efiscal.backend.repository.OrgRepository orgRepository;
     private final com.efiscal.backend.repository.FiscalBillRepository fiscalBillRepository;
 
     public FiscalBillController(
             FiscalBillService fiscalBillService,
+            FiscalBillPdfService fiscalBillPdfService,
             AuthorizationService authorizationService,
-            com.efiscal.backend.repository.OrgRepository orgRepository,
             com.efiscal.backend.repository.FiscalBillRepository fiscalBillRepository) {
         this.fiscalBillService = fiscalBillService;
+        this.fiscalBillPdfService = fiscalBillPdfService;
         this.authorizationService = authorizationService;
-        this.orgRepository = orgRepository;
         this.fiscalBillRepository = fiscalBillRepository;
     }
 
@@ -103,6 +106,22 @@ public class FiscalBillController {
         return ResponseEntity.ok(details);
     }
 
+    /** GET /api/v1/fiscalbill/{id}/pdf — Download fiscal bill PDF rendered from selected HTML template */
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> downloadFiscalBillPdf(
+            @PathVariable Long id,
+            @RequestParam(name = "format", required = false, defaultValue = "a4") String format) {
+        authorizationService.requireAction("FISCAL_VIEW_BILLS");
+        validateFiscalBill(id);
+        FiscalBillPdfService.PdfTemplateFormat templateFormat = fiscalBillPdfService.parseTemplateFormat(format);
+        byte[] pdf = fiscalBillPdfService.generatePdf(id, templateFormat);
+        String suffix = fiscalBillPdfService.filenameSuffix(templateFormat);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=fiscal-bill-" + id + "-" + suffix + ".pdf")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
+    }
+
     /**
      * POST /api/v1/fiscalbill/from-order — 4.1 Order-Based Fiscalization
      * Creates a fiscal bill from a sales order with all 4.1.x rules applied.
@@ -133,6 +152,7 @@ public class FiscalBillController {
 
         OrderFiscalizeRequest orderData = new OrderFiscalizeRequest(
                 request.orderId(), request.customerName(),
+            request.customerEmail(), request.sendEmail(),
                 request.billingType(), request.billingCompanyVat(),
                 request.paymentMethodCode(), items);
 
@@ -182,6 +202,7 @@ public class FiscalBillController {
 
         ManualFiscalBillRequest manualRequest = new ManualFiscalBillRequest(
                 request.orderId(), request.customerName(),
+            request.customerEmail(), request.sendEmail(),
                 request.invoiceType(), request.transactionType(),
                 request.buyerType(), request.buyerVat(),
                 items, payments);
@@ -284,6 +305,8 @@ public class FiscalBillController {
     public record CreateFromOrderRequest(
             String orderId,
             String customerName,
+            String customerEmail,
+            boolean sendEmail,
             int invoiceType,
             int transactionType,
             String billingType,
@@ -294,6 +317,8 @@ public class FiscalBillController {
     public record CreateManualRequest(
             String orderId,        // optional — links to existing order
             String customerName,
+            String customerEmail,
+            boolean sendEmail,
             int invoiceType,
             int transactionType,
             String buyerType,      // optional buyer type prefix
