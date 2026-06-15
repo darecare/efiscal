@@ -505,6 +505,52 @@ Indexes:
 - `(org_id, started_at DESC)` — latest job lookup
 - `(org_id) WHERE status = 'RUNNING'` — UNIQUE partial; one running job per org
 
+### 2.20 email_template
+Table name: email_template
+Organization-scoped HTML email templates for fiscal bill delivery. Bodies store raw HTML with placeholder tokens (for example `{{ customername }}`); rendered at send time.
+
+| Column            | Type         | Constraints              | Notes                                    |
+|-------------------|--------------|--------------------------|------------------------------------------|
+| email_template_id | BIGINT       | PK, NOT NULL, IDENTITY   | Auto-generated integer                   |
+| org_id            | BIGINT       | FK → org.org_id, NOT NULL| Organization scope                       |
+| template_name     | VARCHAR(120) | NOT NULL                 | Display name in admin UI                 |
+| subject           | VARCHAR(255) | NOT NULL                 | Email subject line                       |
+| body_html         | TEXT         | NOT NULL                 | Raw HTML template body                   |
+| is_active         | BOOLEAN      | NOT NULL, DEFAULT TRUE   | Active templates are eligible for send   |
+| created_at        | TIMESTAMPTZ  | NOT NULL                 |                                          |
+| updated_at        | TIMESTAMPTZ  | NOT NULL                 |                                          |
+| deleted_at        | TIMESTAMPTZ  | NULL                     | Soft delete                              |
+
+Rules:
+- List/detail APIs return only rows with `deleted_at IS NULL`.
+- Send flow selects the most recently updated active template per org.
+
+Migration:
+- `V38__create_email_template_table.sql` — creates `email_template` table and org index
+
+### 2.21 log_email
+Table name: log_email
+Audit log of fiscal bill email delivery attempts. Stores rendered subject/body snapshot and delivery status; not soft-deleted.
+
+| Column          | Type         | Constraints                        | Notes                                      |
+|-----------------|--------------|------------------------------------|--------------------------------------------|
+| log_email_id    | BIGINT       | PK, NOT NULL, IDENTITY             | Auto-generated integer                     |
+| org_id          | BIGINT       | FK → org.org_id, NOT NULL          | Organization scope                         |
+| fiscalbill_id   | BIGINT       | FK → fiscalbill.fiscalbill_id, NULL| Linked bill when available                 |
+| order_id        | VARCHAR(64)  | NULL                               | Source order reference                     |
+| recipient_email | VARCHAR(255) | NULL                               | Customer recipient                         |
+| template_name   | VARCHAR(120) | NULL                               | Template name snapshot at send time        |
+| subject         | VARCHAR(255) | NULL                               | Rendered subject snapshot                  |
+| body_html       | TEXT         | NULL                               | Rendered HTML body snapshot                |
+| status          | VARCHAR(20)  | NOT NULL                           | `SENT`, `FAILED`, or `SKIPPED`             |
+| error_message   | VARCHAR(1000)| NULL                               | Failure detail when `status = FAILED`      |
+| sent_at         | TIMESTAMPTZ  | NULL                               | Set when `status = SENT`                   |
+| created_at      | TIMESTAMPTZ  | NOT NULL                           |                                            |
+| updated_at      | TIMESTAMPTZ  | NOT NULL                           |                                            |
+
+Migration:
+- `V39__create_log_email_table.sql` — creates `log_email` table and org/bill indexes
+
 ## 3. Entity Relationships
 
 ```
@@ -512,12 +558,15 @@ organizations
     ├── user_orgaccess (1:N)
     ├── product (1:N)
     ├── product_sync_job (1:N)
+    ├── email_template (1:N)
+    ├── log_email (1:N)
     ├── platform_connections (1:N)
     ├── sales_orders (1:N)
     │     └── fiscalbill (1:N)
     │           ├── fiscalbilltax (1:N)
     │           ├── fiscalbillpay (1:N)
-    │           └── fiscalbillline (1:N)
+    │           ├── fiscalbillline (1:N)
+    │           └── log_email (0:N)
     └── fiscalbillconfig (1:N, active filtered by isactive='Y')
 
 platform_connections → sales_orders (1:N)
@@ -552,6 +601,9 @@ action_catalog → role_action_access (1:N)
 | product                    | (org_id, mp_product_id) UNIQUE partial         | Sync upsert key                 |
 | product_sync_job           | (org_id, started_at DESC)                        | Latest job per org              |
 | product_sync_job           | (org_id) WHERE status = 'RUNNING' UNIQUE       | One active sync per org         |
+| email_template             | (org_id)                                         | Template list by org            |
+| log_email                  | (org_id)                                         | Delivery log by org             |
+| log_email                  | (fiscalbill_id)                                  | Delivery log by bill            |
 
 ---
 
