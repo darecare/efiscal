@@ -1,5 +1,7 @@
 package com.efiscal.backend.controller;
 
+import com.efiscal.backend.model.AppUserEntity;
+import com.efiscal.backend.repository.AppUserRepository;
 import com.efiscal.backend.security.AuthorizationService;
 import com.efiscal.backend.service.FiscalBillService;
 import com.efiscal.backend.service.FiscalBillService.FiscalBillItemRequest;
@@ -31,16 +33,31 @@ public class FiscalBillController {
     private final FiscalBillPdfService fiscalBillPdfService;
     private final AuthorizationService authorizationService;
     private final com.efiscal.backend.repository.FiscalBillRepository fiscalBillRepository;
+    private final AppUserRepository appUserRepository;
 
     public FiscalBillController(
             FiscalBillService fiscalBillService,
             FiscalBillPdfService fiscalBillPdfService,
             AuthorizationService authorizationService,
-            com.efiscal.backend.repository.FiscalBillRepository fiscalBillRepository) {
+            com.efiscal.backend.repository.FiscalBillRepository fiscalBillRepository,
+            AppUserRepository appUserRepository) {
         this.fiscalBillService = fiscalBillService;
         this.fiscalBillPdfService = fiscalBillPdfService;
         this.authorizationService = authorizationService;
         this.fiscalBillRepository = fiscalBillRepository;
+        this.appUserRepository = appUserRepository;
+    }
+
+    private String resolveCurrentUserCashier() {
+        String userIdStr = authorizationService.getUserId();
+        if (userIdStr == null) return null;
+        try {
+            return appUserRepository.findById(Long.parseLong(userIdStr))
+                    .map(AppUserEntity::getCashier)
+                    .orElse(null);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private void validateOrg(Long orgId) {
@@ -154,7 +171,8 @@ public class FiscalBillController {
                 request.orderId(), request.customerName(),
             request.customerEmail(), request.sendEmail(),
                 request.billingType(), request.billingCompanyVat(),
-                request.paymentMethodCode(), items);
+                request.paymentMethodCode(), items,
+                resolveCurrentUserCashier());
 
         FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createFiscalBillFromOrder(
                 orgId, clientId, idempotencyKey,
@@ -205,7 +223,9 @@ public class FiscalBillController {
             request.customerEmail(), request.sendEmail(),
                 request.invoiceType(), request.transactionType(),
                 request.buyerType(), request.buyerVat(),
-                items, payments);
+                items, payments,
+                request.referentDocumentNumber(),
+                resolveCurrentUserCashier());
 
         FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createManualFiscalBill(
                 orgId, clientId, idempotencyKey, manualRequest);
@@ -324,7 +344,8 @@ public class FiscalBillController {
             String buyerType,      // optional buyer type prefix
             String buyerVat,       // optional company VAT
             List<ItemRequest> items,
-            List<PaymentRowRequest> payments) {}
+            List<PaymentRowRequest> payments,
+            String referentDocumentNumber) {}
 
     public record ErrorResponse(String message) {}
 }

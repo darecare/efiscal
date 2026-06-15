@@ -191,7 +191,11 @@
       "4": "Wire Transfer",
       "5": "Voucher",
       "6": "Mobile Money"
-    }
+    },
+    "advertisement": "Advertisement",
+    "advertisementHtml": "Advertisement HTML",
+    "advertisementEnabled": "Enable Advertisement on PDF",
+    "advertisementHtmlPlaceholder": "<p>Your promotional content here…</p>"
   },
   "users": {
     "title": "Users",
@@ -223,7 +227,9 @@
     "myClient": "My Client",
     "fields": {
       "preferredLanguage": "Preferred Language"
-    }
+    },
+    "cashier": "Cashier",
+    "cashierPlaceholder": "Cashier name or code"
   },
   "roles": {
     "title": "Roles & Permissions",
@@ -586,6 +592,9 @@
     "selectBuyerIdType": "Select Buyer ID Type",
     "buyerIdValueOptional": "Buyer ID Value (optional)",
     "buyerIdValuePlaceholder": "Identifier part after code prefix",
+    "closeAdvance": "Close Advance Payment",
+    "referentDocumentNumber": "Reference Document Number",
+    "referentDocumentNumberPlaceholder": "e.g. ABCD1234-ABCD1234-12345",
     "clientHint": "Client: {{name}}",
     "noClientMapping": "No client mapping found for selected organization.",
     "selectOrgRequired": "Please select organization.",
@@ -628,6 +637,7 @@
     "fiscalBillIdLabel": "Fiscal Bill ID",
     "invoiceTypes": {
       "0": "0 – Normal",
+      "2": "2 – Copy",
       "4": "4 – Advance"
     },
     "transactionTypes": {

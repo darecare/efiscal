@@ -4,10 +4,12 @@ import com.efiscal.backend.model.FiscalBillEntity;
 import com.efiscal.backend.model.FiscalBillLineEntity;
 import com.efiscal.backend.model.FiscalBillPayEntity;
 import com.efiscal.backend.model.FiscalBillTaxEntity;
+import com.efiscal.backend.model.OrgEntity;
 import com.efiscal.backend.repository.FiscalBillLineRepository;
 import com.efiscal.backend.repository.FiscalBillPayRepository;
 import com.efiscal.backend.repository.FiscalBillRepository;
 import com.efiscal.backend.repository.FiscalBillTaxRepository;
+import com.efiscal.backend.repository.OrgRepository;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -31,16 +33,19 @@ public class FiscalBillPdfService {
     private final FiscalBillLineRepository fiscalBillLineRepository;
     private final FiscalBillTaxRepository fiscalBillTaxRepository;
     private final FiscalBillPayRepository fiscalBillPayRepository;
+    private final OrgRepository orgRepository;
 
     public FiscalBillPdfService(
             FiscalBillRepository fiscalBillRepository,
             FiscalBillLineRepository fiscalBillLineRepository,
             FiscalBillTaxRepository fiscalBillTaxRepository,
-            FiscalBillPayRepository fiscalBillPayRepository) {
+            FiscalBillPayRepository fiscalBillPayRepository,
+            OrgRepository orgRepository) {
         this.fiscalBillRepository = fiscalBillRepository;
         this.fiscalBillLineRepository = fiscalBillLineRepository;
         this.fiscalBillTaxRepository = fiscalBillTaxRepository;
         this.fiscalBillPayRepository = fiscalBillPayRepository;
+        this.orgRepository = orgRepository;
     }
 
     public byte[] generateDefaultA4Pdf(Long fiscalBillId) {
@@ -54,9 +59,10 @@ public class FiscalBillPdfService {
         List<FiscalBillLineEntity> lines = fiscalBillLineRepository.findByFiscalbillId(fiscalBillId);
         List<FiscalBillTaxEntity> taxes = fiscalBillTaxRepository.findByFiscalbillId(fiscalBillId);
         List<FiscalBillPayEntity> payments = fiscalBillPayRepository.findByFiscalbillId(fiscalBillId);
+        OrgEntity org = bill.getOrgId() != null ? orgRepository.findById(bill.getOrgId()).orElse(null) : null;
 
         String template = readTemplate(resolveTemplatePath(format));
-        String html = renderTemplate(template, bill, lines, taxes, payments);
+        String html = renderTemplate(template, bill, lines, taxes, payments, org);
 
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
@@ -100,7 +106,8 @@ public class FiscalBillPdfService {
             FiscalBillEntity bill,
             List<FiscalBillLineEntity> lines,
             List<FiscalBillTaxEntity> taxes,
-            List<FiscalBillPayEntity> payments) {
+            List<FiscalBillPayEntity> payments,
+            OrgEntity org) {
 
         BigDecimal totalTax = taxes.stream()
                 .map(FiscalBillTaxEntity::getAmount)
@@ -124,6 +131,15 @@ public class FiscalBillPdfService {
         html = html.replace("{{LINE_ITEMS_ROWS}}", renderLineRows(lines));
         html = html.replace("{{TAX_ROWS}}", renderTaxRows(taxes));
         html = html.replace("{{PAYMENT_ROWS}}", renderPaymentRows(payments));
+
+        // Advertisement block — rendered as raw HTML (not escaped) only when org has it enabled
+        String adBlock = "";
+        if (org != null && org.isAdvertisementEnabled()
+                && org.getAdvertisementHtml() != null && !org.getAdvertisementHtml().isBlank()) {
+            adBlock = org.getAdvertisementHtml();
+        }
+        html = html.replace("{{ADVERTISEMENT_BLOCK}}", adBlock);
+
         return html;
     }
 

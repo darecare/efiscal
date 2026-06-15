@@ -200,7 +200,11 @@
       "4": "Prenos",
       "5": "Vaučer",
       "6": "Mobilno plaćanje"
-    }
+    },
+    "advertisement": "Reklama",
+    "advertisementHtml": "HTML reklame",
+    "advertisementEnabled": "Prikaži reklamu na PDF-u",
+    "advertisementHtmlPlaceholder": "<p>Vaš promotivni sadržaj ovde…</p>"
   },
   "users": {
     "title": "Korisnici",
@@ -232,7 +236,9 @@
     "myClient": "Moj klijent",
     "fields": {
       "preferredLanguage": "Željeni jezik"
-    }
+    },
+    "cashier": "Kasir",
+    "cashierPlaceholder": "Ime ili kod kasira"
   },
   "roles": {
     "title": "Uloge i dozvole",
@@ -595,6 +601,9 @@
     "selectBuyerIdType": "Izaberite tip ID kupca",
     "buyerIdValueOptional": "Vrednost ID kupca (opciono)",
     "buyerIdValuePlaceholder": "Deo identifikatora posle prefiksa koda",
+    "closeAdvance": "Zatvaranje avansa",
+    "referentDocumentNumber": "Broj referentnog dokumenta",
+    "referentDocumentNumberPlaceholder": "npr. ABCD1234-ABCD1234-12345",
     "clientHint": "Klijent: {{name}}",
     "noClientMapping": "Nema mapiranja klijenta za izabranu organizaciju.",
     "selectOrgRequired": "Izaberite organizaciju.",
@@ -637,6 +646,7 @@
     "fiscalBillIdLabel": "ID fiskalnog računa",
     "invoiceTypes": {
       "0": "0 – Normalan",
+      "2": "2 – Kopija",
       "4": "4 – Avans"
     },
     "transactionTypes": {

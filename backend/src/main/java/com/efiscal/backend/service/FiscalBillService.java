@@ -164,7 +164,7 @@ public class FiscalBillService {
         FiscalBillConfigEntity config = resolveConfig(orgId);
         String requestBody = buildRequestBody(orgId, clientId, orderId, invoiceType, transactionType,
             resolvedItems, orderData.paymentMethodCode(), orderData.billingType(),
-                orderData.billingCompanyVat(), config);
+                orderData.billingCompanyVat(), config, orderData.cashier());
 
         FiscalBillEntity entity = createPendingEntity(orgId, clientId, orderId,
             invoiceType, transactionType, orderData.customerName(), requestBody);
@@ -252,7 +252,8 @@ public class FiscalBillService {
         String requestBody = buildManualRequestBody(orgId, clientId, orderId,
                 request.invoiceType(), request.transactionType(),
                 request.items(), request.payments(),
-                request.buyerType(), request.buyerVat(), config);
+                request.buyerType(), request.buyerVat(), config,
+                request.referentDocumentNumber(), request.cashier());
 
         FiscalBillEntity entity = createPendingEntity(orgId, clientId, orderId,
             request.invoiceType(), request.transactionType(), request.customerName(), requestBody);
@@ -561,7 +562,7 @@ public class FiscalBillService {
             int invoiceType, int transactionType,
             List<FiscalBillItemRequest> items, String paymentMethodCode,
             String billingType, String billingCompanyVat,
-            FiscalBillConfigEntity config) {
+            FiscalBillConfigEntity config, String cashier) {
 
         Map<String, Object> body = new HashMap<>();
 
@@ -571,6 +572,9 @@ public class FiscalBillService {
         body.put("dateAndTimeOfIssue", belgradeNow());
         if (config != null && config.getEsirno() != null) {
             body.put("invoiceNumber", config.getEsirno());
+        }
+        if (cashier != null && !cashier.isBlank()) {
+            body.put("cashier", cashier);
         }
 
         // BuyerId (4.1.7)
@@ -602,7 +606,7 @@ public class FiscalBillService {
             int invoiceType, int transactionType,
             List<FiscalBillItemRequest> items, List<PaymentRequest> payments,
             String buyerType, String buyerVat,
-            FiscalBillConfigEntity config) {
+            FiscalBillConfigEntity config, String referentDocumentNumber, String cashier) {
 
         Map<String, Object> body = new HashMap<>();
 
@@ -613,14 +617,20 @@ public class FiscalBillService {
         if (config != null && config.getEsirno() != null) {
             body.put("invoiceNumber", config.getEsirno());
         }
+        if (cashier != null && !cashier.isBlank()) {
+            body.put("cashier", cashier);
+        }
 
         // BuyerId (4.2.1)
         if (buyerType != null && buyerVat != null && !buyerVat.isBlank()) {
             body.put("buyerId", buyerType + ":" + buyerVat);
         }
 
-        // Reference fields (4.1.4) — applies when orderId is set
-        if (orderId != null && !orderId.isBlank()) {
+        // Reference fields: if user explicitly supplied a reference number, use it directly;
+        // otherwise fall back to DB auto-resolution when orderId is set (4.1.4).
+        if (referentDocumentNumber != null && !referentDocumentNumber.isBlank()) {
+            body.put("referentDocumentNumber", referentDocumentNumber);
+        } else if (orderId != null && !orderId.isBlank()) {
             setReferentFields(body, orderId, invoiceType, transactionType);
         }
 
@@ -1249,7 +1259,8 @@ public class FiscalBillService {
                 null, // no billing type
                 null, // no billing VAT
                 null, // no payment method code
-                request.items()
+                request.items(),
+                request.cashier()
         );
     }
 
@@ -1321,7 +1332,8 @@ public class FiscalBillService {
             String billingType,          // "company" or individual
             String billingCompanyVat,
             String paymentMethodCode,    // e.g. cash_delivery, wire
-            List<FiscalBillItemRequest> items
+            List<FiscalBillItemRequest> items,
+            String cashier               // Optional — resolved from the issuing user's cashier field
     ) {}
 
     /** Request object for manual fiscal bill creation. */
@@ -1335,7 +1347,9 @@ public class FiscalBillService {
             String buyerType,           // Optional buyer type prefix (e.g. "10")
             String buyerVat,            // Optional company VAT
             List<FiscalBillItemRequest> items,
-            List<PaymentRequest> payments
+            List<PaymentRequest> payments,
+            String referentDocumentNumber, // Optional — user-supplied reference for Copy/Refund/Advance chain
+            String cashier              // Optional — resolved from the issuing user's cashier field
     ) {}
 
     public record FiscalBillView(

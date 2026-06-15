@@ -57,6 +57,9 @@ public class AppUserEntity {
     @Column(name = "preferred_language", length = 10)
     private String preferredLanguage;
 
+    @Column(name = "cashier", length = 255)
+    private String cashier;
+
     public Long getUserId() { return userId; }
     public void setUserId(Long userId) { this.userId = userId; }
     public ClientEntity getClient() { return client; }
@@ -83,4 +86,6 @@ public class AppUserEntity {
     public void setDeletedAt(OffsetDateTime deletedAt) { this.deletedAt = deletedAt; }
     public String getPreferredLanguage() { return preferredLanguage; }
     public void setPreferredLanguage(String preferredLanguage) { this.preferredLanguage = preferredLanguage; }
+    public String getCashier() { return cashier; }
+    public void setCashier(String cashier) { this.cashier = cashier; }
 }

@@ -4,7 +4,7 @@ import AppShell from '../components/AppShell'
 import { fiscalBillApi, orgsApi, productsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
-const INVOICE_TYPE_VALUES = [0, 4]
+const INVOICE_TYPE_VALUES = [0, 2, 4]
 const TRANSACTION_TYPE_VALUES = [0, 1]
 const PAYMENT_TYPE_VALUES = [0, 1, 2, 3, 4, 5, 6]
 const TAX_LABELS = ['A', 'E', 'G', 'Đ', 'N']
@@ -52,6 +52,8 @@ export default function CreateFiscalBill() {
   const [customerName, setCustomerName] = useState('')
   const [buyerType, setBuyerType] = useState('')
   const [buyerIdValue, setBuyerIdValue] = useState('')
+  const [referentDocumentNumber, setReferentDocumentNumber] = useState('')
+  const [closeAdvance, setCloseAdvance] = useState(false)
 
   // Items
   const [items, setItems] = useState([emptyItem()])
@@ -207,6 +209,13 @@ export default function CreateFiscalBill() {
     }
   }
 
+  const showCloseAdvanceCheckbox = Number(invoiceType) === 0 && Number(transactionType) === 0
+  const showReferenceField =
+    Number(invoiceType) === 2 ||
+    Number(transactionType) === 1 ||
+    (Number(invoiceType) === 4 && Number(transactionType) === 0) ||
+    closeAdvance
+
   async function handleSubmit() {
     setError(null)
     setResult(null)
@@ -253,6 +262,7 @@ export default function CreateFiscalBill() {
       buyerVat: buyerIdValue || null,
       items: payloadItems,
       payments: payloadPayments,
+      referentDocumentNumber: showReferenceField && referentDocumentNumber.trim() ? referentDocumentNumber.trim() : null,
     }
 
     const idempotencyKey = crypto.randomUUID()
@@ -329,6 +339,34 @@ export default function CreateFiscalBill() {
               <label className="fiscal-field-label">{t('createFiscalBill.buyerIdValueOptional')}</label>
               <input className="fiscal-input fiscal-input--text" value={buyerIdValue} onChange={e => setBuyerIdValue(e.target.value)} placeholder={t('createFiscalBill.buyerIdValuePlaceholder')} />
             </div>
+
+            {showCloseAdvanceCheckbox && (
+              <div className="fiscal-field fiscal-field--checkbox">
+                <label className="fiscal-field-label fiscal-field-label--inline">
+                  <input
+                    type="checkbox"
+                    checked={closeAdvance}
+                    onChange={e => {
+                      setCloseAdvance(e.target.checked)
+                      if (!e.target.checked) setReferentDocumentNumber('')
+                    }}
+                  />
+                  {' '}{t('createFiscalBill.closeAdvance')}
+                </label>
+              </div>
+            )}
+
+            {showReferenceField && (
+              <div className="fiscal-field">
+                <label className="fiscal-field-label">{t('createFiscalBill.referentDocumentNumber')}</label>
+                <input
+                  className="fiscal-input fiscal-input--text"
+                  value={referentDocumentNumber}
+                  onChange={e => setReferentDocumentNumber(e.target.value)}
+                  placeholder={t('createFiscalBill.referentDocumentNumberPlaceholder')}
+                />
+              </div>
+            )}
           </div>
 
           {selectedOrgId && selectedOrg && (
