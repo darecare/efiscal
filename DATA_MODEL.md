@@ -76,6 +76,7 @@ On Organization level is defined connection to mail server. From this mail addre
 | smtp_username  | VARCHAR(255) | NULL                     | SMTP authentication username  |
 | smtp_password  | VARCHAR(255) | NULL                     | SMTP authentication password (sensitive) |
 | smtp_connection_security | VARCHAR(20) | NULL            | Allowed: `STARTTLS`, `SSL_TLS` |
+| logo_image     | TEXT         | NULL                     | Optional organization logo (typically Data URL image) |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | deleted_at     | TIMESTAMPTZ  | NULL                     | Soft delete                   |

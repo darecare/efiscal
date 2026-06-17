@@ -632,12 +632,14 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
     "emailFrom": "no-reply@example.com",
     "smtpUsername": "smtp-user",
     "smtpConnectionSecurity": "STARTTLS",
+    "logoImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
     "createdAt": "2026-03-24T10:00:00Z"
   }
 ]
 ```
 - Notes:
   - `smtpPassword` is write-only and is never returned in API responses.
+  - `logoImage` is optional and, when present, should be a Data URL image string.
 - Errors: `401`, `403`, `500`
 
 ### GET /orgs/{orgId}
@@ -661,12 +663,14 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   "emailFrom": "no-reply@example.com",
   "smtpUsername": "smtp-user",
   "smtpPassword": "secret",
-  "smtpConnectionSecurity": "STARTTLS"
+  "smtpConnectionSecurity": "STARTTLS",
+  "logoImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
 }
 ```
 - Validation:
   - `smtpPort` range: `1..65535`
   - `smtpConnectionSecurity` allowed values: `STARTTLS`, `SSL_TLS`
+  - `logoImage` max payload length: `2097152` characters
 - 201 Response: Created organization object (same as `GET /orgs`, excluding `smtpPassword`).
 - Errors: `400`, `401`, `403`, `404`, `500`
 

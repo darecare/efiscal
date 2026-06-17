@@ -17,11 +17,13 @@ const emptyForm = {
   smtpUsername: '',
   smtpPassword: '',
   smtpConnectionSecurity: 'STARTTLS',
+  logoImage: '',
 }
 const STATUS_OPTIONS = ['ACTIVE', 'SETUP', 'SUSPENDED', 'INACTIVE']
 const CURRENCY_OPTIONS = ['RSD', 'EUR', 'USD']
 const PAYMENT_TYPE_VALUES = [0, 1, 2, 3, 4, 5, 6]
 const CONNECTION_SECURITY_OPTIONS = ['STARTTLS', 'SSL_TLS']
+const LOGO_MAX_BYTES = 1024 * 1024
 
 export default function Organizations() {
   const { t } = useTranslation()
@@ -96,6 +98,7 @@ export default function Organizations() {
       smtpUsername: o.smtpUsername || '',
       smtpPassword: '',
       smtpConnectionSecurity: o.smtpConnectionSecurity || 'STARTTLS',
+      logoImage: (typeof o.logoImage === 'string' && o.logoImage.toLowerCase().startsWith('data:image/')) ? o.logoImage : '',
     })
     setFormError(null)
     setModalMode('edit')
@@ -117,6 +120,66 @@ export default function Organizations() {
 
   function handleChange(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(new Error('failed_to_read_file'))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  function imageFileToPngDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file)
+      const img = new Image()
+
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth || img.width
+          canvas.height = img.naturalHeight || img.height
+          const ctx = canvas.getContext('2d')
+          if (!ctx) throw new Error('canvas_context_unavailable')
+          ctx.drawImage(img, 0, 0)
+          const pngDataUrl = canvas.toDataURL('image/png')
+          resolve(pngDataUrl)
+        } catch (err) {
+          reject(err)
+        } finally {
+          URL.revokeObjectURL(objectUrl)
+        }
+      }
+
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl)
+        reject(new Error('failed_to_decode_image'))
+      }
+
+      img.src = objectUrl
+    })
+  }
+
+  async function handleLogoUpload(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setFormError(t('organizations.logoImageTypeError'))
+      return
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      setFormError(t('organizations.logoImageSizeError'))
+      return
+    }
+    try {
+      const pngDataUrl = await imageFileToPngDataUrl(file)
+      handleChange('logoImage', pngDataUrl)
+      setFormError(null)
+    } catch {
+      setFormError(t('organizations.logoImageReadError'))
+    }
   }
 
   function togglePaymentType(paymentTypeValue) {
@@ -151,6 +214,7 @@ export default function Organizations() {
         smtpUsername: form.smtpUsername?.trim() || null,
         smtpPassword: form.smtpPassword || null,
         smtpConnectionSecurity: form.smtpConnectionSecurity || null,
+        logoImage: form.logoImage || null,
       }
       if (modalMode === 'add') {
         await orgsApi.create(payload)
@@ -334,6 +398,23 @@ export default function Organizations() {
                       </select>
                     </div>
                   )}
+                  <div className="field" style={{ gridColumn: '1 / -1' }}>
+                    <label>{t('organizations.logoImage')}</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                    />
+                    {form.logoImage ? (
+                      <div style={{ marginTop: 8 }}>
+                        <img
+                          src={form.logoImage}
+                          alt={t('organizations.logoImagePreviewAlt')}
+                          style={{ maxWidth: 200, width: '100%', height: 'auto', border: '1px solid #ddd', borderRadius: 8 }}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               )}
 

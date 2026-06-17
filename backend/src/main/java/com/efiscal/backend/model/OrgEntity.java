@@ -51,6 +51,9 @@ public class OrgEntity {
     @Column(name = "smtp_connection_security", length = 20)
     private String smtpConnectionSecurity;
 
+    @Column(name = "logo_image")
+    private String logoImage;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -88,6 +91,8 @@ public class OrgEntity {
     public void setSmtpPassword(String smtpPassword) { this.smtpPassword = smtpPassword; }
     public String getSmtpConnectionSecurity() { return smtpConnectionSecurity; }
     public void setSmtpConnectionSecurity(String smtpConnectionSecurity) { this.smtpConnectionSecurity = smtpConnectionSecurity; }
+    public String getLogoImage() { return logoImage; }
+    public void setLogoImage(String logoImage) { this.logoImage = logoImage; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public OffsetDateTime getDeletedAt() { return deletedAt; }

@@ -4,13 +4,17 @@ import com.efiscal.backend.model.FiscalBillEntity;
 import com.efiscal.backend.model.FiscalBillLineEntity;
 import com.efiscal.backend.model.FiscalBillPayEntity;
 import com.efiscal.backend.model.FiscalBillTaxEntity;
+import com.efiscal.backend.model.OrgEntity;
 import com.efiscal.backend.repository.FiscalBillLineRepository;
 import com.efiscal.backend.repository.FiscalBillPayRepository;
 import com.efiscal.backend.repository.FiscalBillRepository;
 import com.efiscal.backend.repository.FiscalBillTaxRepository;
+import com.efiscal.backend.repository.OrgRepository;
+import com.openhtmltopdf.extend.FSSupplier;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -31,23 +35,26 @@ public class FiscalBillPdfService {
     private final FiscalBillLineRepository fiscalBillLineRepository;
     private final FiscalBillTaxRepository fiscalBillTaxRepository;
     private final FiscalBillPayRepository fiscalBillPayRepository;
+    private final OrgRepository orgRepository;
 
     public FiscalBillPdfService(
             FiscalBillRepository fiscalBillRepository,
             FiscalBillLineRepository fiscalBillLineRepository,
             FiscalBillTaxRepository fiscalBillTaxRepository,
-            FiscalBillPayRepository fiscalBillPayRepository) {
+            FiscalBillPayRepository fiscalBillPayRepository,
+            OrgRepository orgRepository) {
         this.fiscalBillRepository = fiscalBillRepository;
         this.fiscalBillLineRepository = fiscalBillLineRepository;
         this.fiscalBillTaxRepository = fiscalBillTaxRepository;
         this.fiscalBillPayRepository = fiscalBillPayRepository;
+        this.orgRepository = orgRepository;
     }
 
     public byte[] generateDefaultA4Pdf(Long fiscalBillId) {
         return generatePdf(fiscalBillId, PdfTemplateFormat.A4);
     }
 
-    public byte[] generatePdf(Long fiscalBillId, PdfTemplateFormat format) {
+    public String generateHtml(Long fiscalBillId, PdfTemplateFormat format) {
         FiscalBillEntity bill = fiscalBillRepository.findById(fiscalBillId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Fiscal bill not found"));
 
@@ -56,11 +63,16 @@ public class FiscalBillPdfService {
         List<FiscalBillPayEntity> payments = fiscalBillPayRepository.findByFiscalbillId(fiscalBillId);
 
         String template = readTemplate(resolveTemplatePath(format));
-        String html = renderTemplate(template, bill, lines, taxes, payments);
+        return renderTemplate(template, bill, lines, taxes, payments);
+    }
+
+    public byte[] generatePdf(Long fiscalBillId, PdfTemplateFormat format) {
+        String html = generateHtml(fiscalBillId, format);
 
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
             builder.useFastMode();
+            registerFonts(builder);
             builder.withHtmlContent(html, null);
             builder.toStream(out);
             builder.run();
@@ -88,6 +100,28 @@ public class FiscalBillPdfService {
         return format == PdfTemplateFormat.ROLL80 ? "roll80" : "a4";
     }
 
+    private void registerFonts(PdfRendererBuilder builder) {
+        registerFontIfPresent(builder, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "DejaVu Sans", 400, PdfRendererBuilder.FontStyle.NORMAL);
+        registerFontIfPresent(builder, "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "DejaVu Sans", 700, PdfRendererBuilder.FontStyle.NORMAL);
+        registerFontIfPresent(builder, "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf", "DejaVu Sans", 400, PdfRendererBuilder.FontStyle.ITALIC);
+        registerFontIfPresent(builder, "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf", "DejaVu Sans", 700, PdfRendererBuilder.FontStyle.ITALIC);
+    }
+
+    private void registerFontIfPresent(PdfRendererBuilder builder, String absolutePath, String family, int weight, PdfRendererBuilder.FontStyle style) {
+        java.io.File fontFile = new java.io.File(absolutePath);
+        if (!fontFile.exists()) {
+            return;
+        }
+        FSSupplier<InputStream> supplier = () -> {
+            try {
+                return new java.io.FileInputStream(fontFile);
+            } catch (IOException ex) {
+                return null;
+            }
+        };
+        builder.useFont(supplier, family, weight, style, true);
+    }
+
     private String resolveTemplatePath(PdfTemplateFormat format) {
         if (format == PdfTemplateFormat.ROLL80) {
             return "pdf-templates/default-roll80.html";
@@ -108,6 +142,7 @@ public class FiscalBillPdfService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         String html = template;
+        OrgEntity org = orgRepository.findById(bill.getOrgId()).orElse(null);
         html = replace(html, "{{BUSINESS_NAME}}", safe(bill.getEfiscalBusinessname()));
         html = replace(html, "{{BUSINESS_ADDRESS}}", safe(bill.getEfiscalAddress()));
         html = replace(html, "{{BUSINESS_TIN}}", safe(bill.getEfiscalTin()));
@@ -121,6 +156,8 @@ public class FiscalBillPdfService {
         html = replace(html, "{{TOTAL_AMOUNT}}", formatAmount(bill.getEfiscalTotalamount()));
         html = replace(html, "{{TOTAL_TAX}}", formatAmount(totalTax));
         html = replace(html, "{{EFISCAL_LINK}}", safe(bill.getEfiscalLink()));
+        html = replace(html, "{{CASHIER_NAME}}", "");
+        html = html.replace("{{ORG_LOGO_BLOCK}}", renderLogoBlock(org));
         html = html.replace("{{LINE_ITEMS_ROWS}}", renderLineRows(lines));
         html = html.replace("{{TAX_ROWS}}", renderTaxRows(taxes));
         html = html.replace("{{PAYMENT_ROWS}}", renderPaymentRows(payments));
@@ -149,6 +186,19 @@ public class FiscalBillPdfService {
             }
         }
         return sb.toString();
+    }
+
+    private String renderLogoBlock(OrgEntity org) {
+        if (org == null || org.getLogoImage() == null || org.getLogoImage().isBlank()) {
+            return "";
+        }
+        String raw = org.getLogoImage().trim();
+        String lower = raw.toLowerCase();
+        if (!lower.startsWith("data:image/")) {
+            return "";
+        }
+        String src = escapeHtml(raw);
+        return "<img class=\"org-logo\" src=\"" + src + "\" alt=\"Organization logo\" />";
     }
 
     private String renderTaxRows(List<FiscalBillTaxEntity> taxes) {
