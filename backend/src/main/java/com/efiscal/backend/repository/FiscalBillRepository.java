@@ -23,9 +23,31 @@ public interface FiscalBillRepository extends JpaRepository<FiscalBillEntity, Lo
             @Param("invoiceType") Integer invoiceType,
             @Param("transactionType") Integer transactionType);
 
+    /** Org-scoped variant for order-linked fiscal chain lookups. */
+    @Query("SELECT fb FROM FiscalBillEntity fb WHERE fb.orgId = :orgId AND fb.orderId = :orderId " +
+           "AND fb.efiscalInvoicetype = :invoiceType AND fb.efiscalTransactiontype = :transactionType " +
+           "ORDER BY fb.created DESC")
+    List<FiscalBillEntity> findByOrgIdAndOrderIdAndInvoiceTypeAndTransactionType(
+            @Param("orgId") Long orgId,
+            @Param("orderId") String orderId,
+            @Param("invoiceType") Integer invoiceType,
+            @Param("transactionType") Integer transactionType);
+
+    /** Lookup a fiscal bill by Tax Authority invoice number within an organization. */
+    Optional<FiscalBillEntity> findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
+            Long orgId, String efiscalSdcInvoiceno);
+
     /** Check if a fiscal bill already exists for a given order + invoiceType + transactionType. */
     default Optional<FiscalBillEntity> findLatestByOrderAndType(String orderId, Integer invoiceType, Integer transactionType) {
         List<FiscalBillEntity> list = findByOrderIdAndInvoiceTypeAndTransactionType(orderId, invoiceType, transactionType);
+        return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
+    }
+
+    /** Org-scoped latest bill for order + invoice/transaction type. */
+    default Optional<FiscalBillEntity> findLatestByOrgAndOrderAndType(
+            Long orgId, String orderId, Integer invoiceType, Integer transactionType) {
+        List<FiscalBillEntity> list = findByOrgIdAndOrderIdAndInvoiceTypeAndTransactionType(
+                orgId, orderId, invoiceType, transactionType);
         return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
     }
 }

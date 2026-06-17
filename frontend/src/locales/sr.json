@@ -651,6 +651,25 @@
     "buyerIdAutoSelected": "Tip ID kupca je automatski izabran.",
     "itemsSection": "Stavke",
     "paymentsSection": "Plaćanja i pregled",
+    "resultSuccessTitle": "Fiskalni račun kreiran",
+    "resultFailedTitle": "Fiskalizacija nije uspela",
+    "submitDisabledBalance": "Iznos za uplatu mora biti nula pre slanja.",
+    "summary": {
+      "itemsTotalLabel": "Ukupno stavke",
+      "paymentsTotalLabel": "Ukupno plaćanja",
+      "balanceDueLabel": "Za uplatu"
+    },
+    "validation": {
+      "productNameRequired": "Naziv proizvoda je obavezan.",
+      "quantityRequired": "Količina je obavezna.",
+      "quantityPositive": "Količina mora biti veća od nule.",
+      "unitPriceRequired": "Jedinična cena je obavezna.",
+      "unitPriceInvalid": "Jedinična cena ne može biti negativna.",
+      "paymentAmountRequired": "Iznos plaćanja je obavezan.",
+      "paymentAmountPositive": "Iznos plaćanja mora biti veći od nule.",
+      "referentDocumentRequired": "Broj referentnog dokumenta je obavezan za ovaj tip računa.",
+      "itemSummary": "Stavka {{n}}: {{message}}"
+    },
     "invoiceTypes": {
       "0": "0 – Normalan",
       "2": "2 – Kopija",

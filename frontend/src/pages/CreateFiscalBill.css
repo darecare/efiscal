@@ -156,3 +156,42 @@
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+.fiscal-price-hint--ok {
+  color: #10b981;
+}
+
+.fiscal-input--invalid {
+  border-color: #ef4444;
+}
+
+.fiscal-row-card--invalid {
+  border-color: #ef4444;
+  border-left-width: 3px;
+}
+
+.fiscal-result-card {
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  border-left: 4px solid transparent;
+}
+
+.fiscal-result-card--success {
+  border-left-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.fiscal-result-card--failed {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+}
+
+.fiscal-result-error-line {
+  color: #ef4444;
+}
+
+.fiscal-submit-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  color: #b45309;
+}

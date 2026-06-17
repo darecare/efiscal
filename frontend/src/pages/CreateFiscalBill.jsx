@@ -37,6 +37,14 @@ function emptyPayment(amount = '') {
   return { id: crypto.randomUUID(), paymentType: 1, amount }
 }
 
+function isFiscalResultSuccess(result) {
+  return result?.status === 'SUCCESS'
+}
+
+function isFiscalResultFailed(result) {
+  return result?.status === 'FAILED' || Boolean(result?.lastError)
+}
+
 export default function CreateFiscalBill() {
   const { t } = useTranslation()
   const { user: currentUser } = useAuth()
@@ -67,12 +75,23 @@ export default function CreateFiscalBill() {
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [itemErrors, setItemErrors] = useState({})
+  const [paymentErrors, setPaymentErrors] = useState({})
 
   const suggestDebounceRef = useRef({})
+  const headerSectionRef = useRef(null)
+  const itemsSectionRef = useRef(null)
+  const sidebarSectionRef = useRef(null)
 
   useEffect(() => {
     const loadOrgs = isSuperAdmin ? orgsApi.list() : orgsApi.myAccess()
-    loadOrgs.then(setOrgs).catch(() => setOrgs([]))
+    loadOrgs.then((list) => {
+      setOrgs(list)
+      if (list.length === 1) {
+        setSelectedOrgId(String(list[0].orgId))
+      }
+    }).catch(() => setOrgs([]))
   }, [isSuperAdmin])
 
   useEffect(() => {
@@ -284,46 +303,121 @@ export default function CreateFiscalBill() {
     (Number(invoiceType) === 4 && Number(transactionType) === 0) ||
     closeAdvance
 
-  async function handleSubmit() {
-    setError(null)
-    setResult(null)
+  function clearValidationErrors() {
+    setFieldErrors({})
+    setItemErrors({})
+    setPaymentErrors({})
+  }
+
+  function scrollToFirstError(nextFieldErrors, nextItemErrors, nextPaymentErrors) {
+    const target = (() => {
+      if (nextFieldErrors.orgId || nextFieldErrors.clientId || nextFieldErrors.buyerType || nextFieldErrors.referentDocumentNumber) {
+        return headerSectionRef.current
+      }
+      if (Object.keys(nextItemErrors).length > 0) {
+        return itemsSectionRef.current
+      }
+      if (Object.keys(nextPaymentErrors).length > 0 || nextFieldErrors.paymentTotal) {
+        return sidebarSectionRef.current
+      }
+      return null
+    })()
+    if (target?.scrollIntoView) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  function validateForm() {
+    const nextFieldErrors = {}
+    const nextItemErrors = {}
+    const nextPaymentErrors = {}
+    let globalError = null
 
     if (!selectedOrgId) {
-      setError(t('createFiscalBill.selectOrgRequired'))
-      return
-    }
-
-    if (!selectedClientId) {
-      setError(t('createFiscalBill.orgNotMapped'))
-      return
+      nextFieldErrors.orgId = t('createFiscalBill.selectOrgRequired')
+      globalError = nextFieldErrors.orgId
+    } else if (!selectedClientId) {
+      nextFieldErrors.clientId = t('createFiscalBill.orgNotMapped')
+      globalError = nextFieldErrors.clientId
     }
 
     if (buyerIdValue && !buyerType) {
-      setError(t('createFiscalBill.buyerTypeRequired'))
-      return
+      nextFieldErrors.buyerType = t('createFiscalBill.buyerTypeRequired')
+      globalError = globalError || nextFieldErrors.buyerType
+    }
+
+    if (showReferenceField && !referentDocumentNumber.trim()) {
+      nextFieldErrors.referentDocumentNumber = t('createFiscalBill.validation.referentDocumentRequired')
+      globalError = globalError || nextFieldErrors.referentDocumentNumber
     }
 
     if (items.length === 0) {
-      setError(t('createFiscalBill.invalidEmptyItems'))
-      return
+      globalError = globalError || t('createFiscalBill.invalidEmptyItems')
     }
 
-    const invalidItem = items.find(i => {
-      const q = parseFloat(i.quantity)
-      const p = parseFloat(i.unitPrice)
-      return isNaN(q) || isNaN(p) || q <= 0 || p < 0 || !i.name.trim()
+    items.forEach((item, idx) => {
+      const errs = {}
+      if (!item.name.trim()) {
+        errs.name = t('createFiscalBill.validation.productNameRequired')
+      }
+      const q = parseFloat(item.quantity)
+      if (item.quantity === '' || isNaN(q)) {
+        errs.quantity = t('createFiscalBill.validation.quantityRequired')
+      } else if (q <= 0) {
+        errs.quantity = t('createFiscalBill.validation.quantityPositive')
+      }
+      const p = parseFloat(item.unitPrice)
+      if (item.unitPrice === '' || isNaN(p)) {
+        errs.unitPrice = t('createFiscalBill.validation.unitPriceRequired')
+      } else if (p < 0) {
+        errs.unitPrice = t('createFiscalBill.validation.unitPriceInvalid')
+      }
+      if (Object.keys(errs).length > 0) {
+        nextItemErrors[item.id] = errs
+        if (!globalError) {
+          globalError = t('createFiscalBill.validation.itemSummary', { n: idx + 1, message: Object.values(errs)[0] })
+        }
+      }
     })
-    
-    if (invalidItem) {
-      setError(t('createFiscalBill.invalidQuantities'))
-      return
-    }
+
+    payments.forEach((payment) => {
+      const amt = parseFloat(payment.amount)
+      if (payment.amount === '' || isNaN(amt)) {
+        nextPaymentErrors[payment.id] = { amount: t('createFiscalBill.validation.paymentAmountRequired') }
+      } else if (amt <= 0) {
+        nextPaymentErrors[payment.id] = { amount: t('createFiscalBill.validation.paymentAmountPositive') }
+      }
+    })
 
     const tItems = parseFloat(itemsTotal())
     const tPayments = parseFloat(paymentsTotal())
-    if (Math.abs(tItems - tPayments) > 0.01) {
-       setError(t('createFiscalBill.paymentTotalMismatch', { total: tItems.toFixed(2) }))
-       return
+    if (!isNaN(tItems) && !isNaN(tPayments) && Math.abs(tItems - tPayments) > 0.01) {
+      nextFieldErrors.paymentTotal = t('createFiscalBill.paymentTotalMismatch', { total: tItems.toFixed(2) })
+      globalError = globalError || nextFieldErrors.paymentTotal
+    }
+
+    return {
+      valid: !globalError && Object.keys(nextItemErrors).length === 0 && Object.keys(nextPaymentErrors).length === 0,
+      globalError,
+      nextFieldErrors,
+      nextItemErrors,
+      nextPaymentErrors,
+    }
+  }
+
+  async function handleSubmit() {
+    setError(null)
+    setResult(null)
+    clearValidationErrors()
+
+    const validation = validateForm()
+    if (!validation.valid) {
+      setFieldErrors(validation.nextFieldErrors)
+      setItemErrors(validation.nextItemErrors)
+      setPaymentErrors(validation.nextPaymentErrors)
+      setError(validation.globalError)
+      scrollToFirstError(validation.nextFieldErrors, validation.nextItemErrors, validation.nextPaymentErrors)
+      return
     }
 
     const payloadItems = items.map(i => ({
@@ -365,8 +459,14 @@ export default function CreateFiscalBill() {
       )
       setResult(data)
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('createFiscalBill.requestFailed')
-      setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+      const data = err?.response?.data
+      if (err?.response?.status === 502 && data?.status) {
+        setResult(data)
+        setError(null)
+      } else {
+        const msg = data?.message || data?.lastError || data || err?.message || t('createFiscalBill.requestFailed')
+        setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -374,45 +474,51 @@ export default function CreateFiscalBill() {
 
   const balDue = (parseFloat(currentItemsTotal) - parseFloat(paymentsTotal())).toFixed(2)
   const isSettled = Math.abs(parseFloat(balDue)) < 0.01
+  const resultCardClass = result
+    ? (isFiscalResultFailed(result) ? 'fiscal-result-card fiscal-result-card--failed' : 'fiscal-result-card fiscal-result-card--success')
+    : ''
 
   return (
     <AppShell title={t('createFiscalBill.title')} subtitle={t('createFiscalBill.subtitle')}>
       
       {error && (
-        <div className="card" style={{ marginBottom: '1rem', borderLeft: '4px solid #ef4444', background: '#fef2f2' }}>
+        <div className="fiscal-result-card fiscal-result-card--failed" style={{ marginBottom: '1rem' }}>
           <strong>{t('createFiscalBill.errorLabel')}:</strong> {error}
         </div>
       )}
 
       {result && (
-        <div className="card" style={{ marginBottom: '1rem', borderLeft: '4px solid #22c55e', background: '#f0fdf4' }}>
+        <div className={resultCardClass} style={{ marginBottom: '1rem' }}>
+          <p><strong>{isFiscalResultFailed(result) ? t('createFiscalBill.resultFailedTitle') : t('createFiscalBill.resultSuccessTitle')}</strong></p>
           <p><strong>{t('createFiscalBill.statusLabel')}:</strong> {result.status}</p>
           {result.sdcInvoiceNumber && <p><strong>{t('createFiscalBill.invoiceNumberLabel')}:</strong> {result.sdcInvoiceNumber}</p>}
           {result.fiscalbillId && <p><strong>{t('createFiscalBill.fiscalBillIdLabel')}:</strong> {result.fiscalbillId}</p>}
-          {result.lastError && <p style={{ color: '#ef4444' }}><strong>{t('createFiscalBill.errorLabel')}:</strong> {result.lastError}</p>}
+          {result.lastError && <p className="fiscal-result-error-line"><strong>{t('createFiscalBill.errorLabel')}:</strong> {result.lastError}</p>}
         </div>
       )}
 
       <div className="fiscal-layout-split">
         <div className="fiscal-main-column">
           {/* HEADER SECTION */}
-          <section className="fiscal-section-card">
+          <section className="fiscal-section-card" ref={headerSectionRef}>
             <h3 className="fiscal-section-title">{t('createFiscalBill.header')}</h3>
             <div className="fiscal-header-grid">
               <div className="fiscal-field">
                 <label className="fiscal-field-label">{t('common.organization')}</label>
                 <select
-                  className="fiscal-input fiscal-input--select"
+                  className={`fiscal-input fiscal-input--select${fieldErrors.orgId ? ' fiscal-input--invalid' : ''}`}
                   value={selectedOrgId}
                   onChange={e => setSelectedOrgId(e.target.value)}
+                  aria-invalid={fieldErrors.orgId ? 'true' : undefined}
                 >
                   <option value="">{t('createFiscalBill.selectOrg')}</option>
                   {orgs.map(org => (
                     <option key={org.orgId} value={org.orgId}>{org.name}</option>
                   ))}
                 </select>
+                {fieldErrors.orgId && <span className="error-text fiscal-error">{fieldErrors.orgId}</span>}
                 {selectedOrgId && !selectedOrg?.clientId && (
-                  <span className="error-text fiscal-error">{t('createFiscalBill.noClientMapping')}</span>
+                  <span className="error-text fiscal-error">{fieldErrors.clientId || t('createFiscalBill.noClientMapping')}</span>
                 )}
               </div>
 
@@ -447,10 +553,16 @@ export default function CreateFiscalBill() {
 
               <div className="fiscal-field">
                 <label className="fiscal-field-label">{t('createFiscalBill.buyerIdTypeOptional')}</label>
-                <select className="fiscal-input fiscal-input--select" value={buyerType} onChange={e => setBuyerType(e.target.value)}>
+                <select
+                  className={`fiscal-input fiscal-input--select${fieldErrors.buyerType ? ' fiscal-input--invalid' : ''}`}
+                  value={buyerType}
+                  onChange={e => setBuyerType(e.target.value)}
+                  aria-invalid={fieldErrors.buyerType ? 'true' : undefined}
+                >
                   <option value="">{t('createFiscalBill.selectBuyerIdType')}</option>
                   {BUYER_ID_TYPE_VALUES.map(v => <option key={v} value={v}>{t(`createFiscalBill.buyerIdTypes.${v}`)}</option>)}
                 </select>
+                {fieldErrors.buyerType && <span className="error-text fiscal-error">{fieldErrors.buyerType}</span>}
                 {buyerIdAutoMsg && <span className="buyer-id-auto-msg">{t('createFiscalBill.buyerIdAutoSelected')}</span>}
               </div>
 
@@ -474,11 +586,15 @@ export default function CreateFiscalBill() {
                 <div className="fiscal-field">
                   <label className="fiscal-field-label">{t('createFiscalBill.referentDocumentNumber')}</label>
                   <input
-                    className="fiscal-input fiscal-input--text"
+                    className={`fiscal-input fiscal-input--text${fieldErrors.referentDocumentNumber ? ' fiscal-input--invalid' : ''}`}
                     value={referentDocumentNumber}
                     onChange={e => setReferentDocumentNumber(e.target.value)}
                     placeholder={t('createFiscalBill.referentDocumentNumberPlaceholder')}
+                    aria-invalid={fieldErrors.referentDocumentNumber ? 'true' : undefined}
                   />
+                  {fieldErrors.referentDocumentNumber && (
+                    <span className="error-text fiscal-error">{fieldErrors.referentDocumentNumber}</span>
+                  )}
                 </div>
               )}
             </div>
@@ -488,11 +604,11 @@ export default function CreateFiscalBill() {
           </section>
 
           {/* ITEMS SECTION */}
-          <section className="fiscal-section-card">
+          <section className="fiscal-section-card" ref={itemsSectionRef}>
             <h3 className="fiscal-section-title">{t('createFiscalBill.itemsSection')}</h3>
             <div className="fiscal-row-list">
               {items.map((item, idx) => (
-                <div key={item.id} className="fiscal-row-card fiscal-row-card--enhanced">
+                <div key={item.id} className={`fiscal-row-card fiscal-row-card--enhanced${itemErrors[item.id] ? ' fiscal-row-card--invalid' : ''}`}>
                   <div className="fiscal-row-card-head">
                     <h4>{t('createFiscalBill.itemNumber', { n: idx + 1 })}</h4>
                     <button
@@ -509,7 +625,7 @@ export default function CreateFiscalBill() {
                       <label className="fiscal-field-label">{t('createFiscalBill.productName')}</label>
                       <div className="product-name-combobox">
                         <input
-                          className="fiscal-input fiscal-input--text"
+                          className={`fiscal-input fiscal-input--text${itemErrors[item.id]?.name ? ' fiscal-input--invalid' : ''}`}
                           value={item.name}
                           onChange={e => handleNameChange(item.id, e.target.value)}
                           onFocus={() => {
@@ -523,6 +639,9 @@ export default function CreateFiscalBill() {
                           placeholder={t('createFiscalBill.searchPlaceholder')}
                           disabled={!selectedOrgId}
                           autoComplete="off"
+                          aria-autocomplete="list"
+                          aria-expanded={item.showSuggestions && item.suggestions.length > 0}
+                          aria-invalid={itemErrors[item.id]?.name ? 'true' : undefined}
                         />
                         {item.showSuggestions && selectedOrgId && item.name.trim().length >= 2 && (
                           <ul className="product-suggest-list" role="listbox">
@@ -558,11 +677,14 @@ export default function CreateFiscalBill() {
                           <span className="muted fiscal-price-hint">{t('createFiscalBill.selectOrgRequired')}</span>
                         )}
                       </div>
+                      {itemErrors[item.id]?.name && (
+                        <span className="error-text fiscal-error">{itemErrors[item.id].name}</span>
+                      )}
                       {item.priceVerifying && (
                         <span className="muted fiscal-price-hint">{t('createFiscalBill.priceVerifying')}</span>
                       )}
                       {!item.priceVerifying && item.priceStatus === 'verified' && (
-                        <span className="fiscal-price-hint" style={{ color: '#10b981' }}>{t('createFiscalBill.priceVerified')}</span>
+                        <span className="fiscal-price-hint fiscal-price-hint--ok">{t('createFiscalBill.priceVerified')}</span>
                       )}
                       {!item.priceVerifying && item.priceStatus === 'unverified' && (
                         <span className="fiscal-price-hint fiscal-price-hint--warn">{t('createFiscalBill.priceUnverified')}</span>
@@ -571,11 +693,35 @@ export default function CreateFiscalBill() {
                     
                     <div className="fiscal-field">
                       <label className="fiscal-field-label">{t('createFiscalBill.quantity')}</label>
-                      <input className="fiscal-input fiscal-input--number" type="number" value={item.quantity} onChange={e => setItemField(item.id, 'quantity', e.target.value)} placeholder="1" min="0.01" step="any" />
+                      <input
+                        className={`fiscal-input fiscal-input--number${itemErrors[item.id]?.quantity ? ' fiscal-input--invalid' : ''}`}
+                        type="number"
+                        value={item.quantity}
+                        onChange={e => setItemField(item.id, 'quantity', e.target.value)}
+                        placeholder="1"
+                        min="0.01"
+                        step="any"
+                        aria-invalid={itemErrors[item.id]?.quantity ? 'true' : undefined}
+                      />
+                      {itemErrors[item.id]?.quantity && (
+                        <span className="error-text fiscal-error">{itemErrors[item.id].quantity}</span>
+                      )}
                     </div>
                     <div className="fiscal-field">
                       <label className="fiscal-field-label">{t('createFiscalBill.unitPrice')}</label>
-                      <input className="fiscal-input fiscal-input--number" type="number" value={item.unitPrice} onChange={e => setItemField(item.id, 'unitPrice', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                      <input
+                        className={`fiscal-input fiscal-input--number${itemErrors[item.id]?.unitPrice ? ' fiscal-input--invalid' : ''}`}
+                        type="number"
+                        value={item.unitPrice}
+                        onChange={e => setItemField(item.id, 'unitPrice', e.target.value)}
+                        placeholder="0.00"
+                        min="0"
+                        step="0.01"
+                        aria-invalid={itemErrors[item.id]?.unitPrice ? 'true' : undefined}
+                      />
+                      {itemErrors[item.id]?.unitPrice && (
+                        <span className="error-text fiscal-error">{itemErrors[item.id].unitPrice}</span>
+                      )}
                     </div>
                     <div className="fiscal-field">
                       <label className="fiscal-field-label">{t('createFiscalBill.total')}</label>
@@ -606,24 +752,27 @@ export default function CreateFiscalBill() {
           </section>
         </div>
 
-        <div className="fiscal-sidebar">
+        <div className="fiscal-sidebar" ref={sidebarSectionRef}>
           {/* SUMMARY AND PAYMENTS SECTION */}
           <section className="fiscal-section-card">
             <h3 className="fiscal-section-title">{t('createFiscalBill.paymentsSection')}</h3>
             
             <div className="fiscal-summary-box" style={{ marginBottom: '1.5rem' }}>
               <div className="fiscal-summary-row fiscal-summary-row--total">
-                <span>{t('createFiscalBill.itemsTotal', { total: '' })}</span>
+                <span>{t('createFiscalBill.summary.itemsTotalLabel')}</span>
                 <span>{currentItemsTotal}</span>
               </div>
               <div className="fiscal-summary-row">
-                <span>{t('createFiscalBill.paymentsTotal', { total: '' })}</span>
+                <span>{t('createFiscalBill.summary.paymentsTotalLabel')}</span>
                 <span>{paymentsTotal()}</span>
               </div>
               <div className={`fiscal-summary-row fiscal-summary-row--balance ${isSettled ? 'settled' : ''}`}>
-                <span>{t('createFiscalBill.balanceDue', { amount: '' })}</span>
+                <span>{t('createFiscalBill.summary.balanceDueLabel')}</span>
                 <span>{balDue}</span>
               </div>
+              {fieldErrors.paymentTotal && (
+                <span className="error-text fiscal-error">{fieldErrors.paymentTotal}</span>
+              )}
             </div>
 
             <div className="fiscal-row-list">
@@ -647,7 +796,14 @@ export default function CreateFiscalBill() {
                       </select>
                     </div>
                     <div className="fiscal-field" style={{ display: 'flex', gap: '0.5rem' }}>
-                      <input className="fiscal-input fiscal-input--number" type="number" value={payment.amount} onChange={e => setPaymentField(payment.id, 'amount', e.target.value)} placeholder="0.00" />
+                      <input
+                        className={`fiscal-input fiscal-input--number${paymentErrors[payment.id]?.amount ? ' fiscal-input--invalid' : ''}`}
+                        type="number"
+                        value={payment.amount}
+                        onChange={e => setPaymentField(payment.id, 'amount', e.target.value)}
+                        placeholder="0.00"
+                        aria-invalid={paymentErrors[payment.id]?.amount ? 'true' : undefined}
+                      />
                       <button 
                         type="button" 
                         className="secondary-button" 
@@ -660,6 +816,9 @@ export default function CreateFiscalBill() {
                         =
                       </button>
                     </div>
+                    {paymentErrors[payment.id]?.amount && (
+                      <span className="error-text fiscal-error">{paymentErrors[payment.id].amount}</span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -670,6 +829,9 @@ export default function CreateFiscalBill() {
             </div>
 
             <div className="fiscal-submit-row">
+              {!isSettled && !submitting && (
+                <p className="fiscal-submit-hint">{t('createFiscalBill.submitDisabledBalance')}</p>
+              )}
               <button 
                 className="primary-button primary-button--large" 
                 onClick={handleSubmit} 

@@ -89,6 +89,7 @@
 
 - **Layout:** Uses a modern side-by-side split view (via [`CreateFiscalBill.css`](frontend/src/pages/CreateFiscalBill.css)) putting items on the left and a sticky payments/summary sidebar on the right, eliminating tab context switching.
 - **Auto-Calculations:** `totalAmount` is automatically calculated from `quantity * unitPrice`. The first payment row automatically syncs to match the remaining items total unless split explicitly by the user.
+- **Validation:** Structured inline field errors with scroll-to-first-error; submit disabled until payment balance is zero; status-aware success/failure result panel.
 - **Buyer ID Inference:** Entering a 9-digit or 13-digit `buyerIdValue` automatically pre-selects the corresponding `buyerType` (PIB or JMBG).
 - Line item **Name** field is a combobox-style inline search (no separate search button or modal).
 - Requires selected organization; debounced search after 2+ characters via `GET /products/search?q=…`.

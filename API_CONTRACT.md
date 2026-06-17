@@ -789,18 +789,20 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 ```
 - `invoiceType` values: `0` = Normal, `2` = Copy, `4` = Advance.
 - `transactionType` values: `0` = Sale, `1` = Refund.
-- `referentDocumentNumber` (optional, nullable): Reference document number for Copy, Refund, chained Advance, or close-advance flows. When provided, it is used directly in the Tax Authority request instead of backend auto-resolution.
+- `referentDocumentNumber` (optional, nullable): Reference document number for Copy, Refund, chained Advance, or close-advance flows. When provided, the backend looks up the referenced fiscal bill in the same organization by Tax Authority invoice number (`efiscal_sdc_invoiceno`) and populates both `referentDocumentNumber` and `referentDocumentDT` in the Tax Authority request. Returns `400` if the referenced bill is not found or is missing datetime.
+- `orderId` (optional, nullable): When provided, the backend applies **order-linked fiscal-chain checks** scoped to `orgId`: duplicate protection for the same `orderId` + `invoiceType` + `transactionType`, advance-close chain (Normal Sale after prior Advance Sale bills), and automatic referent-field resolution when `referentDocumentNumber` is omitted. Does **not** fetch or validate MerchantPro order data; use `POST /fiscalbill/from-order` for full order-based fiscalization.
+- Payment total validation: sum of `payments[].amount` must equal sum of `items[].totalAmount` (tolerance `0.01`). Each payment amount must be positive. Returns `400` with message `Payment total does not match fiscal bill total` on mismatch.
 - `cashier` is not sent by the client; it is resolved server-side from the authenticated user's `cashier` field.
 - 201 Response:
 ```json
 {
   "fiscalbillId": 5001,
-  "status": "ISSUED",
+  "status": "SUCCESS",
   "sdcInvoiceNumber": "ABCD1234-ABCD1234-12345",
   "lastError": null
 }
 ```
-- Errors: `400`, `401`, `403`, `409` (duplicate Idempotency-Key), `500`
+- Errors: `400` (validation: payment total mismatch, missing line items, invalid referent document, missing tax labels), `401`, `403`, `409` (duplicate bill for order or Idempotency-Key conflict), `502` (Tax Authority failure; response body may include fiscal bill with `status: FAILED`), `500`
 
 ## 6. Error Model
 All non-2xx responses should follow:

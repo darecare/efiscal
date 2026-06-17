@@ -137,9 +137,9 @@ public class FiscalBillService {
             return FiscalBillCreateResult.ofAlreadyExists(toView(existingKey.get().getFiscalBill()));
         }
 
-        // Check duplicate (same order + invoiceType + transactionType)
+        // Check duplicate (same order + invoiceType + transactionType), scoped to org
         Optional<FiscalBillEntity> duplicate = fiscalBillRepository
-                .findLatestByOrderAndType(orderId, invoiceType, transactionType);
+                .findLatestByOrgAndOrderAndType(orgId, orderId, invoiceType, transactionType);
         if (duplicate.isPresent() && STATUS_SUCCESS.equals(duplicate.get().getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Fiscal bill already exists for order " + orderId +
@@ -153,7 +153,8 @@ public class FiscalBillService {
         // If creating Normal Sale and Advance Sale exists → first create Advance Refund
         if (invoiceType == INVOICE_TYPE_NORMAL && transactionType == TRANSACTION_TYPE_SALE) {
             List<FiscalBillEntity> advanceBills = fiscalBillRepository
-                    .findByOrderIdAndInvoiceTypeAndTransactionType(orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE);
+                    .findByOrgIdAndOrderIdAndInvoiceTypeAndTransactionType(
+                            orgId, orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE);
             if (!advanceBills.isEmpty()) {
                 // Create Advance Refund to close the chain
             createAdvanceRefund(orgId, clientId, orderId, advanceBills, orderData, resolvedItems);
@@ -222,26 +223,23 @@ public class FiscalBillService {
             return FiscalBillCreateResult.ofAlreadyExists(toView(existingKey.get().getFiscalBill()));
         }
 
-        // If an orderId is provided, apply the same checks as order-based fiscalization (spec 4.2.1)
+        validateManualPaymentTotals(request.items(), request.payments());
+
+        // If an orderId is provided, apply order-linked fiscal-chain checks (spec 4.2.1)
         String orderId = request.orderId();
 
-        // Check duplicate if orderId is set
         if (orderId != null && !orderId.isBlank()) {
-            Optional<FiscalBillEntity> duplicate = fiscalBillRepository
-                    .findLatestByOrderAndType(orderId, request.invoiceType(), request.transactionType());
-            if (duplicate.isPresent() && STATUS_SUCCESS.equals(duplicate.get().getStatus())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Fiscal bill already exists for order " + orderId);
-            }
+            applyManualOrderLinkedChecks(orgId, orderId, request);
 
             // 4.1.5 Advance closing chain (also applies when orderId is provided in manual creation)
             if (request.invoiceType() == INVOICE_TYPE_NORMAL && request.transactionType() == TRANSACTION_TYPE_SALE) {
                 List<FiscalBillEntity> advanceBills = fiscalBillRepository
-                        .findByOrderIdAndInvoiceTypeAndTransactionType(orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE);
+                        .findByOrgIdAndOrderIdAndInvoiceTypeAndTransactionType(
+                                orgId, orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE);
                 if (!advanceBills.isEmpty()) {
                     OrderFiscalizeRequest syntheticOrder = buildSyntheticOrderFromManual(request);
                     createAdvanceRefund(orgId, clientId, orderId, advanceBills, syntheticOrder,
-                            resolveVatLabelsForOrderItems(request.items()));
+                            resolveItemsForFiscalChain(request.items()));
                 }
             }
         }
@@ -582,7 +580,7 @@ public class FiscalBillService {
         if (buyerId != null) body.put("buyerId", buyerId);
 
         // Reference fields (4.1.4)
-        setReferentFields(body, orderId, invoiceType, transactionType);
+        setReferentFields(body, orgId, orderId, invoiceType, transactionType);
 
         // Payment (4.1.6)
         body.put("payment", buildPaymentArrayFromCode(clientId, paymentMethodCode,
@@ -626,12 +624,11 @@ public class FiscalBillService {
             body.put("buyerId", buyerType + ":" + buyerVat);
         }
 
-        // Reference fields: if user explicitly supplied a reference number, use it directly;
-        // otherwise fall back to DB auto-resolution when orderId is set (4.1.4).
+        // Reference fields: explicit override resolves DT from local DB; else auto-resolve when orderId set.
         if (referentDocumentNumber != null && !referentDocumentNumber.isBlank()) {
-            body.put("referentDocumentNumber", referentDocumentNumber);
+            applyManualReferentFields(body, orgId, referentDocumentNumber.trim());
         } else if (orderId != null && !orderId.isBlank()) {
-            setReferentFields(body, orderId, invoiceType, transactionType);
+            setReferentFields(body, orgId, orderId, invoiceType, transactionType);
         }
 
         // Payment from manually entered payment rows (4.2.3)
@@ -804,24 +801,24 @@ public class FiscalBillService {
     /**
      * Set referentDocumentNumber and referentDocumentDT fields (4.1.4).
      */
-    private void setReferentFields(Map<String, Object> body, String orderId,
+    private void setReferentFields(Map<String, Object> body, Long orgId, String orderId,
             int invoiceType, int transactionType) {
         FiscalBillEntity ref = null;
 
         if (invoiceType == INVOICE_TYPE_NORMAL && transactionType == TRANSACTION_TYPE_SALE) {
             // Normal Sale references to last issued Advance Refund (closes advance chain)
             ref = fiscalBillRepository
-                    .findLatestByOrderAndType(orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_REFUND)
+                    .findLatestByOrgAndOrderAndType(orgId, orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_REFUND)
                     .orElse(null);
         } else if (invoiceType == INVOICE_TYPE_NORMAL && transactionType == TRANSACTION_TYPE_REFUND) {
             // Normal Refund references to Normal Sale
             ref = fiscalBillRepository
-                    .findLatestByOrderAndType(orderId, INVOICE_TYPE_NORMAL, TRANSACTION_TYPE_SALE)
+                    .findLatestByOrgAndOrderAndType(orgId, orderId, INVOICE_TYPE_NORMAL, TRANSACTION_TYPE_SALE)
                     .orElse(null);
         } else if (invoiceType == INVOICE_TYPE_ADVANCE && transactionType == TRANSACTION_TYPE_SALE) {
             // Advance Sale can reference to last Advance Sale (for chained advances)
             ref = fiscalBillRepository
-                    .findLatestByOrderAndType(orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE)
+                    .findLatestByOrgAndOrderAndType(orgId, orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE)
                     .orElse(null);
         }
 
@@ -831,6 +828,101 @@ public class FiscalBillService {
                 body.put("referentDocumentDT", ref.getEfiscalSdcdatetime());
             }
         }
+    }
+
+    /**
+     * Apply user-supplied referent document number and resolve datetime from local fiscal bill (4.2.1 / 4.1.4).
+     */
+    private void applyManualReferentFields(Map<String, Object> body, Long orgId, String referentDocumentNumber) {
+        FiscalBillEntity ref = fiscalBillRepository
+                .findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(orgId, referentDocumentNumber)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Referenced fiscal bill not found for number: " + referentDocumentNumber));
+        if (ref.getEfiscalSdcdatetime() == null || ref.getEfiscalSdcdatetime().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Referenced fiscal bill is missing Tax Authority datetime for number: " + referentDocumentNumber);
+        }
+        body.put("referentDocumentNumber", referentDocumentNumber);
+        body.put("referentDocumentDT", ref.getEfiscalSdcdatetime());
+    }
+
+    /**
+     * Order-linked prechecks for manual creation when orderId is provided (spec 4.2.1).
+     * Enforces duplicate protection scoped to organization; does not fetch MerchantPro order data.
+     */
+    private void applyManualOrderLinkedChecks(Long orgId, String orderId, ManualFiscalBillRequest request) {
+        Optional<FiscalBillEntity> duplicate = fiscalBillRepository
+                .findLatestByOrgAndOrderAndType(orgId, orderId, request.invoiceType(), request.transactionType());
+        if (duplicate.isPresent() && STATUS_SUCCESS.equals(duplicate.get().getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Fiscal bill already exists for order " + orderId +
+                    " with invoiceType=" + request.invoiceType() +
+                    " transactionType=" + request.transactionType());
+        }
+    }
+
+    private static final BigDecimal PAYMENT_TOTAL_TOLERANCE = new BigDecimal("0.01");
+
+    /**
+     * Validate manual payment rows against line item totals (spec 4.2.3).
+     */
+    private void validateManualPaymentTotals(List<FiscalBillItemRequest> items, List<PaymentRequest> payments) {
+        if (items == null || items.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No line items provided");
+        }
+        if (payments == null || payments.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one payment is required");
+        }
+
+        BigDecimal itemsTotal = BigDecimal.ZERO;
+        for (FiscalBillItemRequest item : items) {
+            if (item.totalAmount() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Each line item must have a total amount");
+            }
+            itemsTotal = itemsTotal.add(item.totalAmount());
+        }
+
+        BigDecimal paymentsTotal = BigDecimal.ZERO;
+        for (PaymentRequest payment : payments) {
+            if (payment.amount() == null || payment.amount().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Each payment must have a positive amount");
+            }
+            paymentsTotal = paymentsTotal.add(payment.amount());
+        }
+
+        if (itemsTotal.subtract(paymentsTotal).abs().compareTo(PAYMENT_TOTAL_TOLERANCE) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Payment total does not match fiscal bill total");
+        }
+    }
+
+    /**
+     * Resolve line items for advance-close and similar fiscal-chain flows.
+     * Manual items use taxLabel/labels; order-normalized items use taxValue + taxCategoryName.
+     */
+    private List<FiscalBillItemRequest> resolveItemsForFiscalChain(List<FiscalBillItemRequest> items) {
+        if (items == null || items.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No line items provided");
+        }
+
+        boolean allManualLabels = items.stream().allMatch(item ->
+                (item.labels() != null && !item.labels().isEmpty())
+                        || (item.taxLabel() != null && !item.taxLabel().isBlank()));
+        if (allManualLabels) {
+            return items;
+        }
+
+        boolean allOrderFields = items.stream().allMatch(item ->
+                item.taxValue() != null
+                        && item.taxCategoryName() != null && !item.taxCategoryName().isBlank());
+        if (allOrderFields) {
+            return resolveVatLabelsForOrderItems(items);
+        }
+
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Line items must have tax labels or order tax fields (product_tax_name and product_tax_percent)");
     }
 
     /**
