@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
 import { fiscalBillApi, orgsApi, productsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import './CreateFiscalBill.css'
 
 const INVOICE_TYPE_VALUES = [0, 2, 4]
 const TRANSACTION_TYPE_VALUES = [0, 1]
@@ -16,7 +17,7 @@ function emptyItem() {
     name: '',
     quantity: '',
     unitPrice: '',
-    totalAmount: '',
+    totalAmount: '0.00',
     taxLabel: 'A',
     taxPrefix: '20',
     gtin: '',
@@ -32,8 +33,8 @@ function emptyItem() {
   }
 }
 
-function emptyPayment() {
-  return { id: crypto.randomUUID(), paymentType: 1, amount: '' }
+function emptyPayment(amount = '') {
+  return { id: crypto.randomUUID(), paymentType: 1, amount }
 }
 
 export default function CreateFiscalBill() {
@@ -52,6 +53,7 @@ export default function CreateFiscalBill() {
   const [customerName, setCustomerName] = useState('')
   const [buyerType, setBuyerType] = useState('')
   const [buyerIdValue, setBuyerIdValue] = useState('')
+  const [buyerIdAutoMsg, setBuyerIdAutoMsg] = useState(false)
   const [referentDocumentNumber, setReferentDocumentNumber] = useState('')
   const [closeAdvance, setCloseAdvance] = useState(false)
 
@@ -60,8 +62,8 @@ export default function CreateFiscalBill() {
 
   // Payments
   const [payments, setPayments] = useState([emptyPayment()])
+  const [userModifiedPayment, setUserModifiedPayment] = useState(false)
 
-  const [activeTab, setActiveTab] = useState('items')
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
@@ -88,12 +90,61 @@ export default function CreateFiscalBill() {
   const selectedOrg = orgs.find(org => String(org.orgId) === String(selectedOrgId))
   const selectedClientId = selectedOrg?.clientId != null ? String(selectedOrg.clientId) : ''
 
+  function itemsTotal() {
+    return items.reduce((sum, i) => sum + (parseFloat(i.totalAmount) || 0), 0).toFixed(2)
+  }
+
+  function paymentsTotal() {
+    return payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0).toFixed(2)
+  }
+
+  const currentItemsTotal = itemsTotal()
+
+  // Auto-sync the payment amount if user hasn't explicitly set up multiple payments
+  useEffect(() => {
+    if (payments.length === 1 && !userModifiedPayment) {
+      if (payments[0].amount !== currentItemsTotal) {
+        setPayments(prev => [{ ...prev[0], amount: currentItemsTotal }])
+      }
+    }
+  }, [currentItemsTotal, payments.length, userModifiedPayment])
+
+  function calcTotalAmount(quantity, unitPrice, oldTotal) {
+    const q = parseFloat(quantity) || 0
+    const p = parseFloat(unitPrice) || 0
+    if (q >= 0 && p >= 0) {
+      return (q * p).toFixed(2)
+    }
+    return oldTotal
+  }
+
   function setItemField(id, field, value) {
-    setItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item))
+    setItems(prev => prev.map(item => {
+      if (item.id === id) {
+        const next = { ...item, [field]: value }
+        if (field === 'quantity' || field === 'unitPrice') {
+          next.totalAmount = calcTotalAmount(next.quantity, next.unitPrice, next.totalAmount)
+        } else if (field === 'totalAmount') {
+          // If user manually overrides total, we update it
+          next.totalAmount = value
+        }
+        return next
+      }
+      return item
+    }))
   }
 
   function patchItem(id, patch) {
-    setItems(prev => prev.map(item => (item.id === id ? { ...item, ...patch } : item)))
+    setItems(prev => prev.map(item => {
+      if (item.id === id) {
+        const next = { ...item, ...patch }
+        if ('quantity' in patch || 'unitPrice' in patch) {
+          next.totalAmount = calcTotalAmount(next.quantity, next.unitPrice, next.totalAmount)
+        }
+        return next
+      }
+      return item
+    }))
   }
 
   function addItem() {
@@ -105,23 +156,39 @@ export default function CreateFiscalBill() {
   }
 
   function setPaymentField(id, field, value) {
+    if (field === 'amount') setUserModifiedPayment(true)
     setPayments(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p))
   }
 
   function addPayment() {
-    setPayments(prev => [...prev, emptyPayment()])
+    setUserModifiedPayment(true)
+    const remaining = Math.max(0, parseFloat(currentItemsTotal) - parseFloat(paymentsTotal()))
+    setPayments(prev => [...prev, emptyPayment(remaining.toFixed(2))])
   }
 
   function removePayment(id) {
+    setUserModifiedPayment(true)
     setPayments(prev => prev.filter(p => p.id !== id))
   }
 
-  function itemsTotal() {
-    return items.reduce((sum, i) => sum + (parseFloat(i.totalAmount) || 0), 0).toFixed(2)
+  function handleBuyerIdChange(e) {
+    const val = e.target.value
+    setBuyerIdValue(val)
+    
+    // Auto-infer buyer type based on common lengths (PIB=9, JMBG=13)
+    const numeric = val.replace(/\D/g, '')
+    if (numeric.length === 13 && (!buyerType || buyerType === '10' || buyerType === '11')) {
+      setBuyerType('11')
+      triggerBuyerIdMsg()
+    } else if (numeric.length === 9 && (!buyerType || buyerType === '10' || buyerType === '11')) {
+      setBuyerType('10')
+      triggerBuyerIdMsg()
+    }
   }
 
-  function paymentsTotal() {
-    return payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0).toFixed(2)
+  function triggerBuyerIdMsg() {
+    setBuyerIdAutoMsg(true)
+    setTimeout(() => setBuyerIdAutoMsg(false), 3000)
   }
 
   function handleNameChange(itemId, value) {
@@ -187,6 +254,7 @@ export default function CreateFiscalBill() {
       showSuggestions: false,
       suggestLoading: false,
       suggestError: null,
+      quantity: '1', // Default quantity when selecting product
     })
 
     try {
@@ -235,6 +303,29 @@ export default function CreateFiscalBill() {
       return
     }
 
+    if (items.length === 0) {
+      setError(t('createFiscalBill.invalidEmptyItems'))
+      return
+    }
+
+    const invalidItem = items.find(i => {
+      const q = parseFloat(i.quantity)
+      const p = parseFloat(i.unitPrice)
+      return isNaN(q) || isNaN(p) || q <= 0 || p < 0 || !i.name.trim()
+    })
+    
+    if (invalidItem) {
+      setError(t('createFiscalBill.invalidQuantities'))
+      return
+    }
+
+    const tItems = parseFloat(itemsTotal())
+    const tPayments = parseFloat(paymentsTotal())
+    if (Math.abs(tItems - tPayments) > 0.01) {
+       setError(t('createFiscalBill.paymentTotalMismatch', { total: tItems.toFixed(2) }))
+       return
+    }
+
     const payloadItems = items.map(i => ({
       name: i.name,
       quantity: parseFloat(i.quantity),
@@ -281,120 +372,127 @@ export default function CreateFiscalBill() {
     }
   }
 
-  const tabs = ['items', 'payments']
+  const balDue = (parseFloat(currentItemsTotal) - parseFloat(paymentsTotal())).toFixed(2)
+  const isSettled = Math.abs(parseFloat(balDue)) < 0.01
 
   return (
     <AppShell title={t('createFiscalBill.title')} subtitle={t('createFiscalBill.subtitle')}>
-      <div className="card fiscal-bill-workspace">
-        <section className="fiscal-header-area">
-          <h3 className="fiscal-area-title">{t('createFiscalBill.header')}</h3>
-          <div className="fiscal-header-grid">
-            <div className="fiscal-field">
-              <label className="fiscal-field-label">{t('common.organization')}</label>
-              <select
-                className="fiscal-input fiscal-input--select"
-                value={selectedOrgId}
-                onChange={e => setSelectedOrgId(e.target.value)}
-              >
-                <option value="">{t('createFiscalBill.selectOrg')}</option>
-                {orgs.map(org => (
-                  <option key={org.orgId} value={org.orgId}>{org.name}</option>
-                ))}
-              </select>
-            </div>
+      
+      {error && (
+        <div className="card" style={{ marginBottom: '1rem', borderLeft: '4px solid #ef4444', background: '#fef2f2' }}>
+          <strong>{t('createFiscalBill.errorLabel')}:</strong> {error}
+        </div>
+      )}
 
-            <div className="fiscal-field">
-              <label className="fiscal-field-label">{t('createFiscalBill.invoiceType')}</label>
-              <select className="fiscal-input fiscal-input--select" value={invoiceType} onChange={e => setInvoiceType(e.target.value)}>
-                {INVOICE_TYPE_VALUES.map(v => <option key={v} value={v}>{t(`createFiscalBill.invoiceTypes.${v}`)}</option>)}
-              </select>
-            </div>
+      {result && (
+        <div className="card" style={{ marginBottom: '1rem', borderLeft: '4px solid #22c55e', background: '#f0fdf4' }}>
+          <p><strong>{t('createFiscalBill.statusLabel')}:</strong> {result.status}</p>
+          {result.sdcInvoiceNumber && <p><strong>{t('createFiscalBill.invoiceNumberLabel')}:</strong> {result.sdcInvoiceNumber}</p>}
+          {result.fiscalbillId && <p><strong>{t('createFiscalBill.fiscalBillIdLabel')}:</strong> {result.fiscalbillId}</p>}
+          {result.lastError && <p style={{ color: '#ef4444' }}><strong>{t('createFiscalBill.errorLabel')}:</strong> {result.lastError}</p>}
+        </div>
+      )}
 
-            <div className="fiscal-field">
-              <label className="fiscal-field-label">{t('createFiscalBill.transactionType')}</label>
-              <select className="fiscal-input fiscal-input--select" value={transactionType} onChange={e => setTransactionType(e.target.value)}>
-                {TRANSACTION_TYPE_VALUES.map(v => <option key={v} value={v}>{t(`createFiscalBill.transactionTypes.${v}`)}</option>)}
-              </select>
-            </div>
-
-            <div className="fiscal-field">
-              <label className="fiscal-field-label">{t('createFiscalBill.orderIdOptional')}</label>
-              <input className="fiscal-input fiscal-input--text" value={orderId} onChange={e => setOrderId(e.target.value)} placeholder={t('createFiscalBill.orderIdPlaceholder')} />
-            </div>
-
-            <div className="fiscal-field">
-              <label className="fiscal-field-label">{t('createFiscalBill.customerNameOptional')}</label>
-              <input className="fiscal-input fiscal-input--text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('createFiscalBill.customerNamePlaceholder')} />
-            </div>
-
-            <div className="fiscal-field">
-              <label className="fiscal-field-label">{t('createFiscalBill.buyerIdTypeOptional')}</label>
-              <select className="fiscal-input fiscal-input--select" value={buyerType} onChange={e => setBuyerType(e.target.value)}>
-                <option value="">{t('createFiscalBill.selectBuyerIdType')}</option>
-                {BUYER_ID_TYPE_VALUES.map(v => <option key={v} value={v}>{t(`createFiscalBill.buyerIdTypes.${v}`)}</option>)}
-              </select>
-            </div>
-
-            <div className="fiscal-field">
-              <label className="fiscal-field-label">{t('createFiscalBill.buyerIdValueOptional')}</label>
-              <input className="fiscal-input fiscal-input--text" value={buyerIdValue} onChange={e => setBuyerIdValue(e.target.value)} placeholder={t('createFiscalBill.buyerIdValuePlaceholder')} />
-            </div>
-
-            {showCloseAdvanceCheckbox && (
-              <div className="fiscal-field fiscal-field--checkbox">
-                <label className="fiscal-field-label fiscal-field-label--inline">
-                  <input
-                    type="checkbox"
-                    checked={closeAdvance}
-                    onChange={e => {
-                      setCloseAdvance(e.target.checked)
-                      if (!e.target.checked) setReferentDocumentNumber('')
-                    }}
-                  />
-                  {' '}{t('createFiscalBill.closeAdvance')}
-                </label>
-              </div>
-            )}
-
-            {showReferenceField && (
+      <div className="fiscal-layout-split">
+        <div className="fiscal-main-column">
+          {/* HEADER SECTION */}
+          <section className="fiscal-section-card">
+            <h3 className="fiscal-section-title">{t('createFiscalBill.header')}</h3>
+            <div className="fiscal-header-grid">
               <div className="fiscal-field">
-                <label className="fiscal-field-label">{t('createFiscalBill.referentDocumentNumber')}</label>
-                <input
-                  className="fiscal-input fiscal-input--text"
-                  value={referentDocumentNumber}
-                  onChange={e => setReferentDocumentNumber(e.target.value)}
-                  placeholder={t('createFiscalBill.referentDocumentNumberPlaceholder')}
-                />
+                <label className="fiscal-field-label">{t('common.organization')}</label>
+                <select
+                  className="fiscal-input fiscal-input--select"
+                  value={selectedOrgId}
+                  onChange={e => setSelectedOrgId(e.target.value)}
+                >
+                  <option value="">{t('createFiscalBill.selectOrg')}</option>
+                  {orgs.map(org => (
+                    <option key={org.orgId} value={org.orgId}>{org.name}</option>
+                  ))}
+                </select>
+                {selectedOrgId && !selectedOrg?.clientId && (
+                  <span className="error-text fiscal-error">{t('createFiscalBill.noClientMapping')}</span>
+                )}
               </div>
+
+              <div className="fiscal-field">
+                <label className="fiscal-field-label">{t('createFiscalBill.invoiceType')}</label>
+                <select className="fiscal-input fiscal-input--select" value={invoiceType} onChange={e => setInvoiceType(e.target.value)}>
+                  {INVOICE_TYPE_VALUES.map(v => <option key={v} value={v}>{t(`createFiscalBill.invoiceTypes.${v}`)}</option>)}
+                </select>
+              </div>
+
+              <div className="fiscal-field">
+                <label className="fiscal-field-label">{t('createFiscalBill.transactionType')}</label>
+                <select className="fiscal-input fiscal-input--select" value={transactionType} onChange={e => setTransactionType(e.target.value)}>
+                  {TRANSACTION_TYPE_VALUES.map(v => <option key={v} value={v}>{t(`createFiscalBill.transactionTypes.${v}`)}</option>)}
+                </select>
+              </div>
+
+              <div className="fiscal-field">
+                <label className="fiscal-field-label">{t('createFiscalBill.orderIdOptional')}</label>
+                <input className="fiscal-input fiscal-input--text" value={orderId} onChange={e => setOrderId(e.target.value)} placeholder={t('createFiscalBill.orderIdPlaceholder')} />
+              </div>
+
+              <div className="fiscal-field">
+                <label className="fiscal-field-label">{t('createFiscalBill.customerNameOptional')}</label>
+                <input className="fiscal-input fiscal-input--text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('createFiscalBill.customerNamePlaceholder')} />
+              </div>
+
+              <div className="fiscal-field">
+                <label className="fiscal-field-label">{t('createFiscalBill.buyerIdValueOptional')}</label>
+                <input className="fiscal-input fiscal-input--text" value={buyerIdValue} onChange={handleBuyerIdChange} placeholder={t('createFiscalBill.buyerIdValuePlaceholder')} />
+              </div>
+
+              <div className="fiscal-field">
+                <label className="fiscal-field-label">{t('createFiscalBill.buyerIdTypeOptional')}</label>
+                <select className="fiscal-input fiscal-input--select" value={buyerType} onChange={e => setBuyerType(e.target.value)}>
+                  <option value="">{t('createFiscalBill.selectBuyerIdType')}</option>
+                  {BUYER_ID_TYPE_VALUES.map(v => <option key={v} value={v}>{t(`createFiscalBill.buyerIdTypes.${v}`)}</option>)}
+                </select>
+                {buyerIdAutoMsg && <span className="buyer-id-auto-msg">{t('createFiscalBill.buyerIdAutoSelected')}</span>}
+              </div>
+
+              {showCloseAdvanceCheckbox && (
+                <div className="fiscal-field fiscal-field--checkbox">
+                  <label className="fiscal-field-label fiscal-field-label--inline">
+                    <input
+                      type="checkbox"
+                      checked={closeAdvance}
+                      onChange={e => {
+                        setCloseAdvance(e.target.checked)
+                        if (!e.target.checked) setReferentDocumentNumber('')
+                      }}
+                    />
+                    {' '}{t('createFiscalBill.closeAdvance')}
+                  </label>
+                </div>
+              )}
+
+              {showReferenceField && (
+                <div className="fiscal-field">
+                  <label className="fiscal-field-label">{t('createFiscalBill.referentDocumentNumber')}</label>
+                  <input
+                    className="fiscal-input fiscal-input--text"
+                    value={referentDocumentNumber}
+                    onChange={e => setReferentDocumentNumber(e.target.value)}
+                    placeholder={t('createFiscalBill.referentDocumentNumberPlaceholder')}
+                  />
+                </div>
+              )}
+            </div>
+            {selectedOrgId && selectedOrg && (
+              <p className="muted fiscal-client-hint" style={{ marginTop: '1rem' }}>{t('createFiscalBill.clientHint', { name: selectedOrg.clientName || selectedOrg.clientId })}</p>
             )}
-          </div>
+          </section>
 
-          {selectedOrgId && selectedOrg && (
-            <p className="muted fiscal-client-hint">{t('createFiscalBill.clientHint', { name: selectedOrg.clientName || selectedOrg.clientId })}</p>
-          )}
-          {selectedOrgId && !selectedOrg?.clientId && (
-            <p className="error-text fiscal-error">{t('createFiscalBill.noClientMapping')}</p>
-          )}
-        </section>
-
-        <section className="fiscal-detail-area">
-          <div className="fiscal-tabs" role="tablist" aria-label={t('createFiscalBill.title')}>
-            {tabs.map(tab => (
-              <button
-                key={tab}
-                type="button"
-                className={`fiscal-tab ${activeTab === tab ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                {tab === 'items' ? t('createFiscalBill.itemsTab', { count: items.length }) : t('createFiscalBill.paymentsTab', { count: payments.length })}
-              </button>
-            ))}
-          </div>
-
-          {activeTab === 'items' && (
+          {/* ITEMS SECTION */}
+          <section className="fiscal-section-card">
+            <h3 className="fiscal-section-title">{t('createFiscalBill.itemsSection')}</h3>
             <div className="fiscal-row-list">
               {items.map((item, idx) => (
-                <div key={item.id} className="fiscal-row-card">
+                <div key={item.id} className="fiscal-row-card fiscal-row-card--enhanced">
                   <div className="fiscal-row-card-head">
                     <h4>{t('createFiscalBill.itemNumber', { n: idx + 1 })}</h4>
                     <button
@@ -407,8 +505,8 @@ export default function CreateFiscalBill() {
                     </button>
                   </div>
                   <div className="fiscal-item-grid">
-                    <div className="fiscal-field fiscal-field--with-search">
-                      <label className="fiscal-field-label">{t('common.name')}</label>
+                    <div className="fiscal-field fiscal-field--with-search" style={{ gridColumn: '1 / -1' }}>
+                      <label className="fiscal-field-label">{t('createFiscalBill.productName')}</label>
                       <div className="product-name-combobox">
                         <input
                           className="fiscal-input fiscal-input--text"
@@ -425,8 +523,6 @@ export default function CreateFiscalBill() {
                           placeholder={t('createFiscalBill.searchPlaceholder')}
                           disabled={!selectedOrgId}
                           autoComplete="off"
-                          aria-autocomplete="list"
-                          aria-expanded={item.showSuggestions && item.suggestions.length > 0}
                         />
                         {item.showSuggestions && selectedOrgId && item.name.trim().length >= 2 && (
                           <ul className="product-suggest-list" role="listbox">
@@ -452,7 +548,6 @@ export default function CreateFiscalBill() {
                                     {p.sku ? `${t('products.columns.sku')}: ${p.sku}` : ''}
                                     {p.sku && p.ean ? ' · ' : ''}
                                     {p.ean ? `${t('products.columns.ean')}: ${p.ean}` : ''}
-                                    {!p.sku && !p.ean ? t('common.dash') : ''}
                                   </span>
                                 </button>
                               </li>
@@ -462,31 +557,29 @@ export default function CreateFiscalBill() {
                         {!selectedOrgId && (
                           <span className="muted fiscal-price-hint">{t('createFiscalBill.selectOrgRequired')}</span>
                         )}
-                        {selectedOrgId && item.name.trim().length > 0 && item.name.trim().length < 2 && (
-                          <span className="muted fiscal-price-hint">{t('createFiscalBill.searchMinChars')}</span>
-                        )}
                       </div>
                       {item.priceVerifying && (
                         <span className="muted fiscal-price-hint">{t('createFiscalBill.priceVerifying')}</span>
                       )}
                       {!item.priceVerifying && item.priceStatus === 'verified' && (
-                        <span className="fiscal-price-hint">{t('createFiscalBill.priceVerified')}</span>
+                        <span className="fiscal-price-hint" style={{ color: '#10b981' }}>{t('createFiscalBill.priceVerified')}</span>
                       )}
                       {!item.priceVerifying && item.priceStatus === 'unverified' && (
                         <span className="fiscal-price-hint fiscal-price-hint--warn">{t('createFiscalBill.priceUnverified')}</span>
                       )}
                     </div>
+                    
                     <div className="fiscal-field">
                       <label className="fiscal-field-label">{t('createFiscalBill.quantity')}</label>
-                      <input className="fiscal-input fiscal-input--number" type="number" value={item.quantity} onChange={e => setItemField(item.id, 'quantity', e.target.value)} placeholder="1" />
+                      <input className="fiscal-input fiscal-input--number" type="number" value={item.quantity} onChange={e => setItemField(item.id, 'quantity', e.target.value)} placeholder="1" min="0.01" step="any" />
                     </div>
                     <div className="fiscal-field">
                       <label className="fiscal-field-label">{t('createFiscalBill.unitPrice')}</label>
-                      <input className="fiscal-input fiscal-input--number" type="number" value={item.unitPrice} onChange={e => setItemField(item.id, 'unitPrice', e.target.value)} placeholder="0.00" />
+                      <input className="fiscal-input fiscal-input--number" type="number" value={item.unitPrice} onChange={e => setItemField(item.id, 'unitPrice', e.target.value)} placeholder="0.00" min="0" step="0.01" />
                     </div>
                     <div className="fiscal-field">
                       <label className="fiscal-field-label">{t('createFiscalBill.total')}</label>
-                      <input className="fiscal-input fiscal-input--number" type="number" value={item.totalAmount} onChange={e => setItemField(item.id, 'totalAmount', e.target.value)} placeholder="0.00" />
+                      <input className="fiscal-input fiscal-input--number fiscal-input--readonly" type="number" value={item.totalAmount} onChange={e => setItemField(item.id, 'totalAmount', e.target.value)} placeholder="0.00" />
                     </div>
                     <div className="fiscal-field">
                       <label className="fiscal-field-label">{t('createFiscalBill.taxLabel')}</label>
@@ -506,78 +599,88 @@ export default function CreateFiscalBill() {
                 </div>
               ))}
 
-              <div className="fiscal-tab-actions">
+              <div className="fiscal-tab-actions" style={{ marginTop: '1rem' }}>
                 <button type="button" className="secondary-button" onClick={addItem}>{t('createFiscalBill.addItem')}</button>
-                <span className="fiscal-total">{t('createFiscalBill.itemsTotal', { total: itemsTotal() })}</span>
               </div>
             </div>
-          )}
+          </section>
+        </div>
 
-          {activeTab === 'payments' && (
+        <div className="fiscal-sidebar">
+          {/* SUMMARY AND PAYMENTS SECTION */}
+          <section className="fiscal-section-card">
+            <h3 className="fiscal-section-title">{t('createFiscalBill.paymentsSection')}</h3>
+            
+            <div className="fiscal-summary-box" style={{ marginBottom: '1.5rem' }}>
+              <div className="fiscal-summary-row fiscal-summary-row--total">
+                <span>{t('createFiscalBill.itemsTotal', { total: '' })}</span>
+                <span>{currentItemsTotal}</span>
+              </div>
+              <div className="fiscal-summary-row">
+                <span>{t('createFiscalBill.paymentsTotal', { total: '' })}</span>
+                <span>{paymentsTotal()}</span>
+              </div>
+              <div className={`fiscal-summary-row fiscal-summary-row--balance ${isSettled ? 'settled' : ''}`}>
+                <span>{t('createFiscalBill.balanceDue', { amount: '' })}</span>
+                <span>{balDue}</span>
+              </div>
+            </div>
+
             <div className="fiscal-row-list">
               {payments.map((payment, idx) => (
-                <div key={payment.id} className="fiscal-row-card">
-                  <div className="fiscal-row-card-head">
-                    <h4>{t('createFiscalBill.paymentNumber', { n: idx + 1 })}</h4>
+                <div key={payment.id} className="fiscal-row-card fiscal-row-card--enhanced" style={{ padding: '0.75rem', marginBottom: '0.75rem' }}>
+                  <div className="fiscal-row-card-head" style={{ marginBottom: '0.5rem', paddingBottom: '0.5rem' }}>
+                    <h4 style={{ fontSize: '1rem' }}>{t('createFiscalBill.paymentNumber', { n: idx + 1 })}</h4>
                     <button
                       type="button"
-                      className="secondary-button"
+                      className="secondary-button match-total-btn"
                       onClick={() => removePayment(payment.id)}
                       disabled={payments.length === 1}
                     >
                       {t('common.remove')}
                     </button>
                   </div>
-                  <div className="fiscal-payment-grid">
+                  <div className="fiscal-payment-grid" style={{ gridTemplateColumns: '1fr' }}>
                     <div className="fiscal-field">
-                      <label className="fiscal-field-label">{t('createFiscalBill.paymentType')}</label>
                       <select className="fiscal-input fiscal-input--select" value={payment.paymentType} onChange={e => setPaymentField(payment.id, 'paymentType', e.target.value)}>
                         {PAYMENT_TYPE_VALUES.filter(v => allowedPaymentTypes.includes(v)).map(v => <option key={v} value={v}>{t(`createFiscalBill.paymentTypes.${v}`)}</option>)}
                       </select>
                     </div>
-                    <div className="fiscal-field">
-                      <label className="fiscal-field-label">{t('fiscalBills.amount')}</label>
+                    <div className="fiscal-field" style={{ display: 'flex', gap: '0.5rem' }}>
                       <input className="fiscal-input fiscal-input--number" type="number" value={payment.amount} onChange={e => setPaymentField(payment.id, 'amount', e.target.value)} placeholder="0.00" />
+                      <button 
+                        type="button" 
+                        className="secondary-button" 
+                        title={t('createFiscalBill.matchTotal')}
+                        onClick={() => {
+                          const rem = Math.max(0, parseFloat(currentItemsTotal) - (parseFloat(paymentsTotal()) - parseFloat(payment.amount || 0)));
+                          setPaymentField(payment.id, 'amount', rem.toFixed(2));
+                        }}
+                      >
+                        =
+                      </button>
                     </div>
                   </div>
                 </div>
               ))}
 
-              <div className="fiscal-tab-actions">
-                <button type="button" className="secondary-button" onClick={addPayment}>{t('createFiscalBill.addPayment')}</button>
-                <span className="fiscal-total">
-                  {t('createFiscalBill.paymentsTotal', { total: paymentsTotal() })}
-                  {paymentsTotal() !== itemsTotal() && (
-                    <span className="fiscal-total-warning">{t('createFiscalBill.paymentTotalMismatch', { total: itemsTotal() })}</span>
-                  )}
-                </span>
+              <div className="fiscal-tab-actions" style={{ marginTop: '1rem' }}>
+                <button type="button" className="secondary-button" onClick={addPayment} style={{ width: '100%' }}>{t('createFiscalBill.addPayment')}</button>
               </div>
             </div>
-          )}
-        </section>
-      </div>
 
-      <div className="fiscal-submit-row">
-        <button className="primary-button" onClick={handleSubmit} disabled={submitting}>
-          {submitting ? t('createFiscalBill.submitting') : t('createFiscalBill.createFiscalBill')}
-        </button>
-      </div>
-
-      {error && (
-        <div className="card" style={{ marginTop: '1rem', borderLeft: '4px solid red', background: '#fff5f5' }}>
-          <strong>{t('createFiscalBill.errorLabel')}:</strong> {error}
+            <div className="fiscal-submit-row">
+              <button 
+                className="primary-button primary-button--large" 
+                onClick={handleSubmit} 
+                disabled={submitting || !isSettled || items.length === 0}
+              >
+                {submitting ? t('createFiscalBill.submitting') : t('createFiscalBill.createFiscalBill')}
+              </button>
+            </div>
+          </section>
         </div>
-      )}
-
-      {result && (
-        <div className="card" style={{ marginTop: '1rem', borderLeft: '4px solid green', background: '#f0fff4' }}>
-          <p><strong>{t('createFiscalBill.statusLabel')}:</strong> {result.status}</p>
-          {result.sdcInvoiceNumber && <p><strong>{t('createFiscalBill.invoiceNumberLabel')}:</strong> {result.sdcInvoiceNumber}</p>}
-          {result.fiscalbillId && <p><strong>{t('createFiscalBill.fiscalBillIdLabel')}:</strong> {result.fiscalbillId}</p>}
-          {result.lastError && <p style={{ color: 'red' }}><strong>{t('createFiscalBill.errorLabel')}:</strong> {result.lastError}</p>}
-        </div>
-      )}
-
+      </div>
     </AppShell>
   )
 }

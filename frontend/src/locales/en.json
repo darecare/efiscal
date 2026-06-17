@@ -635,6 +635,13 @@
     "statusLabel": "Status",
     "invoiceNumberLabel": "Invoice Number",
     "fiscalBillIdLabel": "Fiscal Bill ID",
+    "matchTotal": "Match Total",
+    "balanceDue": "Balance Due: {{amount}}",
+    "invalidQuantities": "Please ensure all items have a valid quantity and unit price.",
+    "invalidEmptyItems": "Please add at least one item.",
+    "buyerIdAutoSelected": "Buyer ID Type auto-selected.",
+    "itemsSection": "Items",
+    "paymentsSection": "Payments & Summary",
     "invoiceTypes": {
       "0": "0 – Normal",
       "2": "2 – Copy",

@@ -644,6 +644,13 @@
     "statusLabel": "Status",
     "invoiceNumberLabel": "Broj računa",
     "fiscalBillIdLabel": "ID fiskalnog računa",
+    "matchTotal": "Uskladi iznos",
+    "balanceDue": "Za uplatu: {{amount}}",
+    "invalidQuantities": "Proverite da li sve stavke imaju ispravnu količinu i jediničnu cenu.",
+    "invalidEmptyItems": "Dodajte bar jednu stavku.",
+    "buyerIdAutoSelected": "Tip ID kupca je automatski izabran.",
+    "itemsSection": "Stavke",
+    "paymentsSection": "Plaćanja i pregled",
     "invoiceTypes": {
       "0": "0 – Normalan",
       "2": "2 – Kopija",
