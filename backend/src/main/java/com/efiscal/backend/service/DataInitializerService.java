@@ -1,6 +1,8 @@
 package com.efiscal.backend.service;
 
 import com.efiscal.backend.model.ActionCatalogEntity;
+import com.efiscal.backend.model.ApiConnEntity;
+import com.efiscal.backend.model.ApiTemplateEntity;
 import com.efiscal.backend.model.AppUserEntity;
 import com.efiscal.backend.model.ClientEntity;
 import com.efiscal.backend.model.OrgEntity;
@@ -10,6 +12,8 @@ import com.efiscal.backend.model.RoleEntity;
 import com.efiscal.backend.model.UserOrgAccessEntity;
 import com.efiscal.backend.model.UserOrgAccessId;
 import com.efiscal.backend.repository.ActionCatalogRepository;
+import com.efiscal.backend.repository.ApiConnRepository;
+import com.efiscal.backend.repository.ApiTemplateRepository;
 import com.efiscal.backend.repository.AppUserRepository;
 import com.efiscal.backend.repository.ClientRepository;
 import com.efiscal.backend.repository.OrgRepository;
@@ -43,6 +47,8 @@ public class DataInitializerService implements CommandLineRunner {
     private final RoleActionAccessRepository roleActionAccessRepository;
     private final OrgRepository orgRepository;
     private final UserOrgAccessRepository userOrgAccessRepository;
+    private final ApiConnRepository apiConnRepository;
+    private final ApiTemplateRepository apiTemplateRepository;
     private final BCryptPasswordEncoder passwordEncoder;
 
     public DataInitializerService(
@@ -52,7 +58,9 @@ public class DataInitializerService implements CommandLineRunner {
         ActionCatalogRepository actionCatalogRepository,
         RoleActionAccessRepository roleActionAccessRepository,
         OrgRepository orgRepository,
-        UserOrgAccessRepository userOrgAccessRepository
+        UserOrgAccessRepository userOrgAccessRepository,
+        ApiConnRepository apiConnRepository,
+        ApiTemplateRepository apiTemplateRepository
     ) {
         this.roleRepository = roleRepository;
         this.clientRepository = clientRepository;
@@ -61,6 +69,8 @@ public class DataInitializerService implements CommandLineRunner {
         this.roleActionAccessRepository = roleActionAccessRepository;
         this.orgRepository = orgRepository;
         this.userOrgAccessRepository = userOrgAccessRepository;
+        this.apiConnRepository = apiConnRepository;
+        this.apiTemplateRepository = apiTemplateRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -81,11 +91,11 @@ public class DataInitializerService implements CommandLineRunner {
 
         // Seed role-action mappings
         seedRoleActions(superAdminRole, List.of(
-            "FISCAL_CREATE_BILL", "FISCAL_RETRY_BILL", "FISCAL_VIEW_BILLS",
+            "FISCAL_CREATE_BILL", "FISCAL_RETRY_BILL", "FISCAL_VIEW_BILLS", "FISCAL_MANAGE_PRODUCTS",
             "MERCHANTPRO_FETCH_ORDERS", "USERS_MANAGE", "ROLES_MANAGE", "ORGS_MANAGE"
         ));
         seedRoleActions(clientAdminRole, List.of(
-            "FISCAL_CREATE_BILL", "FISCAL_RETRY_BILL", "FISCAL_VIEW_BILLS",
+            "FISCAL_CREATE_BILL", "FISCAL_RETRY_BILL", "FISCAL_VIEW_BILLS", "FISCAL_MANAGE_PRODUCTS",
             "MERCHANTPRO_FETCH_ORDERS", "USERS_MANAGE", "ROLES_MANAGE", "ORGS_MANAGE"
         ));
         seedRoleActions(operatorRole, List.of(
@@ -107,6 +117,9 @@ public class DataInitializerService implements CommandLineRunner {
             seedUserOrgAccess(opsUser, acmeHq);
             seedUserOrgAccess(opsUser, acmeWeb);
         }
+
+        seedMerchantProApi(acmeHq);
+        seedMerchantProApi(acmeWeb);
     }
 
     private RoleEntity seedRole(String roleCode, String name, String description) {
@@ -174,6 +187,7 @@ public class DataInitializerService implements CommandLineRunner {
         seedAction("FISCAL", "FISCAL_CREATE_BILL", "Create Fiscal Bill", "Allows issuing new fiscal bills");
         seedAction("FISCAL", "FISCAL_RETRY_BILL", "Retry Fiscal Bill", "Allows retrying failed fiscal bills");
         seedAction("FISCAL", "FISCAL_VIEW_BILLS", "View Fiscal Bills", "Allows viewing fiscal bills list and details");
+        seedAction("FISCAL", "FISCAL_MANAGE_PRODUCTS", "Manage Products", "Allows managing product catalog and syncing from shop");
         seedAction("MERCHANTPRO", "MERCHANTPRO_FETCH_ORDERS", "Fetch Orders", "Allows fetching orders from MerchantPro API");
         seedAction("SYSTEM", "USERS_MANAGE", "Manage Users", "Allows creating and editing users");
         seedAction("SYSTEM", "ROLES_MANAGE", "Manage Roles", "Allows creating and editing roles");
@@ -225,6 +239,46 @@ public class DataInitializerService implements CommandLineRunner {
                 log.info("Seeded org: {}", name);
                 return saved;
             });
+    }
+
+    private void seedMerchantProApi(OrgEntity org) {
+        ApiConnEntity conn = apiConnRepository.findAllByOrgOrgIdAndDeletedAtIsNull(org.getOrgId()).stream()
+            .filter(c -> "MP".equals(c.getApiPlatform()))
+            .findFirst()
+            .orElseGet(() -> {
+                ApiConnEntity e = new ApiConnEntity();
+                e.setOrg(org);
+                e.setDisplayName("MerchantPro – " + org.getName());
+                e.setApiPlatform("MP");
+                e.setApiBaseUrl("https://api.merchantpro.rs/");
+                e.setApiauthtype("BASIC_AUTH");
+                e.setApikey("dev-api-key");
+                e.setApisecret("dev-api-secret");
+                e.setActive(true);
+                ApiConnEntity saved = apiConnRepository.save(e);
+                log.info("Seeded MerchantPro connection for org: {}", org.getName());
+                return saved;
+            });
+
+        seedApiTemplate(conn, "FETCH_ORDERS", "api/v2/orders");
+        seedApiTemplate(conn, "GET_PRODUCTS", "api/v2/products");
+    }
+
+    private void seedApiTemplate(ApiConnEntity conn, String operationKey, String endpointPath) {
+        boolean exists = apiTemplateRepository.findAllByApiConnApiconnId(conn.getApiconnId()).stream()
+            .anyMatch(t -> operationKey.equals(t.getOperationKey()));
+        if (exists) {
+            return;
+        }
+        ApiTemplateEntity template = new ApiTemplateEntity();
+        template.setApiConn(conn);
+        template.setOperationKey(operationKey);
+        template.setHttpMethod("GET");
+        template.setContentType("application/json");
+        template.setEndpointPath(endpointPath);
+        template.setActive(true);
+        apiTemplateRepository.save(template);
+        log.info("Seeded API template {} for connection {}", operationKey, conn.getDisplayName());
     }
 
     private void seedUserOrgAccess(AppUserEntity user, OrgEntity org) {

@@ -45,9 +45,11 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 ## 4. In Scope (MVP)
 - User authentication and authorization
 - MerchantPro order fetch/sync
-- MerchantPro products fetch/sync
+- Product catalog per organization (CRUD + pull from shop via `GET_PRODUCTS`)
+- Product catalog screen (`/fiscal-bills/products`) with shop sync (SSE progress) and CRUD
+- Inline product search on Create Fiscal Bill line item Name (name, SKU, or EAN) with live MerchantPro price verification on selection
 - Fiscalization flow (fiscal bill issue) through Serbian Tax Authority API
-- Status tracking for submitted fiscal bills
+- Status tracking for submitted fiscal bills (via `GET_STATUS` template)
 - Basic reporting/export
 
 ## 5. Out of Scope (MVP)
@@ -82,13 +84,27 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 ### 6.4 Manual entry of fiscal bill
 1. User will access page to manually add fiscal bill
 2. User enters header data and line items(products)
-3. System sends request to Tax Authority API to issue fiscal bill
-4. App stores response and status - if response is 200, fiscal bill data will be stored in database tables
+3. User can search products from local catalog inline on line item name (name, SKU, or EAN; min 2 characters)
+4. On product selection, system calls MerchantPro live lookup (SKU first, then EAN) to populate unit price
+5. System sends request to Tax Authority API to issue fiscal bill
+6. App stores response and status - if response is 200, fiscal bill data will be stored in database tables
+
+### 6.4A Product catalog management
+1. User with `FISCAL_MANAGE_PRODUCTS` opens Products screen under Fiscal Bills menu
+2. User selects organization and views/edits local product catalog (name, SKU, EAN, last known price)
+3. User may search the catalog with a debounced text box; search matches name, SKU, EAN, IDs, and price fields simultaneously
+4. User may select products on the current page or select all products (including across pages / filtered results) for bulk delete, bulk activate, or bulk deactivate
+5. User may click "Pull from Shop" to sync products from MerchantPro into local `product` table; UI shows sync progress (synced / total) and sync type (full vs incremental)
+6. After a completed full catalog sync, subsequent pulls use incremental sync (MerchantPro `modified[gte]` filter) when supported
+7. Sync progress survives page refresh via status polling; user may cancel an in-progress sync
+8. When idle, UI shows last successful sync timestamp and product count
+9. At least one of SKU or EAN is required per product for live price lookup
+10. Removing shop-synced products hides them locally; user may restore the full shop catalog via "Rebuild from Shop" (`RESET_FULL` sync). Manually created products are truly deleted.
 
 ### 6.5 Role and Access Management
 1. SuperAdmin/Admin opens Role Definition page.
 2. Admin creates, updates, or deletes a role. Deleting a role that is in use by active users requires reassigning those users to another active role.
-3. Admin assigns allowed actions to role (for example Fetch Orders, Create Fiscal Bill).
+3. Admin assigns allowed actions to role (for example Fetch Orders, Create Fiscal Bill, Manage Products).
 4. Admin manages users, including creating, updating (assigning roles and selecting allowed organizations), and soft-deleting user profiles.
 5. System enforces access by role action permissions plus client/organization scope. Users are prevented from self-deleting their own accounts.
 

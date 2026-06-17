@@ -37,6 +37,12 @@ MERCHANTPRO FETCH PARAMETERIZATION:
 - Additional parameters must be added through metadata/config extension (template + parameter definitions), not hardcoded endpoint redesign.
 - Fetch pipeline should support pagination parameters (limit/start) and future provider-specific filters.
 
+MERCHANTPRO PRODUCTS (catalog):
+- Local `product` table per organization stores catalog rows for fiscal bill line-item lookup (manual entry or sync).
+- Sync: `GET_PRODUCTS` apitemplate on `MP` apiconn; paginated fetch with per-page DB commits; progress streamed to UI via SSE (`GET /api/v1/products/sync`).
+- Create Fiscal Bill: inline autocomplete searches local catalog (`q` = name/SKU/EAN); selection triggers live price lookup from MerchantPro before submit.
+- Access: `FISCAL_MANAGE_PRODUCTS` (catalog admin), `FISCAL_CREATE_BILL` (search + lookup). No per-organization feature flag.
+
 INTEGRATION NOTE:
 - Java backend calls MerchantPro API directly.
 - Java backend calls Serbian Tax Authority API directly.
@@ -64,11 +70,10 @@ OPERATIONAL BASELINE (MVP):
 • External API Reliability: timeout + retry with exponential backoff + circuit breaker
 • Observability: request correlation ID, structured logs, masked sensitive fields
 
-FRONTEND REFERENCE ADAPTATION (KLIKLAK DASHBOARD):
-• Reference source path: kliklak_dashboard_reference/Kliklak_Dashboard/frontend/src/pages
-• Reuse target pages: Account.jsx, Users.jsx, Orders.jsx
-• Reuse mode: visual/interaction baseline only, with clean reimplementation in eFiscal frontend
-• No direct code copy from reference pages; preserve behavior and structure while adapting domain fields/actions
+FRONTEND UI BASELINE (historical Kliklak adaptation — reference tree removed):
+• Living guidance: FRONTEND_STRUCTURE.md, PRODUCT_REQUIREMENTS.md (FR-007–FR-009), LEGACY_REFERENCE.md
+• Target pages: Account, Users, Orders (partial)
+• Reuse mode: visual/interaction baseline only, clean reimplementation in eFiscal frontend
 
 Required reuse scope:
 • Account page: keep baseline page shell (navbar + sidebar + content card) and account form interaction pattern, then extend with eFiscal-specific fields.

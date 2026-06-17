@@ -1,26 +1,66 @@
 ---
-description: External API integration patterns
-globs: backend/src/main/java/com/efiscal/backend/service/**/*.java
+description: External API integration patterns (adapter architecture, resilience, security, domain specifics)
+globs: backend/src/main/java/com/efiscal/backend/integration/**/*.java
 alwaysApply: false
 ---
 
 # External Integrations
 
-## Extensibility
-- Dynamic configuration via database (`apiconn` and `apitemplate` tables) instead of hardcoding endpoints
-- Support flexible parameterization (e.g., query params for MerchantPro orders)
+> For full detail see `BACKEND_STRUCTURE.md` §6 and `docs/MERCHANTPRO_ORDER_NORMALIZATION.md`. This rule captures the constraints agents most commonly get wrong.
 
-## Resilience & Operational Rules
-- External API calls MUST use timeouts
-- Implement safe retries with exponential backoff for transient failures (especially Tax Authority API)
-- Use circuit breakers for downstream provider instability
-- Always log requests with a Correlation ID
+## Adapter Architecture
+
+Integration code follows a three-component pattern inside `com.efiscal.backend.integration.<provider>`:
+
+- **Adapter** — translates between an internal use case and the external API call.
+- **Client** — performs HTTP calls and handles transport-level concerns (auth, timeout, retry).
+- **Mapper** — converts between external DTOs and internal domain models.
+
+Do not leak external DTOs into `domain` or `application` layers. Internal models must not reference `integration.*` types.
+
+## DB-Driven Configuration (apiconn + apitemplate)
+
+Integration runtime is configured via database, not hardcoded:
+
+- **`apiconn`** — connection profile: base URL, auth type, platform identity, active flag, credentials reference.
+- **`apitemplate`** — operation template: endpoint path, HTTP method, content type, linked to `apiconn`.
+
+When adding a new provider operation:
+1. Prefer adding `apiconn` + `apitemplate` rows (Mode A — config-only).
+2. Add a mapper only if response/request shape is non-standard (Mode B).
+3. Add a full custom adapter/client only for non-standard protocols or flows (Mode C).
+
+Do not hardcode endpoint paths or query parameters in Java code if they can be expressed as template metadata.
+
+## Provider Onboarding
+
+New providers go in `com.efiscal.backend.integration.<providername>` following the MerchantPro module layout. Do not create parallel structures outside `integration/`.
+
+## Resilience — Required for Every External Call
+
+- **Timeout:** always set an explicit connection and read timeout.
+- **Retry:** safe retries with exponential backoff for transient failures only (idempotent operations). Do not retry fiscal bill submissions without idempotency key validation.
+- **Circuit breaker:** required for all downstream providers.
+- **Correlation ID:** log request/response metadata with correlation ID on every external call.
 
 ## Security
-- Never log raw secrets or API keys in plain text
-- Keys/passwords configured in `apiconn` should be securely managed
-- Tax Authority communication uses mTLS (certificates) configured in `apiconn`
+
+- Never log raw secrets, API keys, credentials, or JWT tokens.
+- Credentials in `apiconn` are referenced securely; never read them into log output.
+- Tax Authority communication uses mTLS. Certificate config lives in `apiconn`. Do not bypass or ignore certificate configuration.
 
 ## Domain Specifics
-- **MerchantPro**: Primary source of Orders and Products. Uses Basic/API Key auth.
-- **Tax Authority (eFiscal)**: Target for fiscal bills. Requires strict adherence to request formats (Invoice types: Normal, Advance, Refund, etc.). Implements specific logic for chained documents (e.g., Advance Refund before Normal Sale).
+
+### MerchantPro
+- Primary source of Orders and Products. Auth: Basic/API Key.
+- Order fetch is parameterized via `apitemplate` + fetch parameter metadata. MVP filters: `created_after`, `shipping_status`. Add new filters through parameter metadata, not endpoint redesign.
+- Product sync uses `GET_PRODUCTS` apitemplate. Paginated with per-page DB commits. Progress streamed to UI via SSE (`SseEmitter`).
+- Upsert match order for products: `mp_product_id` → SKU (case-insensitive, `MERCHANTPRO` source only) → EAN (`MERCHANTPRO` source only).
+- See `docs/MERCHANTPRO_ORDER_NORMALIZATION.md` and `docs/PRODUCT_SYNC_JOBS_AND_INCREMENTAL_HANDOFF.md` for normalization and sync job details.
+
+### Tax Authority (Serbian eFiscal)
+- Target for fiscal bill submission. Auth: mTLS.
+- Strict adherence to request format required. Invoice types: Normal, Advance, Refund, Copy.
+- Chained document logic: Advance Refund must precede Normal Sale in the correct sequence.
+- Fiscal bill submission must be idempotent — validate `Idempotency-Key` before every submission attempt.
+- Retry on transient failure; do not retry on business-rule rejection without human review.

@@ -70,6 +70,28 @@
 
 ### 3.6 Status Chip Pattern
 - Use consistent status chips (color + label) across all modules.
+
+### 3.7 Products and Create Fiscal Bill (catalog integration)
+
+**Route:** `/fiscal-bills/products` — guarded by `FISCAL_MANAGE_PRODUCTS` ([`Products.jsx`](frontend/src/pages/Products.jsx)).
+
+- Organization selector + product table (CRUD, search, bulk actions).
+- **Pull from Shop:** [`productsApi.syncStream`](frontend/src/services/api.js) calls `GET /api/v1/products/sync?mode=AUTO` using `fetch` + ReadableStream (Bearer token in header; not native `EventSource`). Handles `409` via `onConflict` (re-attaches to running job).
+- **Rebuild from Shop:** secondary action calls `GET /api/v1/products/sync?mode=RESET_FULL` after confirmation; restores hidden shop-synced products and refreshes the full catalog.
+- **Sync recovery:** [`SyncContext`](frontend/src/contexts/SyncContext.jsx) polls `GET /products/sync/status` every 2.5s while syncing; `checkSyncStatus` on org change restores in-progress UI after page refresh.
+- **Cancel sync:** UI cancel calls `POST /products/sync/cancel` then clears local state.
+- **Per-org sync:** user may sync different orgs concurrently; guard blocks duplicate start for the same org only.
+- Progress UI: sync type label (`products.syncTypeFull` / `products.syncTypeIncremental` / `products.syncTypeResetFull`), `<progress>` bar with `products.syncStarting` / `products.syncingProgress`.
+- Local delete copy: removing shop-synced products hides them from the catalog; use Rebuild from Shop to restore (`products.deleteConfirm`, `products.deleteSelectedConfirm`, `products.fullRefreshConfirm`).
+- Last sync line: `products.lastSyncAt` when latest job is `DONE` and idle.
+
+**Create Fiscal Bill** ([`CreateFiscalBill.jsx`](frontend/src/pages/CreateFiscalBill.jsx)) — guarded by `FISCAL_CREATE_BILL`.
+
+- Line item **Name** field is a combobox-style inline search (no separate search button or modal).
+- Requires selected organization; debounced search after 2+ characters via `GET /products/search?q=…`.
+- Dropdown lists name + SKU/EAN; selecting a row fills the line and triggers live price lookup (`GET /products/lookup`).
+- Styles: `.product-name-combobox`, `.product-suggest-list` in [`styles.css`](frontend/src/styles.css).
+- Related locale keys: `createFiscalBill.searchPlaceholder`, `searchMinChars`, `searchNoResults`, `priceVerifying`, `priceVerified`, `priceUnverified`.
 - Same status must always keep same chip style.
 
 ### 3.7 Form Section Pattern
@@ -130,7 +152,7 @@
 		- Clicking delete triggers a confirmation modal to perform a soft-delete (calling `DELETE /users/{userId}`).
 		- **Self-deletion Protection**: The UI must disable or hide the delete action for the currently logged-in user to prevent accidental self-account lockout.
 - Organizations page edit modal must provide three tabs for existing organizations:
-	- **Main** tab: general organization data (`clientId`, `name`, `taxId`, status/currency/active flags, product-search flag).
+	- **Main** tab: general organization data (`clientId`, `name`, `taxId`, status/currency/active flags).
 	- **Payment Types** tab: allowed payment type mapping.
 	- **Email Settings** tab: SMTP server, SMTP port, from email, username, password, and connection security (`STARTTLS` or `SSL/TLS`).
 - Email Templates page should provide org-scoped Add/Edit/Delete forms with a raw HTML textarea for the body field. The body editor does not need WYSIWYG in the first version, but it must preserve HTML markup and placeholder tokens such as `{{ customername }}`.

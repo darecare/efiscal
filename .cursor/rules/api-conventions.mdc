@@ -1,33 +1,61 @@
 ---
-description: Backend API conventions (Spring Boot, auth, error handling)
+description: Backend API conventions (Spring Boot, layered architecture, auth, error handling)
 globs: backend/src/main/java/**/*.java
 alwaysApply: false
 ---
 
 # Backend API Conventions
 
-## Structure
-- Controllers in `com.efiscal.backend.controller`
-- Business logic in `com.efiscal.backend.service`
-- JPA Entities in `com.efiscal.backend.model`
-- Repositories in `com.efiscal.backend.repository`
-- Config & Security in `com.efiscal.backend.config` and `com.efiscal.backend.security`
+> For full detail see `BACKEND_STRUCTURE.md`. This rule captures the constraints agents most commonly get wrong.
 
-## Authentication
-- Most endpoints require JWT Bearer token via `BearerTokenFilter`
-- Use Spring Security annotations or filter logic for protected routes
-- Granular Role-Based Access Control (RBAC): Enforce action-based permissions (e.g. `FISCAL_CREATE_BILL`) and client/organization scope bounds.
+## Package Structure
+
+The backend uses a strict layered architecture. Place new code in the correct layer:
+
+| Layer | Package | Responsibility |
+|---|---|---|
+| API | `com.efiscal.backend.api` | HTTP endpoints, request validation, response mapping only |
+| Application | `com.efiscal.backend.application` | Orchestration, transactions, idempotency |
+| Domain | `com.efiscal.backend.domain` | Business rules, fiscal lifecycle, value objects |
+| Integration | `com.efiscal.backend.integration` | External API adapters, clients, DTOs, mappers |
+| Persistence | `com.efiscal.backend.persistence` | JPA entities, repositories, specifications |
+| Access | `com.efiscal.backend.access` | RBAC policy, scope resolution, authorization evaluator |
+| Audit | `com.efiscal.backend.audit` | Audit trail records and service |
+| Common | `com.efiscal.backend.common` | Errors, logging, utilities |
+| Config/Security | `com.efiscal.backend.config`, `com.efiscal.backend.security` | Spring wiring, JWT filter |
+
+**Do not:**
+- Put business logic in controllers.
+- Expose JPA entities directly in API responses — use DTOs.
+- Leak integration DTOs (`integration.*`) into domain or application layers.
+
+## Authentication & Authorization
+
+- Every protected endpoint must declare a required action code (e.g. `FISCAL_CREATE_BILL`, `USERS_MANAGE`). Use `AuthorizationService` (`com.efiscal.backend.security`) for action + org scope checks.
+- Authorization decision requires all four conditions:
+  1. Role has required action **or** user is `SUPERADMIN`.
+  2. User has access to the active organization (`allowedOrgIds`) **or** is `SUPERADMIN`.
+  3. Organization belongs to active client context.
+  4. Subscription is active and not expired (normal users only; `SUPERADMIN` exempt).
+- Use `BearerTokenFilter` for token validation. Do not duplicate JWT parsing logic outside `security`.
 
 ## Error Responses
-- Adhere to the API Error Model defined in `API_CONTRACT.md`
-- Use consistent HTTP status codes:
-  - 400: Validation/Bad Request
-  - 401: Unauthorized (Invalid/missing token)
-  - 403: Forbidden (Missing role/scope or expired subscription)
-  - 404: Resource not found
-  - 500: Internal server error
+
+Follow the error model in `API_CONTRACT.md` exactly. HTTP status codes:
+
+- `400` — validation error or bad request
+- `401` — missing or invalid JWT
+- `403` — forbidden (action denied, scope violation, or expired subscription)
+- `404` — resource not found
+`409` — conflict (e.g. duplicate fiscal bill, role in use)
+- `500` — internal server error
 
 ## Patterns
-- DTO pattern for request/response bodies (do not expose internal entities directly to controllers)
-- Password hashing: BCryptPasswordEncoder
-- Idempotency-Key support required for mutating fiscal endpoints to avoid duplicate submissions
+
+- **DTOs:** All controller request/response bodies use DTOs. Never expose entity classes.
+- **Transactions:** `@Transactional` at application service boundaries, not in controllers or repositories.
+- **Idempotency:** Mutating fiscal endpoints must validate an `Idempotency-Key` header and persist it to block duplicate submissions.
+- **Soft delete:** User deletion sets `deleted_at`; never hard-delete user rows. Repository/query layers must filter `deleted_at IS NULL`.
+- **Correlation ID:** Include correlation ID in all structured log entries at API and integration boundaries.
+- **Password hashing:** `BCryptPasswordEncoder` only; never store or log plaintext passwords.
+- **Subscription enforcement:** Validate at login and again on protected operations for normal users.

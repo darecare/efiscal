@@ -7,6 +7,7 @@ It connects webshop/order systems (currently MerchantPro) with Serbian Tax Autho
 
 - Authenticated, role-based access with client/organization scope
 - MerchantPro order fetch with filterable sync parameters
+- Per-organization product catalog (CRUD, shop sync with progress, inline search on manual fiscal bills)
 - Fiscal bill creation (order-based and manual flows)
 - Retry and status tracking for fiscalization attempts
 - Admin workflows for users, roles, organizations, and API connection templates
@@ -154,6 +155,7 @@ See full endpoint contracts and error model in `API_CONTRACT.md`.
 
 - **Auth**: login/session bootstrap for protected APIs
 - **MerchantPro Sync**: fetch orders with parameterized filters
+- **Products**: organization-scoped catalog, DB-backed pull-from-shop sync (`GET /products/sync` SSE + `GET /products/sync/status` poll, `POST /products/sync/cancel`), inline search on Create Fiscal Bill
 - **Fiscal Bill**: create, detail, retry, and status operations
 - **RBAC and Scope**:
   - action-based permissions
@@ -205,6 +207,7 @@ This repository already contains core modules and scaffolding for:
 - end-to-end local stack execution
 - role/user and access-control management
 - MerchantPro order operations
-- fiscal bill workflows and related mappings
+- product catalog and MerchantPro product sync
+- fiscal bill workflows and related mappings (including inline catalog search on manual create)
 
 Planned extension points include additional commerce/integration providers and broader automation modules.

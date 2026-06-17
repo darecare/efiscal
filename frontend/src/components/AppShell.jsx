@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
+import { useSyncContext } from '../contexts/SyncContext'
 import { hasAction, hasAnyAction } from '../utils/permissions'
 import { appInfoApi, usersApi } from '../services/api'
 import i18n from '../i18n'
@@ -140,6 +141,7 @@ const getNavItems = (user) => {
         { path: '/fiscal-bills', labelKey: 'nav.fiscalBills', show: can('FISCAL_VIEW_BILLS') },
         { path: '/fiscal-bills/create', labelKey: 'nav.createFiscalBill', show: can('FISCAL_CREATE_BILL') },
         { path: '/fiscal-bills/get-status', labelKey: 'nav.getStatus', show: can('FISCAL_VIEW_BILLS') },
+        { path: '/fiscal-bills/products', labelKey: 'nav.products', show: can('FISCAL_MANAGE_PRODUCTS') },
         { path: '/taxes', labelKey: 'nav.taxes', show: can('ORGS_MANAGE') },
       ],
     },
@@ -169,6 +171,7 @@ const getNavItems = (user) => {
 export default function AppShell({ title, subtitle, actions, children }) {
   const { t } = useTranslation()
   const { user, logout } = useAuth()
+  const { syncing, syncProgress, syncOrgName } = useSyncContext()
   const location = useLocation()
   const navigate = useNavigate()
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -229,6 +232,18 @@ export default function AppShell({ title, subtitle, actions, children }) {
           <p>{user?.email}</p>
         </div>
         <div className="topbar-actions">
+          {syncing && (
+            <span className="sync-indicator" aria-label={t('products.pulling')}>
+              <span className="sync-indicator__spinner" aria-hidden="true" />
+              {syncProgress && syncProgress.total > 0
+                ? syncOrgName
+                  ? t('products.syncingProgressOrg', { org: syncOrgName, synced: syncProgress.synced, total: syncProgress.total })
+                  : t('products.syncingProgress', { synced: syncProgress.synced, total: syncProgress.total })
+                : syncOrgName
+                  ? t('products.pullingOrg', { org: syncOrgName })
+                  : t('products.pulling')}
+            </span>
+          )}
           <LanguageSwitcher />
           <HelpMenu onAbout={openAbout} />
           <span className="badge">{user?.roleName}</span>
