@@ -179,6 +179,7 @@ Subscription behavior:
 - Notes:
   - `createdAfter` and `shippingStatus` are the primary MVP filter fields.
   - Backend resolves and validates allowed filter keys, then maps to provider URL query parameters.
+  - Order line items expose the provider `product_ean` value as `ean` when MerchantPro returns it; fiscalization uses that value as the `gtin` source.
 - 202 Response:
 ```json
 {
