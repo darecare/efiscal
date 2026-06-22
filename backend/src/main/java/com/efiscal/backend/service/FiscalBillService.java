@@ -223,7 +223,7 @@ public class FiscalBillService {
             return FiscalBillCreateResult.ofAlreadyExists(toView(existingKey.get().getFiscalBill()));
         }
 
-        validateManualPaymentTotals(request.items(), request.payments());
+        validateManualRequestAmounts(request.items(), request.payments());
 
         // If an orderId is provided, apply order-linked fiscal-chain checks (spec 4.2.1)
         String orderId = request.orderId();
@@ -866,7 +866,7 @@ public class FiscalBillService {
     /**
      * Validate manual payment rows against line item totals (spec 4.2.3).
      */
-    private void validateManualPaymentTotals(List<FiscalBillItemRequest> items, List<PaymentRequest> payments) {
+    private void validateManualRequestAmounts(List<FiscalBillItemRequest> items, List<PaymentRequest> payments) {
         if (items == null || items.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No line items provided");
         }
@@ -876,9 +876,17 @@ public class FiscalBillService {
 
         BigDecimal itemsTotal = BigDecimal.ZERO;
         for (FiscalBillItemRequest item : items) {
-            if (item.totalAmount() == null) {
+            if (item.quantity() == null || item.quantity().compareTo(BigDecimal.ZERO) <= 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Each line item must have a total amount");
+                        "Each line item must have a positive quantity");
+            }
+            if (item.unitPrice() == null || item.unitPrice().compareTo(BigDecimal.ZERO) < 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Each line item must have a non-negative unit price");
+            }
+            if (item.totalAmount() == null || item.totalAmount().compareTo(BigDecimal.ZERO) < 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Each line item must have a non-negative total amount");
             }
             itemsTotal = itemsTotal.add(item.totalAmount());
         }

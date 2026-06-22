@@ -1,14 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
-import { fiscalBillApi, orgsApi, productsApi } from '../services/api'
+import { fiscalBillApi, orgsApi, productsApi, taxApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import {
+  calcPaymentMatchAmount,
+  calcTotalAmount,
+  FALLBACK_TAX_LABELS,
+  inferBuyerTypeFromNumericId,
+  isFiscalResultFailed,
+  isFiscalResultSuccess,
+  normalizeTaxLabelOptions,
+} from './createFiscalBillUtils'
 import './CreateFiscalBill.css'
 
 const INVOICE_TYPE_VALUES = [0, 2, 4]
 const TRANSACTION_TYPE_VALUES = [0, 1]
 const PAYMENT_TYPE_VALUES = [0, 1, 2, 3, 4, 5, 6]
-const TAX_LABELS = ['A', 'E', 'G', 'Đ', 'N']
 const BUYER_ID_TYPE_VALUES = ['10', '11', '12', '13', '14', '15', '16', '20', '21', '22', '23', '30', '31', '32', '33', '34', '35', '36', '40']
 
 function emptyItem() {
@@ -37,14 +46,6 @@ function emptyPayment(amount = '') {
   return { id: crypto.randomUUID(), paymentType: 1, amount }
 }
 
-function isFiscalResultSuccess(result) {
-  return result?.status === 'SUCCESS'
-}
-
-function isFiscalResultFailed(result) {
-  return result?.status === 'FAILED' || Boolean(result?.lastError)
-}
-
 export default function CreateFiscalBill() {
   const { t } = useTranslation()
   const { user: currentUser } = useAuth()
@@ -59,6 +60,8 @@ export default function CreateFiscalBill() {
   const [transactionType, setTransactionType] = useState(0)
   const [orderId, setOrderId] = useState('')
   const [customerName, setCustomerName] = useState('')
+  const [sendEmail, setSendEmail] = useState(false)
+  const [customerEmail, setCustomerEmail] = useState('')
   const [buyerType, setBuyerType] = useState('')
   const [buyerIdValue, setBuyerIdValue] = useState('')
   const [buyerIdAutoMsg, setBuyerIdAutoMsg] = useState(false)
@@ -78,6 +81,8 @@ export default function CreateFiscalBill() {
   const [fieldErrors, setFieldErrors] = useState({})
   const [itemErrors, setItemErrors] = useState({})
   const [paymentErrors, setPaymentErrors] = useState({})
+  const [taxLabelOptions, setTaxLabelOptions] = useState(FALLBACK_TAX_LABELS)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   const suggestDebounceRef = useRef({})
   const headerSectionRef = useRef(null)
@@ -93,6 +98,12 @@ export default function CreateFiscalBill() {
       }
     }).catch(() => setOrgs([]))
   }, [isSuperAdmin])
+
+  useEffect(() => {
+    taxApi.list()
+      .then((taxes) => setTaxLabelOptions(normalizeTaxLabelOptions(taxes)))
+      .catch(() => setTaxLabelOptions(FALLBACK_TAX_LABELS))
+  }, [])
 
   useEffect(() => {
     if (selectedOrgId) {
@@ -127,15 +138,6 @@ export default function CreateFiscalBill() {
       }
     }
   }, [currentItemsTotal, payments.length, userModifiedPayment])
-
-  function calcTotalAmount(quantity, unitPrice, oldTotal) {
-    const q = parseFloat(quantity) || 0
-    const p = parseFloat(unitPrice) || 0
-    if (q >= 0 && p >= 0) {
-      return (q * p).toFixed(2)
-    }
-    return oldTotal
-  }
 
   function setItemField(id, field, value) {
     setItems(prev => prev.map(item => {
@@ -174,9 +176,20 @@ export default function CreateFiscalBill() {
     setItems(prev => prev.filter(item => item.id !== id))
   }
 
-  function setPaymentField(id, field, value) {
-    if (field === 'amount') setUserModifiedPayment(true)
+  function setPaymentField(id, field, value, options = {}) {
+    if (field === 'amount' && options.markModified !== false) {
+      setUserModifiedPayment(true)
+    }
     setPayments(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p))
+  }
+
+  function matchPaymentToRemaining(paymentId, paymentAmount) {
+    const rem = calcPaymentMatchAmount(currentItemsTotal, paymentsTotal(), paymentAmount)
+    if (payments.length === 1) {
+      setPaymentField(paymentId, 'amount', rem, { markModified: false })
+      return
+    }
+    setPaymentField(paymentId, 'amount', rem)
   }
 
   function addPayment() {
@@ -193,16 +206,16 @@ export default function CreateFiscalBill() {
   function handleBuyerIdChange(e) {
     const val = e.target.value
     setBuyerIdValue(val)
-    
-    // Auto-infer buyer type based on common lengths (PIB=9, JMBG=13)
+
     const numeric = val.replace(/\D/g, '')
-    if (numeric.length === 13 && (!buyerType || buyerType === '10' || buyerType === '11')) {
-      setBuyerType('11')
-      triggerBuyerIdMsg()
-    } else if (numeric.length === 9 && (!buyerType || buyerType === '10' || buyerType === '11')) {
-      setBuyerType('10')
-      triggerBuyerIdMsg()
-    }
+    setBuyerType((prev) => {
+      const inferred = inferBuyerTypeFromNumericId(numeric, prev)
+      if (inferred && inferred !== prev) {
+        triggerBuyerIdMsg()
+        return inferred
+      }
+      return prev
+    })
   }
 
   function triggerBuyerIdMsg() {
@@ -441,6 +454,8 @@ export default function CreateFiscalBill() {
     const payload = {
       orderId: orderId || null,
       customerName: customerName || null,
+      customerEmail: sendEmail && customerEmail.trim() ? customerEmail.trim() : null,
+      sendEmail,
       invoiceType: parseInt(invoiceType),
       transactionType: parseInt(transactionType),
       buyerType: buyerIdValue && buyerType ? buyerType : null,
@@ -472,6 +487,49 @@ export default function CreateFiscalBill() {
     }
   }
 
+  function resetFormForAnother() {
+    setInvoiceType(0)
+    setTransactionType(0)
+    setOrderId('')
+    setCustomerName('')
+    setSendEmail(false)
+    setCustomerEmail('')
+    setBuyerType('')
+    setBuyerIdValue('')
+    setBuyerIdAutoMsg(false)
+    setReferentDocumentNumber('')
+    setCloseAdvance(false)
+    setItems([emptyItem()])
+    setPayments([emptyPayment()])
+    setUserModifiedPayment(false)
+    setResult(null)
+    setError(null)
+    clearValidationErrors()
+  }
+
+  async function handleDownloadPdf() {
+    const fiscalBillId = result?.fiscalbillId
+    if (!fiscalBillId) return
+
+    setDownloadingPdf(true)
+    try {
+      const blob = await fiscalBillApi.downloadPdf(fiscalBillId, 'a4')
+      const url = window.URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `fiscal-bill-${fiscalBillId}-a4.pdf`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('fiscalBills.downloadPdfFailed')
+      setError(typeof msg === 'string' ? msg : t('fiscalBills.downloadPdfFailed'))
+    } finally {
+      setDownloadingPdf(false)
+    }
+  }
+
   const balDue = (parseFloat(currentItemsTotal) - parseFloat(paymentsTotal())).toFixed(2)
   const isSettled = Math.abs(parseFloat(balDue)) < 0.01
   const resultCardClass = result
@@ -494,6 +552,36 @@ export default function CreateFiscalBill() {
           {result.sdcInvoiceNumber && <p><strong>{t('createFiscalBill.invoiceNumberLabel')}:</strong> {result.sdcInvoiceNumber}</p>}
           {result.fiscalbillId && <p><strong>{t('createFiscalBill.fiscalBillIdLabel')}:</strong> {result.fiscalbillId}</p>}
           {result.lastError && <p className="fiscal-result-error-line"><strong>{t('createFiscalBill.errorLabel')}:</strong> {result.lastError}</p>}
+          {isFiscalResultSuccess(result) && (
+            <div className="fiscal-result-actions">
+              {result.efiscalLink && (
+                <a
+                  href={result.efiscalLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="secondary-button"
+                >
+                  {t('createFiscalBill.openVerificationLink')}
+                </a>
+              )}
+              {result.fiscalbillId && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleDownloadPdf}
+                  disabled={downloadingPdf}
+                >
+                  {downloadingPdf ? t('fiscalBills.downloadingPdf') : t('fiscalBills.downloadPdfA4')}
+                </button>
+              )}
+              <Link to="/fiscal-bills" className="secondary-button fiscal-result-link-button">
+                {t('createFiscalBill.goToFiscalBills')}
+              </Link>
+              <button type="button" className="primary-button" onClick={resetFormForAnother}>
+                {t('createFiscalBill.createAnother')}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -545,6 +633,30 @@ export default function CreateFiscalBill() {
                 <label className="fiscal-field-label">{t('createFiscalBill.customerNameOptional')}</label>
                 <input className="fiscal-input fiscal-input--text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('createFiscalBill.customerNamePlaceholder')} />
               </div>
+
+              <div className="fiscal-field fiscal-field--checkbox">
+                <label className="fiscal-field-label fiscal-field-label--inline">
+                  <input
+                    type="checkbox"
+                    checked={sendEmail}
+                    onChange={(e) => setSendEmail(e.target.checked)}
+                  />
+                  {' '}{t('createFiscalBill.sendEmail')}
+                </label>
+              </div>
+
+              {sendEmail && (
+                <div className="fiscal-field">
+                  <label className="fiscal-field-label">{t('createFiscalBill.customerEmailOptional')}</label>
+                  <input
+                    className="fiscal-input fiscal-input--text"
+                    type="email"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    placeholder={t('createFiscalBill.customerEmailPlaceholder')}
+                  />
+                </div>
+              )}
 
               <div className="fiscal-field">
                 <label className="fiscal-field-label">{t('createFiscalBill.buyerIdValueOptional')}</label>
@@ -730,7 +842,7 @@ export default function CreateFiscalBill() {
                     <div className="fiscal-field">
                       <label className="fiscal-field-label">{t('createFiscalBill.taxLabel')}</label>
                       <select className="fiscal-input fiscal-input--select" value={item.taxLabel} onChange={e => setItemField(item.id, 'taxLabel', e.target.value)}>
-                        {TAX_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
+                        {taxLabelOptions.map(l => <option key={l} value={l}>{l}</option>)}
                       </select>
                     </div>
                     <div className="fiscal-field">
@@ -806,12 +918,9 @@ export default function CreateFiscalBill() {
                       />
                       <button 
                         type="button" 
-                        className="secondary-button" 
+                        className="secondary-button fiscal-match-total-btn" 
                         title={t('createFiscalBill.matchTotal')}
-                        onClick={() => {
-                          const rem = Math.max(0, parseFloat(currentItemsTotal) - (parseFloat(paymentsTotal()) - parseFloat(payment.amount || 0)));
-                          setPaymentField(payment.id, 'amount', rem.toFixed(2));
-                        }}
+                        onClick={() => matchPaymentToRemaining(payment.id, payment.amount)}
                       >
                         =
                       </button>

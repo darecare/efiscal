@@ -123,6 +123,7 @@
   "about": {
     "title": "O aplikaciji",
     "menuLabel": "Meni pomoći",
+    "triggerLabel": "i",
     "manufacturer": "Proizvođač",
     "serialNumber": "Serijski broj",
     "softwareVersion": "Verzija softvera",
@@ -597,6 +598,9 @@
     "orderIdPlaceholder": "npr. 12345",
     "customerNameOptional": "Ime kupca (opciono)",
     "customerNamePlaceholder": "Ime kupca",
+    "sendEmail": "Pošalji email",
+    "customerEmailOptional": "Email kupca (opciono)",
+    "customerEmailPlaceholder": "kupac@primer.com",
     "buyerIdTypeOptional": "Tip ID kupca (opciono)",
     "selectBuyerIdType": "Izaberite tip ID kupca",
     "buyerIdValueOptional": "Vrednost ID kupca (opciono)",
@@ -653,6 +657,9 @@
     "paymentsSection": "Plaćanja i pregled",
     "resultSuccessTitle": "Fiskalni račun kreiran",
     "resultFailedTitle": "Fiskalizacija nije uspela",
+    "openVerificationLink": "Otvori link za verifikaciju",
+    "goToFiscalBills": "Idi na fiskalne račune",
+    "createAnother": "Kreiraj novi račun",
     "submitDisabledBalance": "Iznos za uplatu mora biti nula pre slanja.",
     "summary": {
       "itemsTotalLabel": "Ukupno stavke",

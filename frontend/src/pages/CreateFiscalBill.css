@@ -190,6 +190,20 @@
   color: #ef4444;
 }
 
+.fiscal-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.fiscal-result-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .fiscal-submit-hint {
   margin: 0 0 0.75rem;
   font-size: 0.875rem;
