@@ -87,6 +87,14 @@
 
 **Create Fiscal Bill** ([`CreateFiscalBill.jsx`](frontend/src/pages/CreateFiscalBill.jsx)) — guarded by `FISCAL_CREATE_BILL`.
 
+- **Layout:** Uses a modern side-by-side split view (via [`CreateFiscalBill.css`](frontend/src/pages/CreateFiscalBill.css)) putting items on the left and a sticky payments/summary sidebar on the right, eliminating tab context switching.
+- **Auto-Calculations:** `totalAmount` is automatically calculated from `quantity * unitPrice`. The first payment row automatically syncs to match the remaining items total unless split explicitly by the user.
+- **Validation:** Structured inline field errors with scroll-to-first-error; submit disabled until payment balance is zero; status-aware success/failure result panel.
+- **Buyer ID Inference:** Entering a 9-digit or 13-digit `buyerIdValue` automatically pre-selects the corresponding `buyerType` (PIB or JMBG) using functional state updates to avoid stale closure bugs.
+- **Tax labels:** Item tax-label dropdown is populated from `GET /taxes` via `taxApi.list()`, with static fallback labels if the request fails.
+- **Email:** Optional `sendEmail` checkbox and `customerEmail` field are sent on `POST /fiscalbill/manual` when enabled.
+- **Post-success actions:** Success result card offers verification link (when present), PDF download, navigation to fiscal bills list, and a reset flow for creating another bill.
+- **Payment match:** The `=` match-total control updates the payment amount without disabling single-payment auto-sync.
 - Line item **Name** field is a combobox-style inline search (no separate search button or modal).
 - Requires selected organization; debounced search after 2+ characters via `GET /products/search?q=…`.
 - Dropdown lists name + SKU/EAN; selecting a row fills the line and triggers live price lookup (`GET /products/lookup`).
@@ -151,10 +159,11 @@
 		- User list interface must provide a delete button for each user.
 		- Clicking delete triggers a confirmation modal to perform a soft-delete (calling `DELETE /users/{userId}`).
 		- **Self-deletion Protection**: The UI must disable or hide the delete action for the currently logged-in user to prevent accidental self-account lockout.
-- Organizations page edit modal must provide three tabs for existing organizations:
+- Organizations page edit modal must provide four tabs for existing organizations:
 	- **Main** tab: general organization data (`clientId`, `name`, `taxId`, status/currency/active flags).
 	- **Payment Types** tab: allowed payment type mapping.
 	- **Email Settings** tab: SMTP server, SMTP port, from email, username, password, and connection security (`STARTTLS` or `SSL/TLS`).
+	- **Advertisement** tab: `advertisementEnabled` toggle (checkbox) and `advertisementHtml` textarea. When enabled and non-empty, the HTML is injected into the `{{ADVERTISEMENT_BLOCK}}` placeholder in generated PDF fiscal bills.
 - Email Templates page should provide org-scoped Add/Edit/Delete forms with a raw HTML textarea for the body field. The body editor does not need WYSIWYG in the first version, but it must preserve HTML markup and placeholder tokens such as `{{ customername }}`.
 - Email settings form behavior:
 	- All email settings fields are optional.

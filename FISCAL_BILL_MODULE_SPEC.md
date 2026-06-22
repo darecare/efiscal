@@ -139,11 +139,14 @@ Users will use page to create manually fiscal bill and send it to Tax Authority 
 1. Optional - buyerid:
 - For manual creation of fiscal bill on Fiscal Bill page there will be a dropdown field to select type of buyer. And a separate field to enter company VAT ID.
 
-2. Optional - Sales Order ID - if user enters manually Sales Order ID, system must perform all checks that apply for process of creating fiscal bill from Sales Order 4.1 item(and subitems)
-
+2. Optional - Sales Order ID - when provided on manual creation, the backend applies **order-linked fiscal-chain checks** scoped to the selected organization:
+   - Duplicate protection for the same `orderId` + `invoiceType` + `transactionType`.
+   - Advance-close chain: if creating Normal Sale and prior Advance Sale bills exist for the order, an Advance Refund is created first (using manual line item tax labels).
+   - Automatic referent document resolution per §4.1.4 when `referentDocumentNumber` is not supplied.
+   - Does **not** fetch MerchantPro order data or validate order line items; use order-based fiscalization (§4.1) for full MerchantPro integration.
 
 ### 4.2.2 Items list (implemented)
-- User adds one or more line item cards on the Create Fiscal Bill page (Items tab).
+- User adds one or more line item cards on the Create Fiscal Bill page (split layout: items left, payments/summary right).
 - **Product Name** field provides inline autocomplete against the local `product` catalog (`GET /api/v1/products/search?q=…`), minimum 2 characters, organization required.
 - Search matches product name (substring), or exact SKU/EAN.
 - Selecting a suggestion fills name, SKU/EAN, and internal product id; system then calls `GET /api/v1/products/lookup` for live MerchantPro `price_gross` (SKU first, EAN fallback).
@@ -158,7 +161,8 @@ System will allow adding more payment types for one fiscal bill.
 - Create new table fiscalbillpay
 -2. Payment type - dropdown list to select value
 Payment Type enumeration value: 0 - Other, 1 - Cash, 2 - Card, 3 - Check, 4 - Wire Transfer, 5 - Voucher, 6 - Mobile Money
-- Add a validation that sum of all rows amount equals sum of all items/products - total of fiscal bill. If total of payment types is not equal to total of Fiscal bill, show error message to user.
+- Add a validation that sum of all rows amount equals sum of all items/products - total of fiscal bill. If total of payment types is not equal to total of Fiscal bill, show error message to user. **Enforced on both frontend and backend** (`400` on mismatch).
+- When user supplies `referentDocumentNumber` manually, backend resolves `referentDocumentDT` from the matching local fiscal bill in the same organization.
 
 ### 4.2.3 Fiscalization process
 - With a click on a button "Create fiscal bill" system will do POST method to Tax Authority and if response is 200, it will store data in fiscalbill, fiscalbilltax and fiscalbillpay tables.

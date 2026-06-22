@@ -116,7 +116,7 @@ function HelpMenu({ onAbout }) {
         aria-haspopup="menu"
         aria-label={t('about.menuLabel')}
       >
-        i
+        {t('about.triggerLabel')}
       </button>
       {open && (
         <div className="help-menu__menu" role="menu" aria-label={t('about.menuLabel')}>

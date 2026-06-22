@@ -114,6 +114,7 @@
   "about": {
     "title": "About",
     "menuLabel": "Help menu",
+    "triggerLabel": "i",
     "manufacturer": "Manufacturer",
     "serialNumber": "Serial number",
     "softwareVersion": "Software version",
@@ -191,7 +192,11 @@
       "4": "Wire Transfer",
       "5": "Voucher",
       "6": "Mobile Money"
-    }
+    },
+    "advertisement": "Advertisement",
+    "advertisementHtml": "Advertisement HTML",
+    "advertisementEnabled": "Enable Advertisement on PDF",
+    "advertisementHtmlPlaceholder": "<p>Your promotional content here…</p>"
   },
   "users": {
     "title": "Users",
@@ -223,7 +228,9 @@
     "myClient": "My Client",
     "fields": {
       "preferredLanguage": "Preferred Language"
-    }
+    },
+    "cashier": "Cashier",
+    "cashierPlaceholder": "Cashier name or code"
   },
   "roles": {
     "title": "Roles & Permissions",
@@ -582,10 +589,16 @@
     "orderIdPlaceholder": "e.g. 12345",
     "customerNameOptional": "Customer Name (optional)",
     "customerNamePlaceholder": "Customer name",
+    "sendEmail": "Send email",
+    "customerEmailOptional": "Customer email (optional)",
+    "customerEmailPlaceholder": "customer@example.com",
     "buyerIdTypeOptional": "Buyer ID Type (optional)",
     "selectBuyerIdType": "Select Buyer ID Type",
     "buyerIdValueOptional": "Buyer ID Value (optional)",
     "buyerIdValuePlaceholder": "Identifier part after code prefix",
+    "closeAdvance": "Close Advance Payment",
+    "referentDocumentNumber": "Reference Document Number",
+    "referentDocumentNumberPlaceholder": "e.g. ABCD1234-ABCD1234-12345",
     "clientHint": "Client: {{name}}",
     "noClientMapping": "No client mapping found for selected organization.",
     "selectOrgRequired": "Please select organization.",
@@ -626,8 +639,38 @@
     "statusLabel": "Status",
     "invoiceNumberLabel": "Invoice Number",
     "fiscalBillIdLabel": "Fiscal Bill ID",
+    "matchTotal": "Match Total",
+    "balanceDue": "Balance Due: {{amount}}",
+    "invalidQuantities": "Please ensure all items have a valid quantity and unit price.",
+    "invalidEmptyItems": "Please add at least one item.",
+    "buyerIdAutoSelected": "Buyer ID Type auto-selected.",
+    "itemsSection": "Items",
+    "paymentsSection": "Payments & Summary",
+    "resultSuccessTitle": "Fiscal bill created",
+    "resultFailedTitle": "Fiscalization failed",
+    "openVerificationLink": "Open verification link",
+    "goToFiscalBills": "Go to fiscal bills",
+    "createAnother": "Create another bill",
+    "submitDisabledBalance": "Balance due must be zero before submitting.",
+    "summary": {
+      "itemsTotalLabel": "Items total",
+      "paymentsTotalLabel": "Payments total",
+      "balanceDueLabel": "Balance due"
+    },
+    "validation": {
+      "productNameRequired": "Product name is required.",
+      "quantityRequired": "Quantity is required.",
+      "quantityPositive": "Quantity must be greater than zero.",
+      "unitPriceRequired": "Unit price is required.",
+      "unitPriceInvalid": "Unit price cannot be negative.",
+      "paymentAmountRequired": "Payment amount is required.",
+      "paymentAmountPositive": "Payment amount must be greater than zero.",
+      "referentDocumentRequired": "Reference document number is required for this invoice type.",
+      "itemSummary": "Item {{n}}: {{message}}"
+    },
     "invoiceTypes": {
       "0": "0 – Normal",
+      "2": "2 – Copy",
       "4": "4 – Advance"
     },
     "transactionTypes": {

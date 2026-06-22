@@ -19,6 +19,7 @@ const emptyForm = {
   isActive: true,
   newPassword: '',
   orgIds: [],
+  cashier: '',
 }
 
 export default function Users() {
@@ -130,6 +131,7 @@ export default function Users() {
       newPassword: '',
       orgIds: u.orgIds || [],
       preferredLanguage: u.preferredLanguage || '',
+      cashier: u.cashier || '',
     })
     setFormError(null)
     setModalMode('edit')
@@ -184,6 +186,7 @@ export default function Users() {
           subscriptionExpiresAt: form.subscriptionExpiresAt ? new Date(form.subscriptionExpiresAt).toISOString() : null,
           orgIds: form.orgIds,
           preferredLanguage: form.preferredLanguage || null,
+          cashier: form.cashier.trim() || null,
         })
         setSuccessMsg(t('users.createdSuccess'))
       } else {
@@ -198,6 +201,7 @@ export default function Users() {
           newPassword: form.newPassword || null,
           orgIds: form.orgIds,
           preferredLanguage: form.preferredLanguage || null,
+          cashier: form.cashier.trim() || null,
         })
         setSuccessMsg(t('users.updatedSuccess'))
       }
@@ -439,6 +443,14 @@ export default function Users() {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div className="field">
+                  <label>{t('users.cashier')}</label>
+                  <input
+                    value={form.cashier}
+                    onChange={(e) => handleChange('cashier', e.target.value)}
+                    placeholder={t('users.cashierPlaceholder')}
+                  />
                 </div>
                 <div className="field">
                   <label>{t('users.subscriptionStatus')}</label>

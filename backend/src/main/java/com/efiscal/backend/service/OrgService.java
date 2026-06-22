@@ -125,6 +125,8 @@ public class OrgService {
         if (req.smtpConnectionSecurity() != null) {
             org.setSmtpConnectionSecurity(validateAndNormalizeSmtpConnectionSecurity(req.smtpConnectionSecurity()));
         }
+        if (req.advertisementHtml() != null) org.setAdvertisementHtml(normalizeOptional(req.advertisementHtml()));
+        if (req.advertisementEnabled() != null) org.setAdvertisementEnabled(req.advertisementEnabled());
         return toDto(orgRepository.save(org));
     }
 
@@ -184,7 +186,9 @@ public class OrgService {
             o.getEmailFrom(),
             o.getSmtpUsername(),
             o.getSmtpConnectionSecurity(),
-            o.getCreatedAt()
+            o.getCreatedAt(),
+            o.getAdvertisementHtml(),
+            o.isAdvertisementEnabled()
         );
     }
 
@@ -227,7 +231,9 @@ public class OrgService {
         String emailFrom,
         String smtpUsername,
         String smtpConnectionSecurity,
-        OffsetDateTime createdAt
+        OffsetDateTime createdAt,
+        String advertisementHtml,
+        boolean advertisementEnabled
     ) {}
 
     public record CreateOrgRequest(
@@ -302,6 +308,9 @@ public class OrgService {
         String smtpPassword,
 
         @Size(max = 20, message = "SMTP connection security must not exceed 20 characters")
-        String smtpConnectionSecurity
+        String smtpConnectionSecurity,
+
+        String advertisementHtml,
+        Boolean advertisementEnabled
     ) {}
 }

@@ -17,6 +17,8 @@ const emptyForm = {
   smtpUsername: '',
   smtpPassword: '',
   smtpConnectionSecurity: 'STARTTLS',
+  advertisementHtml: '',
+  advertisementEnabled: false,
 }
 const STATUS_OPTIONS = ['ACTIVE', 'SETUP', 'SUSPENDED', 'INACTIVE']
 const CURRENCY_OPTIONS = ['RSD', 'EUR', 'USD']
@@ -96,6 +98,8 @@ export default function Organizations() {
       smtpUsername: o.smtpUsername || '',
       smtpPassword: '',
       smtpConnectionSecurity: o.smtpConnectionSecurity || 'STARTTLS',
+      advertisementHtml: o.advertisementHtml || '',
+      advertisementEnabled: o.advertisementEnabled || false,
     })
     setFormError(null)
     setModalMode('edit')
@@ -151,6 +155,8 @@ export default function Organizations() {
         smtpUsername: form.smtpUsername?.trim() || null,
         smtpPassword: form.smtpPassword || null,
         smtpConnectionSecurity: form.smtpConnectionSecurity || null,
+        advertisementHtml: form.advertisementHtml?.trim() || null,
+        advertisementEnabled: form.advertisementEnabled,
       }
       if (modalMode === 'add') {
         await orgsApi.create(payload)
@@ -274,6 +280,12 @@ export default function Organizations() {
                   onClick={() => setActiveTab('email-settings')}
                 >
                   {t('organizations.emailSettings')}
+                </button>
+                <button
+                  className={`tab-button ${activeTab === 'advertisement' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('advertisement')}
+                >
+                  {t('organizations.advertisement')}
                 </button>
               </div>
             )}
@@ -415,6 +427,31 @@ export default function Organizations() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'advertisement' && (
+                <div className="form-grid" style={{ padding: '20px' }}>
+                  <div className="field" style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={form.advertisementEnabled}
+                        onChange={(e) => handleChange('advertisementEnabled', e.target.checked)}
+                      />
+                      {t('organizations.advertisementEnabled')}
+                    </label>
+                  </div>
+                  <div className="field" style={{ gridColumn: '1 / -1' }}>
+                    <label>{t('organizations.advertisementHtml')}</label>
+                    <textarea
+                      value={form.advertisementHtml}
+                      onChange={(e) => handleChange('advertisementHtml', e.target.value)}
+                      placeholder={t('organizations.advertisementHtmlPlaceholder')}
+                      rows={8}
+                      style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.85rem' }}
+                    />
                   </div>
                 </div>
               )}

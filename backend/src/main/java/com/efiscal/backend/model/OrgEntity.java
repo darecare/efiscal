@@ -51,6 +51,12 @@ public class OrgEntity {
     @Column(name = "smtp_connection_security", length = 20)
     private String smtpConnectionSecurity;
 
+    @Column(name = "advertisement_html", columnDefinition = "TEXT")
+    private String advertisementHtml;
+
+    @Column(name = "advertisement_enabled", nullable = false)
+    private boolean advertisementEnabled = false;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -88,6 +94,10 @@ public class OrgEntity {
     public void setSmtpPassword(String smtpPassword) { this.smtpPassword = smtpPassword; }
     public String getSmtpConnectionSecurity() { return smtpConnectionSecurity; }
     public void setSmtpConnectionSecurity(String smtpConnectionSecurity) { this.smtpConnectionSecurity = smtpConnectionSecurity; }
+    public String getAdvertisementHtml() { return advertisementHtml; }
+    public void setAdvertisementHtml(String advertisementHtml) { this.advertisementHtml = advertisementHtml; }
+    public boolean isAdvertisementEnabled() { return advertisementEnabled; }
+    public void setAdvertisementEnabled(boolean advertisementEnabled) { this.advertisementEnabled = advertisementEnabled; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public OffsetDateTime getDeletedAt() { return deletedAt; }
