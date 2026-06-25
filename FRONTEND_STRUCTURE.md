@@ -27,6 +27,7 @@
 - **Usage:** `useTranslation()` + `t('key')` in components; `i18next.t()` in non-React code (e.g. `AuthContext`). Use `count` for plurals and `{{var}}` for interpolation
 - **Plurals:** English uses `*_one` / `*_other` suffix keys (for example `common.counts.orders_one`). Serbian adds `*_few` for Slavic plural rules (2–4); define all three suffixes in `sr.json` when adding new counted strings
 - **Language switcher:** [`LanguageSwitcher`](frontend/src/components/AppShell.jsx) in the top bar — custom dropdown with `aria-expanded`, `role="listbox"`, and localized option labels (`common.languages.*`). Persists choice via detector `localStorage` key `efiscal_lang` (also honors browser language on first visit)
+- **Organization switcher:** [`OrganizationSwitcher`](frontend/src/components/AppShell.jsx) in the top bar — global active organization for operational pages. Backed by [`OrgContext`](frontend/src/contexts/OrgContext.jsx) (`activeOrgId`, `activeOrg`, `orgs`, `loading`, `error`, `setActiveOrgId`, `refreshOrgs`). Loads via `orgsApi.myAccess()` for normal users or `orgsApi.list()` for SuperAdmin (role check via [`isSuperAdmin()`](frontend/src/utils/permissions.js), not inline role-name strings). Persists selection in `localStorage` keyed per user (`activeOrg:<userId>`); stale stored ids are cleared when no longer in the accessible list. Single-org users see a static label; multi-org users get a dropdown. On load failure, `error` is `'loadFailed'` and the switcher shows `orgSwitcher.loadFailed` (`.org-switcher__pill--error`) instead of the empty-org pill. Pages that need org scope read `useOrg()` instead of local `<select>` controls.
 - **About modal:** Header help menu exposes an About modal with manufacturer, serial number, and software version pulled from backend app info endpoint.
 - **Settings menu:** [`AppShell`](frontend/src/components/AppShell.jsx) groups organization-facing admin tools under a Settings menu, including API Configuration, Email Templates, and Payment Type Mapping.
 - **RBAC labels:** Backend action codes stay stable API identifiers. Display names and tooltips come from locale maps keyed by `actionCode`: `roles.actionLabels`, `roles.permissionDescriptions`, and `roles.permissionModules` (see [`Roles.jsx`](frontend/src/pages/Roles.jsx)); use `defaultValue` from API metadata when a new action has no catalog entry yet
@@ -41,10 +42,20 @@
 
 ### 3.1 App Shell Pattern
 - Standard shell for authenticated pages:
-	- Header (top)
+	- Header (top) — includes global organization switcher and language switcher
 	- Sidebar (left, collapsible)
 	- Main content area (right)
 	- Optional footer (bottom)
+
+### 3.1A Active Organization Context Pattern
+- [`OrgProvider`](frontend/src/contexts/OrgContext.jsx) wraps authenticated routes (`AuthProvider` → `OrgProvider` → `SyncProvider`).
+- Operational pages consume `useOrg()` for `activeOrgId` / `activeOrg` instead of page-local org state.
+- **Migrated pages:** Orders, Fiscal Bills, Get Status, Products, Create Fiscal Bill, Email Templates (list filter only).
+- **Intentionally local scope:** ApiConfig (connection `orgId` on create/edit), PayTypeMap (client-scoped), Organizations/Users admin forms, Taxes import modal org picker, Email Templates add/edit modal org picker (admin may assign a different org than the list filter).
+- **No-org UX:** When no org is selected, show a single top-of-page hint — `<p className="muted org-scope-hint">` with `orgSwitcher.selectPrompt`. Do not duplicate with a second empty-state message in the table/content area. Disable primary fetch/submit actions until an org is active.
+- **Org change:** Migrated pages reset fetched data, pagination, and in-progress form state when `activeOrgId` changes (Create Fiscal Bill clears items, payments, validation, and result).
+- **Validation copy:** Org-required messages on migrated pages must reference the header switcher (`orgSwitcher.selectPrompt`), not page-local org dropdown wording.
+- **Tests:** [`OrgContext.test.js`](frontend/src/contexts/OrgContext.test.js) covers `storageKey`, `resolveInitialOrgId`, provider API selection, and load-failure state.
 
 ### 3.2 List Workspace Pattern
 - For operational pages (Orders, Fiscal Bills, Products, Users):
@@ -75,7 +86,7 @@
 
 **Route:** `/fiscal-bills/products` — guarded by `FISCAL_MANAGE_PRODUCTS` ([`Products.jsx`](frontend/src/pages/Products.jsx)).
 
-- Organization selector + product table (CRUD, search, bulk actions).
+- Organization selector + product table (CRUD, search, bulk actions). Uses global active org from shell (no page-level org dropdown).
 - **Pull from Shop:** [`productsApi.syncStream`](frontend/src/services/api.js) calls `GET /api/v1/products/sync?mode=AUTO` using `fetch` + ReadableStream (Bearer token in header; not native `EventSource`). Handles `409` via `onConflict` (re-attaches to running job).
 - **Rebuild from Shop:** secondary action calls `GET /api/v1/products/sync?mode=RESET_FULL` after confirmation; restores hidden shop-synced products and refreshes the full catalog.
 - **Sync recovery:** [`SyncContext`](frontend/src/contexts/SyncContext.jsx) polls `GET /products/sync/status` every 2.5s while syncing; `checkSyncStatus` on org change restores in-progress UI after page refresh.

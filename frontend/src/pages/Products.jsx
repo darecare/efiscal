@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
-import { orgsApi, productsApi } from '../services/api'
-import { useAuth } from '../contexts/AuthContext'
+import { productsApi } from '../services/api'
+import { useOrg } from '../contexts/OrgContext'
 import { useSyncContext } from '../contexts/SyncContext'
 
 const PAGE_SIZE = 100
@@ -30,8 +30,7 @@ function formatDateTime(value, dash) {
 
 export default function Products() {
   const { t } = useTranslation()
-  const { user: currentUser } = useAuth()
-  const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
+  const { activeOrgId, activeOrg } = useOrg()
   const {
     syncing,
     syncOrgId,
@@ -44,8 +43,7 @@ export default function Products() {
     checkSyncStatus,
   } = useSyncContext()
 
-  const [orgs, setOrgs] = useState([])
-  const [selectedOrgId, setSelectedOrgId] = useState('')
+
   const [products, setProducts] = useState([])
   const [page, setPage] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
@@ -70,7 +68,7 @@ export default function Products() {
   const headerCheckboxRef = useRef(null)
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
-  const isSyncingThisOrg = syncing && String(syncOrgId) === String(selectedOrgId)
+  const isSyncingThisOrg = syncing && String(syncOrgId) === String(activeOrgId)
   const visibleProductIds = products.map((p) => p.productId)
   const allVisibleSelected = visibleProductIds.length > 0
     && visibleProductIds.every((id) => selectedIds.has(id) || isAllPagesSelected)
@@ -80,9 +78,11 @@ export default function Products() {
   const bulkActionsDisabled = isSyncingThisOrg || bulkActionInFlight
 
   useEffect(() => {
-    const loadOrgs = isSuperAdmin ? orgsApi.list() : orgsApi.myAccess()
-    loadOrgs.then(setOrgs).catch(() => setOrgs([]))
-  }, [isSuperAdmin])
+    setPage(0)
+    setSearchQuery('')
+    setDebouncedQuery('')
+    clearSelection()
+  }, [activeOrgId])
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 300)
@@ -93,17 +93,17 @@ export default function Products() {
     setPage(0)
     setSelectedIds(new Set())
     setIsAllPagesSelected(false)
-  }, [debouncedQuery, selectedOrgId])
+  }, [debouncedQuery, activeOrgId])
 
   useEffect(() => {
-    if (!selectedOrgId) {
+    if (!activeOrgId) {
       setProducts([])
       setTotalCount(0)
       return undefined
     }
     loadProducts()
     return undefined
-  }, [selectedOrgId, page, debouncedQuery])
+  }, [activeOrgId, page, debouncedQuery])
 
   useEffect(() => {
     const el = headerCheckboxRef.current
@@ -112,13 +112,13 @@ export default function Products() {
   }, [someVisibleSelected, allVisibleSelected])
 
   useEffect(() => {
-    if (!selectedOrgId) {
+    if (!activeOrgId) {
       setLastSync(null)
       return undefined
     }
-    const selectedOrgName = orgs.find((o) => String(o.orgId) === String(selectedOrgId))?.name
-    checkSyncStatus(Number(selectedOrgId), selectedOrgName)
-    productsApi.syncStatus(Number(selectedOrgId))
+    const orgName = activeOrg?.name
+    checkSyncStatus(Number(activeOrgId), orgName)
+    productsApi.syncStatus(Number(activeOrgId))
       .then((status) => {
         if (!status.running && status.status === 'DONE' && status.finishedAt) {
           setLastSync({ synced: status.synced, finishedAt: status.finishedAt })
@@ -128,7 +128,7 @@ export default function Products() {
       })
       .catch(() => setLastSync(null))
     return undefined
-  }, [selectedOrgId, checkSyncStatus])
+  }, [activeOrgId, checkSyncStatus])
 
   useEffect(() => {
     if (!success) return undefined
@@ -139,11 +139,11 @@ export default function Products() {
   // Pick up a sync that completed while the user was on another page.
   useEffect(() => {
     if (!syncResult) return
-    if (String(syncResult.orgId) !== String(selectedOrgId)) return
+    if (String(syncResult.orgId) !== String(activeOrgId)) return
     if (syncResult.ok) {
       setPage(0)
       loadProducts(0)
-      productsApi.syncStatus(Number(selectedOrgId))
+      productsApi.syncStatus(Number(activeOrgId))
         .then((status) => {
           if (status.finishedAt) {
             setLastSync({ synced: status.synced, finishedAt: status.finishedAt })
@@ -159,13 +159,13 @@ export default function Products() {
       setError(mapSyncErrorMessage(syncResult.message, t))
     }
     consumeResult()
-  }, [syncResult, selectedOrgId])
+  }, [syncResult, activeOrgId])
 
   useEffect(() => {
     if (!isSyncingThisOrg) return undefined
     const id = setInterval(() => silentRefreshProducts(), SYNC_LIVE_REFRESH_MS)
     return () => clearInterval(id)
-  }, [isSyncingThisOrg, page, debouncedQuery, selectedOrgId])
+  }, [isSyncingThisOrg, page, debouncedQuery, activeOrgId])
 
   function clearSelection() {
     setSelectedIds(new Set())
@@ -210,7 +210,7 @@ export default function Products() {
   }
 
   function handleSelectAllPages() {
-    if (!selectedOrgId) return
+    if (!activeOrgId) return
     setIsAllPagesSelected(true)
   }
 
@@ -221,7 +221,7 @@ export default function Products() {
     try {
       const listParams = { page: currentPage, size: PAGE_SIZE }
       if (debouncedQuery) listParams.q = debouncedQuery
-      const data = await productsApi.list(Number(selectedOrgId), listParams)
+      const data = await productsApi.list(Number(activeOrgId), listParams)
       setProducts(data.items || [])
       setTotalCount(data.totalCount ?? 0)
     } catch (err) {
@@ -233,12 +233,12 @@ export default function Products() {
   }
 
   async function silentRefreshProducts(pageOverride) {
-    if (!selectedOrgId) return
+    if (!activeOrgId) return
     const currentPage = pageOverride ?? page
     try {
       const listParams = { page: currentPage, size: PAGE_SIZE }
       if (debouncedQuery) listParams.q = debouncedQuery
-      const data = await productsApi.list(Number(selectedOrgId), listParams)
+      const data = await productsApi.list(Number(activeOrgId), listParams)
       setProducts(data.items || [])
       setTotalCount(data.totalCount ?? 0)
     } catch {
@@ -287,7 +287,7 @@ export default function Products() {
       setFormError(t('products.invalidPrice'))
       return
     }
-    if (!selectedOrgId) {
+    if (!activeOrgId) {
       setFormError(t('products.selectOrgRequired'))
       return
     }
@@ -304,7 +304,7 @@ export default function Products() {
     setFormError(null)
     try {
       if (modalMode === 'add') {
-        await productsApi.create(Number(selectedOrgId), payload)
+        await productsApi.create(Number(activeOrgId), payload)
       } else {
         await productsApi.update(editId, payload)
       }
@@ -344,8 +344,8 @@ export default function Products() {
     try {
       const bulkOptions = { selectAll: isAllPagesSelected, q: debouncedQuery || undefined }
       const result = isAllPagesSelected
-        ? await productsApi.removeMany(Number(selectedOrgId), [], bulkOptions)
-        : await productsApi.removeMany(Number(selectedOrgId), [...selectedIds], bulkOptions)
+        ? await productsApi.removeMany(Number(activeOrgId), [], bulkOptions)
+        : await productsApi.removeMany(Number(activeOrgId), [...selectedIds], bulkOptions)
       const deleted = result.deleted ?? count
       clearSelection()
       const remaining = totalCount - deleted
@@ -373,8 +373,8 @@ export default function Products() {
     try {
       const bulkOptions = { selectAll: isAllPagesSelected, q: debouncedQuery || undefined }
       const result = isAllPagesSelected
-        ? await productsApi.updateStatusMany(Number(selectedOrgId), [], isActive, bulkOptions)
-        : await productsApi.updateStatusMany(Number(selectedOrgId), [...selectedIds], isActive, bulkOptions)
+        ? await productsApi.updateStatusMany(Number(activeOrgId), [], isActive, bulkOptions)
+        : await productsApi.updateStatusMany(Number(activeOrgId), [...selectedIds], isActive, bulkOptions)
       const updated = result.updated ?? count
       clearSelection()
       await loadProducts()
@@ -393,11 +393,11 @@ export default function Products() {
   }
 
   function handlePullFromShop() {
-    if (!selectedOrgId || isSyncingThisOrg) return
+    if (!activeOrgId || isSyncingThisOrg) return
     setError(null)
-    const orgName = orgs.find((o) => String(o.orgId) === String(selectedOrgId))?.name
+    const orgName = activeOrg?.name
     startSync(
-      Number(selectedOrgId),
+      Number(activeOrgId),
       t('products.pullError'),
       t('products.syncAlreadyRunning'),
       'AUTO',
@@ -406,12 +406,12 @@ export default function Products() {
   }
 
   function handleFullRefresh() {
-    if (!selectedOrgId || isSyncingThisOrg) return
+    if (!activeOrgId || isSyncingThisOrg) return
     if (!window.confirm(t('products.fullRefreshConfirm'))) return
     setError(null)
-    const orgName = orgs.find((o) => String(o.orgId) === String(selectedOrgId))?.name
+    const orgName = activeOrg?.name
     startSync(
-      Number(selectedOrgId),
+      Number(activeOrgId),
       t('products.pullError'),
       t('products.syncAlreadyRunning'),
       'RESET_FULL',
@@ -440,7 +440,7 @@ export default function Products() {
       title={t('products.title')}
       subtitle={t('products.subtitle')}
       actions={
-        selectedOrgId && (
+        activeOrgId && (
           <>
             {isSyncingThisOrg && (
               <button
@@ -474,39 +474,22 @@ export default function Products() {
         )
       }
     >
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <div className="form-group" style={{ maxWidth: 320, marginBottom: 0 }}>
-          <label className="form-label">{t('common.organization')}</label>
-          <select
-            className="form-input"
-            value={selectedOrgId}
-            onChange={(e) => {
-              setSelectedOrgId(e.target.value)
-              setPage(0)
-              setSearchQuery('')
-              setDebouncedQuery('')
-              clearSelection()
-            }}
-          >
-            <option value="">{t('products.selectOrg')}</option>
-            {orgs.map((org) => (
-              <option key={org.orgId} value={org.orgId}>{org.name}</option>
-            ))}
-          </select>
-        </div>
-        {lastSync && !isSyncingThisOrg && (
-          <p className="muted" style={{ marginTop: '0.75rem', marginBottom: 0 }}>
-            {t('products.lastSyncAt', {
-              count: lastSync.synced,
-              time: formatDateTime(lastSync.finishedAt, t('common.dash')),
-            })}
-          </p>
-        )}
-      </div>
-
       {success && <div className="success-banner">{success}</div>}
 
       {error && <div className="error-banner">{error}</div>}
+
+      {!activeOrgId && (
+        <p className="muted org-scope-hint">{t('orgSwitcher.selectPrompt')}</p>
+      )}
+
+      {activeOrgId && lastSync && !isSyncingThisOrg && (
+        <p className="muted" style={{ marginBottom: '1rem' }}>
+          {t('products.lastSyncAt', {
+            count: lastSync.synced,
+            time: formatDateTime(lastSync.finishedAt, t('common.dash')),
+          })}
+        </p>
+      )}
 
       {isSyncingThisOrg && syncProgress && (
         <div className="card sync-progress-card" style={{ marginBottom: '1rem' }}>
@@ -529,9 +512,7 @@ export default function Products() {
       )}
 
       <section className={`table-card products-table-card${hasSelection ? ' products-table-card--has-selection' : ''}`}>
-        {!selectedOrgId ? (
-          <p className="muted">{t('products.selectOrgHint')}</p>
-        ) : (
+        {!activeOrgId ? null : (
           <>
             <div className="products-table-toolbar">
               <div className="products-search-field">

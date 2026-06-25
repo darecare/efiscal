@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
 import { emailTemplatesApi, orgsApi } from '../services/api'
+import { useOrg } from '../contexts/OrgContext'
 
 const emptyForm = {
   orgId: '',
@@ -13,9 +14,9 @@ const emptyForm = {
 
 export default function EmailTemplates() {
   const { t } = useTranslation()
+  const { activeOrgId } = useOrg()
 
   const [orgs, setOrgs] = useState([])
-  const [selectedOrgId, setSelectedOrgId] = useState('')
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -33,12 +34,12 @@ export default function EmailTemplates() {
   }, [])
 
   useEffect(() => {
-    if (!selectedOrgId) {
+    if (!activeOrgId) {
       setTemplates([])
       return
     }
-    loadTemplates(selectedOrgId)
-  }, [selectedOrgId])
+    loadTemplates(activeOrgId)
+  }, [activeOrgId])
 
   useEffect(() => {
     if (!successMsg) return undefined
@@ -59,7 +60,7 @@ export default function EmailTemplates() {
   }
 
   function openAddModal() {
-    setForm({ ...emptyForm, orgId: selectedOrgId })
+    setForm({ ...emptyForm, orgId: activeOrgId })
     setFormError(null)
     setModalMode('add')
     setEditTemplateId(null)
@@ -118,7 +119,7 @@ export default function EmailTemplates() {
         setSuccessMsg(t('emailTemplates.updatedSuccess'))
       }
       setModalOpen(false)
-      await loadTemplates(selectedOrgId || form.orgId)
+      await loadTemplates(activeOrgId || form.orgId)
     } catch (err) {
       setFormError(err?.response?.data?.message || err?.response?.data || t('common.operationFailed'))
     } finally {
@@ -132,7 +133,7 @@ export default function EmailTemplates() {
     try {
       await emailTemplatesApi.remove(template.emailTemplateId)
       setSuccessMsg(t('emailTemplates.deletedSuccess'))
-      await loadTemplates(selectedOrgId)
+      await loadTemplates(activeOrgId)
     } catch (err) {
       setError(err?.response?.data?.message || err?.response?.data || t('common.operationFailed'))
     }
@@ -142,24 +143,14 @@ export default function EmailTemplates() {
     <AppShell
       title={t('emailTemplates.title')}
       subtitle={t('emailTemplates.subtitle')}
-      actions={<button className="primary-button" onClick={openAddModal} disabled={!selectedOrgId}>{t('emailTemplates.addTemplate')}</button>}
+      actions={<button className="primary-button" onClick={openAddModal} disabled={!activeOrgId}>{t('emailTemplates.addTemplate')}</button>}
     >
       {successMsg && <div className="success-banner">{successMsg}</div>}
       {error && <div className="error-banner">{error}</div>}
 
-      <section className="filters-panel">
-        <div className="filter-grid">
-          <div className="field">
-            <label>{t('common.organization')}</label>
-            <select value={selectedOrgId} onChange={(e) => setSelectedOrgId(e.target.value)}>
-              <option value="">{t('common.selectOrgPlaceholder')}</option>
-              {orgs.map((org) => (
-                <option key={org.orgId} value={org.orgId}>{org.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </section>
+      {!activeOrgId && (
+        <p className="muted org-scope-hint">{t('orgSwitcher.selectPrompt')}</p>
+      )}
 
       <section className="table-card">
         {loading ? (

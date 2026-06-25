@@ -14,7 +14,7 @@ alwaysApply: false
 frontend/src/
   pages/          # One file per route/page
   components/     # Shared reusable components
-  contexts/       # AuthContext.jsx, SyncContext.jsx
+  contexts/       # AuthContext.jsx, OrgContext.jsx (+ OrgContext.test.js), SyncContext.jsx
   services/       # api.js — single Axios instance
   locales/        # en.json, sr.json
   i18n/           # index.js — language registration
@@ -27,6 +27,10 @@ frontend/src/
 - Wrap protected pages with `ProtectedRoute`. Wrap action-gated sections with `ActionProtectedRoute` (uses action code, not role name).
 - Show/hide actions and sensitive fields based on role action codes. Never branch on role name strings in UI logic.
 - Respect active client/organization scope — hide or disable actions outside the user's org access.
+- **Global active org:** Operational pages read `activeOrgId` / `activeOrg` from `useOrg()` ([`OrgContext.jsx`](frontend/src/contexts/OrgContext.jsx)). The topbar [`OrganizationSwitcher`](frontend/src/components/AppShell.jsx) is the single org picker for migrated pages; do not add per-page org dropdowns unless the page manages a different scope (e.g. admin assignment forms, ApiConfig connection create, Email Templates modal).
+- **No-org hint:** One banner per page — `<p className="muted org-scope-hint">` with `orgSwitcher.selectPrompt`. No duplicate inner empty-state org prompts.
+- **Org load error:** `OrgContext.error === 'loadFailed'` is surfaced in the header switcher via `orgSwitcher.loadFailed` (not the "no organizations" pill).
+- **OrgContext role check:** Use `isSuperAdmin(user)` from [`permissions.js`](frontend/src/utils/permissions.js) to choose `orgsApi.list()` vs `myAccess()` — do not inline `roleName === 'SUPERADMIN'` in new code.
 - Self-deletion: always disable or hide the delete action for the currently logged-in user.
 
 ## API Client
