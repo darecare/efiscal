@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
 import { fiscalBillApi, orgsApi, productsApi, taxApi } from '../services/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useOrg } from '../contexts/OrgContext'
 import {
   calcPaymentMatchAmount,
   calcTotalAmount,
@@ -48,11 +48,7 @@ function emptyPayment(amount = '') {
 
 export default function CreateFiscalBill() {
   const { t } = useTranslation()
-  const { user: currentUser } = useAuth()
-  const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
-
-  const [orgs, setOrgs] = useState([])
-  const [selectedOrgId, setSelectedOrgId] = useState('')
+  const { activeOrgId, activeOrg } = useOrg()
   const [allowedPaymentTypes, setAllowedPaymentTypes] = useState([])
 
   // Header fields
@@ -89,15 +85,7 @@ export default function CreateFiscalBill() {
   const itemsSectionRef = useRef(null)
   const sidebarSectionRef = useRef(null)
 
-  useEffect(() => {
-    const loadOrgs = isSuperAdmin ? orgsApi.list() : orgsApi.myAccess()
-    loadOrgs.then((list) => {
-      setOrgs(list)
-      if (list.length === 1) {
-        setSelectedOrgId(String(list[0].orgId))
-      }
-    }).catch(() => setOrgs([]))
-  }, [isSuperAdmin])
+  const prevOrgIdRef = useRef(activeOrgId)
 
   useEffect(() => {
     taxApi.list()
@@ -106,19 +94,34 @@ export default function CreateFiscalBill() {
   }, [])
 
   useEffect(() => {
-    if (selectedOrgId) {
-      orgsApi.getPaymentTypes(selectedOrgId)
+    if (prevOrgIdRef.current !== activeOrgId) {
+      prevOrgIdRef.current = activeOrgId
+      setItems([emptyItem()])
+      setPayments([emptyPayment()])
+      setUserModifiedPayment(false)
+      setResult(null)
+      setError(null)
+      setFieldErrors({})
+      setItemErrors({})
+      setPaymentErrors({})
+    }
+  }, [activeOrgId])
+
+  useEffect(() => {
+    if (activeOrgId) {
+      orgsApi.getPaymentTypes(activeOrgId)
         .then(types => {
           setAllowedPaymentTypes(types.length > 0 ? types : PAYMENT_TYPE_VALUES)
         })
         .catch(() => {
           setAllowedPaymentTypes(PAYMENT_TYPE_VALUES)
         })
+    } else {
+      setAllowedPaymentTypes([])
     }
-  }, [selectedOrgId])
+  }, [activeOrgId])
 
-  const selectedOrg = orgs.find(org => String(org.orgId) === String(selectedOrgId))
-  const selectedClientId = selectedOrg?.clientId != null ? String(selectedOrg.clientId) : ''
+  const selectedClientId = activeOrg?.clientId != null ? String(activeOrg.clientId) : ''
 
   function itemsTotal() {
     return items.reduce((sum, i) => sum + (parseFloat(i.totalAmount) || 0), 0).toFixed(2)
@@ -235,7 +238,7 @@ export default function CreateFiscalBill() {
     }
 
     const q = value.trim()
-    if (!selectedOrgId || q.length < 2) {
+    if (!activeOrgId || q.length < 2) {
       patchItem(itemId, { suggestions: [], suggestLoading: false })
       return
     }
@@ -243,7 +246,7 @@ export default function CreateFiscalBill() {
     patchItem(itemId, { suggestLoading: true })
     suggestDebounceRef.current[itemId] = setTimeout(async () => {
       try {
-        const data = await productsApi.search(Number(selectedOrgId), { q })
+        const data = await productsApi.search(Number(activeOrgId), { q })
         setItems((prev) => prev.map((item) => {
           if (item.id !== itemId || item.name.trim() !== q) return item
           return {
@@ -290,7 +293,7 @@ export default function CreateFiscalBill() {
     })
 
     try {
-      const live = await productsApi.lookup(Number(selectedOrgId), {
+      const live = await productsApi.lookup(Number(activeOrgId), {
         sku: product.sku || undefined,
         ean: product.ean || undefined,
       })
@@ -346,8 +349,8 @@ export default function CreateFiscalBill() {
     const nextPaymentErrors = {}
     let globalError = null
 
-    if (!selectedOrgId) {
-      nextFieldErrors.orgId = t('createFiscalBill.selectOrgRequired')
+    if (!activeOrgId) {
+      nextFieldErrors.orgId = t('orgSwitcher.selectPrompt')
       globalError = nextFieldErrors.orgId
     } else if (!selectedClientId) {
       nextFieldErrors.clientId = t('createFiscalBill.orgNotMapped')
@@ -470,7 +473,7 @@ export default function CreateFiscalBill() {
     try {
       const data = await fiscalBillApi.createManual(
         payload, idempotencyKey,
-        Number(selectedOrgId), Number(selectedClientId)
+        Number(activeOrgId), Number(selectedClientId)
       )
       setResult(data)
     } catch (err) {
@@ -591,24 +594,19 @@ export default function CreateFiscalBill() {
           <section className="fiscal-section-card" ref={headerSectionRef}>
             <h3 className="fiscal-section-title">{t('createFiscalBill.header')}</h3>
             <div className="fiscal-header-grid">
-              <div className="fiscal-field">
-                <label className="fiscal-field-label">{t('common.organization')}</label>
-                <select
-                  className={`fiscal-input fiscal-input--select${fieldErrors.orgId ? ' fiscal-input--invalid' : ''}`}
-                  value={selectedOrgId}
-                  onChange={e => setSelectedOrgId(e.target.value)}
-                  aria-invalid={fieldErrors.orgId ? 'true' : undefined}
-                >
-                  <option value="">{t('createFiscalBill.selectOrg')}</option>
-                  {orgs.map(org => (
-                    <option key={org.orgId} value={org.orgId}>{org.name}</option>
-                  ))}
-                </select>
-                {fieldErrors.orgId && <span className="error-text fiscal-error">{fieldErrors.orgId}</span>}
-                {selectedOrgId && !selectedOrg?.clientId && (
-                  <span className="error-text fiscal-error">{fieldErrors.clientId || t('createFiscalBill.noClientMapping')}</span>
-                )}
-              </div>
+              {!activeOrgId && (
+                <p className="muted org-scope-hint fiscal-client-hint" style={{ gridColumn: '1 / -1' }}>
+                  {t('orgSwitcher.selectPrompt')}
+                </p>
+              )}
+              {fieldErrors.orgId && (
+                <p className="error-text fiscal-error" style={{ gridColumn: '1 / -1' }}>{fieldErrors.orgId}</p>
+              )}
+              {activeOrgId && !activeOrg?.clientId && (
+                <p className="error-text fiscal-error" style={{ gridColumn: '1 / -1' }}>
+                  {fieldErrors.clientId || t('createFiscalBill.noClientMapping')}
+                </p>
+              )}
 
               <div className="fiscal-field">
                 <label className="fiscal-field-label">{t('createFiscalBill.invoiceType')}</label>
@@ -710,8 +708,8 @@ export default function CreateFiscalBill() {
                 </div>
               )}
             </div>
-            {selectedOrgId && selectedOrg && (
-              <p className="muted fiscal-client-hint" style={{ marginTop: '1rem' }}>{t('createFiscalBill.clientHint', { name: selectedOrg.clientName || selectedOrg.clientId })}</p>
+            {activeOrgId && activeOrg && (
+              <p className="muted fiscal-client-hint" style={{ marginTop: '1rem' }}>{t('createFiscalBill.clientHint', { name: activeOrg.clientName || activeOrg.clientId })}</p>
             )}
           </section>
 
@@ -749,13 +747,13 @@ export default function CreateFiscalBill() {
                             setTimeout(() => hideSuggestions(item.id), 150)
                           }}
                           placeholder={t('createFiscalBill.searchPlaceholder')}
-                          disabled={!selectedOrgId}
+                          disabled={!activeOrgId}
                           autoComplete="off"
                           aria-autocomplete="list"
                           aria-expanded={item.showSuggestions && item.suggestions.length > 0}
                           aria-invalid={itemErrors[item.id]?.name ? 'true' : undefined}
                         />
-                        {item.showSuggestions && selectedOrgId && item.name.trim().length >= 2 && (
+                        {item.showSuggestions && activeOrgId && item.name.trim().length >= 2 && (
                           <ul className="product-suggest-list" role="listbox">
                             {item.suggestLoading && (
                               <li className="product-suggest-item product-suggest-item--muted">{t('common.loadingDots')}</li>
@@ -785,8 +783,8 @@ export default function CreateFiscalBill() {
                             ))}
                           </ul>
                         )}
-                        {!selectedOrgId && (
-                          <span className="muted fiscal-price-hint">{t('createFiscalBill.selectOrgRequired')}</span>
+                        {!activeOrgId && (
+                          <span className="muted fiscal-price-hint">{t('orgSwitcher.selectPrompt')}</span>
                         )}
                       </div>
                       {itemErrors[item.id]?.name && (

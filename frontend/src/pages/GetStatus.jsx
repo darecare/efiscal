@@ -1,27 +1,24 @@
 import React, { useEffect, useState } from 'react'
 import { useTranslation, Trans } from 'react-i18next'
 import AppShell from '../components/AppShell'
-import { fiscalBillApi, orgsApi } from '../services/api'
-import { useAuth } from '../contexts/AuthContext'
+import { fiscalBillApi } from '../services/api'
+import { useOrg } from '../contexts/OrgContext'
 
 export default function GetStatus() {
   const { t } = useTranslation()
-  const { user: currentUser } = useAuth()
-  const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
+  const { activeOrgId } = useOrg()
 
-  const [orgs, setOrgs] = useState([])
-  const [selectedOrgId, setSelectedOrgId] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    const loadOrgs = isSuperAdmin ? orgsApi.list() : orgsApi.myAccess()
-    loadOrgs.then(setOrgs).catch(() => setOrgs([]))
-  }, [isSuperAdmin])
+    setResult(null)
+    setError(null)
+  }, [activeOrgId])
 
   async function handleGetStatus() {
-    if (!selectedOrgId) {
+    if (!activeOrgId) {
       setError(t('getStatus.selectOrgRequired'))
       return
     }
@@ -29,7 +26,7 @@ export default function GetStatus() {
     setResult(null)
     setError(null)
     try {
-      const data = await fiscalBillApi.getStatus(Number(selectedOrgId))
+      const data = await fiscalBillApi.getStatus(Number(activeOrgId))
       setResult(data)
     } catch (err) {
       const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('getStatus.loadFailed')
@@ -40,26 +37,17 @@ export default function GetStatus() {
   }
 
   const topActions = (
-    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-      <select
-        value={selectedOrgId}
-        onChange={(e) => setSelectedOrgId(e.target.value)}
-        className="form-input"
-        style={{ minWidth: '200px' }}
-      >
-        <option value="">{t('getStatus.selectOrg')}</option>
-        {orgs.map((org) => (
-          <option key={org.orgId} value={org.orgId}>{org.name}</option>
-        ))}
-      </select>
-      <button className="primary-button" onClick={handleGetStatus} disabled={loading}>
-        {loading ? t('common.loading') : t('getStatus.getStatus')}
-      </button>
-    </div>
+    <button className="primary-button" onClick={handleGetStatus} disabled={loading || !activeOrgId}>
+      {loading ? t('common.loading') : t('getStatus.getStatus')}
+    </button>
   )
 
   return (
     <AppShell title={t('getStatus.title')} subtitle={t('getStatus.subtitle')} actions={topActions}>
+      {!activeOrgId && (
+        <p className="muted org-scope-hint">{t('orgSwitcher.selectPrompt')}</p>
+      )}
+
       {error && (
         <div className="error-banner" style={{ marginBottom: '1rem' }}>
           {error}
@@ -120,7 +108,7 @@ export default function GetStatus() {
         </div>
       )}
 
-      {!result && !error && !loading && (
+      {!result && !error && !loading && activeOrgId && (
         <div className="empty-state">
           <p>
             <Trans i18nKey="getStatus.emptyHint" components={{ strong: <strong /> }} />

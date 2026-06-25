@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
-import { fiscalBillApi, ordersApi, orgsApi } from '../services/api'
-import { useAuth } from '../contexts/AuthContext'
+import { fiscalBillApi, ordersApi } from '../services/api'
+import { useOrg } from '../contexts/OrgContext'
 
 const INVOICE_TYPE_VALUES = [0, 4]
 const PAGE_SIZE_OPTIONS = [20, 50, 100]
@@ -10,10 +10,8 @@ const SHIPPING_STATUS_VALUES = ['awaiting', 'in_process', 'shipped', 'delivered'
 
 export default function Orders() {
   const { t } = useTranslation()
-  const { user: currentUser } = useAuth()
+  const { activeOrgId, activeOrg } = useOrg()
 
-  const [orgs, setOrgs] = useState([])
-  const [selectedOrgId, setSelectedOrgId] = useState('')
   const [createdAfter, setCreatedAfter] = useState('')
   const [shippingStatus, setShippingStatus] = useState('awaiting')
 
@@ -42,15 +40,16 @@ export default function Orders() {
   const [fiscalError, setFiscalError] = useState(null)
   const [fiscalSubmitting, setFiscalSubmitting] = useState(false)
 
-  // Load accessible orgs on mount
   useEffect(() => {
-    orgsApi.myAccess()
-      .then((list) => {
-        setOrgs(list)
-        if (list.length === 1) setSelectedOrgId(String(list[0].orgId))
-      })
-      .catch(() => setOrgs([]))
-  }, [])
+    setOrders([])
+    setTotalRecords(0)
+    setHasFetched(false)
+    setCurrentPage(1)
+    setExpandedOrderIds(new Set())
+    setSelectedOrderIds(new Set())
+    setFiscalByOrderId({})
+    setError(null)
+  }, [activeOrgId])
 
   function toggleExpand(orderId) {
     setExpandedOrderIds((prev) => {
@@ -85,7 +84,7 @@ export default function Orders() {
   }
 
   async function fetchPage(page) {
-    if (!selectedOrgId) { setError(t('orders.selectOrgFirst')); return }
+    if (!activeOrgId) { setError(t('orders.selectOrgFirst')); return }
     setError(null)
     setLoading(true)
     setHasFetched(true)
@@ -94,7 +93,7 @@ export default function Orders() {
     const start = (page - 1) * limit
     try {
       const result = await ordersApi.fetch({
-        orgId: Number(selectedOrgId),
+        orgId: Number(activeOrgId),
         createdAfter,
         shippingStatus,
         start,
@@ -149,7 +148,7 @@ export default function Orders() {
 
   async function submitFiscalBill() {
     const ordersToSubmit = fiscalModal?.orders || []
-    const selectedOrg = orgs.find(o => String(o.orgId) === String(selectedOrgId))
+    const selectedOrg = activeOrg
     if (!selectedOrg || !selectedOrg.clientId) {
       setFiscalError(t('orders.noOrgClient'))
       return
@@ -218,7 +217,7 @@ export default function Orders() {
       try {
         const created = await fiscalBillApi.createFromOrder(
           payload, createIdempotencyKey(),
-          Number(selectedOrgId), Number(clientId)
+          Number(activeOrgId), Number(clientId)
         )
         nextFiscalState[order.id] = {
           fiscalbillId: created.fiscalbillId,
@@ -276,19 +275,6 @@ export default function Orders() {
       <form className="filters-panel" onSubmit={handleFetch}>
         <div className="filter-grid">
           <label className="field">
-            <span>{t('orders.organization')}</span>
-            <select
-              value={selectedOrgId}
-              onChange={(e) => setSelectedOrgId(e.target.value)}
-              required
-            >
-              <option value="">{t('common.selectOrgPlaceholder')}</option>
-              {orgs.map((o) => (
-                <option key={o.orgId} value={o.orgId}>{o.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
             <span>{t('orders.dateFrom')}</span>
             <input
               type="date"
@@ -321,7 +307,7 @@ export default function Orders() {
           </label>
         </div>
         <div className="inline-actions">
-          <button className="primary-button" type="submit" disabled={loading}>
+          <button className="primary-button" type="submit" disabled={loading || !activeOrgId}>
             {loading ? t('orders.fetching') : t('orders.fetchOrders')}
           </button>
           {selectedOrderIds.size > 0 && (
@@ -336,6 +322,10 @@ export default function Orders() {
           {hasFetched && <span className="badge">{t('common.counts.records', { count: totalRecords })}</span>}
         </div>
       </form>
+
+      {!activeOrgId && (
+        <p className="muted org-scope-hint">{t('orgSwitcher.selectPrompt')}</p>
+      )}
 
       {error && <div className="error-banner">{error}</div>}
 

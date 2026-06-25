@@ -1,13 +1,15 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import i18next from 'i18next'
-import { orgsApi, productsApi } from '../services/api'
+import { productsApi } from '../services/api'
 import { useAuth } from './AuthContext'
+import { useOrg } from './OrgContext'
 
 const SyncContext = createContext(null)
 const POLL_MS = 2500
 
 export function SyncProvider({ children }) {
   const { user } = useAuth()
+  const { orgs } = useOrg()
   const [syncOrgId, setSyncOrgId] = useState(null)
   const [syncOrgName, setSyncOrgName] = useState(null)
   const [syncing, setSyncing] = useState(false)
@@ -97,25 +99,25 @@ export function SyncProvider({ children }) {
   // On login / app reload: scan all accessible orgs for a running sync and
   // auto-recover the indicator without requiring the user to open Products first.
   useEffect(() => {
-    if (!user) return
-    const fetchOrgs = user.roleName === 'SUPERADMIN' ? orgsApi.list() : orgsApi.myAccess()
-    fetchOrgs
-      .then(async (orgs) => {
-        for (const org of orgs) {
-          try {
-            const status = await productsApi.syncStatus(org.orgId)
-            if (status.running) {
-              applyRunningStatus(org.orgId, status, org.name)
-              startPolling(org.orgId)
-              break
-            }
-          } catch {
-            /* skip org on error */
+    if (!user || orgs.length === 0) return
+    let cancelled = false
+    ;(async () => {
+      for (const org of orgs) {
+        if (cancelled) return
+        try {
+          const status = await productsApi.syncStatus(org.orgId)
+          if (status.running) {
+            applyRunningStatus(org.orgId, status, org.name)
+            startPolling(org.orgId)
+            break
           }
+        } catch {
+          /* skip org on error */
         }
-      })
-      .catch(() => {})
-  }, [user, applyRunningStatus, startPolling])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [user, orgs, applyRunningStatus, startPolling])
 
   const startSync = useCallback((orgId, failedMessage, alreadyRunningMessage, mode = 'AUTO', orgName) => {
     if (syncing && syncOrgId === orgId) return

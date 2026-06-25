@@ -37,6 +37,7 @@
     "language": "Jezik",
     "noPreference": "Bez podešavanja (koristi sistemski/jezik pregledača)",
     "selectOrgPlaceholder": "— Izaberite organizaciju —",
+    "noOrganizationSelected": "Izaberite organizaciju u zaglavlju da biste nastavili.",
     "selectClientPlaceholder": "— Izaberite klijenta —",
     "selectRolePlaceholder": "— Izaberite ulogu —",
     "selectAllPlaceholder": "— Sve —",
@@ -89,6 +90,14 @@
       "templates_few": "{{count}} šablona",
       "templates_other": "{{count}} šablona"
     }
+  },
+  "orgSwitcher": {
+    "label": "Organizacija",
+    "triggerAriaLabel": "Izaberite aktivnu organizaciju",
+    "menuAriaLabel": "Organizacije",
+    "noOrganizations": "Nema organizacija",
+    "loadFailed": "Učitavanje nije uspelo",
+    "selectPrompt": "Izaberite organizaciju u zaglavlju da biste koristili ovu stranicu."
   },
   "nav": {
     "brand": "eFiscal",
@@ -444,7 +453,7 @@
     "loadFiscalBills": "Učitaj fiskalne račune",
     "recordsBadgeFiltered": "{{shown}} od {{total}} zapisa",
     "listTitle": "Lista fiskalnih računa",
-    "selectOrgPrompt": "Izaberite organizaciju i učitajte fiskalne račune.",
+    "selectOrgPrompt": "Kliknite Učitaj da preuzmete fiskalne račune za izabranu organizaciju.",
     "noBillsForOrg": "Nema fiskalnih računa za izabranu organizaciju.",
     "noBillsMatchFilters": "Nema fiskalnih računa koji odgovaraju filterima.",
     "action": "Akcija",

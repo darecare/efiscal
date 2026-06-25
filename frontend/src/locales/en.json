@@ -37,6 +37,7 @@
     "language": "Language",
     "noPreference": "No preference (use system/browser default)",
     "selectOrgPlaceholder": "— Select organization —",
+    "noOrganizationSelected": "Select an organization in the header to continue.",
     "selectClientPlaceholder": "— Select client —",
     "selectRolePlaceholder": "— Select role —",
     "selectAllPlaceholder": "— All —",
@@ -80,6 +81,14 @@
       "templates_one": "{{count}} template",
       "templates_other": "{{count}} templates"
     }
+  },
+  "orgSwitcher": {
+    "label": "Organization",
+    "triggerAriaLabel": "Select active organization",
+    "menuAriaLabel": "Organizations",
+    "noOrganizations": "No organizations",
+    "loadFailed": "Failed to load",
+    "selectPrompt": "Select an organization in the header to use this page."
   },
   "nav": {
     "brand": "eFiscal",
@@ -435,7 +444,7 @@
     "loadFiscalBills": "Load Fiscal Bills",
     "recordsBadgeFiltered": "{{shown}} of {{total}} records",
     "listTitle": "Fiscal Bill List",
-    "selectOrgPrompt": "Select an organization and load fiscal bills.",
+    "selectOrgPrompt": "Click Load to fetch fiscal bills for the selected organization.",
     "noBillsForOrg": "No fiscal bills found for the selected organization.",
     "noBillsMatchFilters": "No fiscal bills match the current filters.",
     "action": "Action",
