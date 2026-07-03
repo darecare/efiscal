@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from 'i18next'
 import AppShell from '../components/AppShell'
-import { fiscalBillApi, orgsApi } from '../services/api'
-import { useAuth } from '../contexts/AuthContext'
+import { fiscalBillApi } from '../services/api'
+import { useOrg } from '../contexts/OrgContext'
 import { DateRangePicker } from 'react-date-range'
 import { enUS, srLatn } from 'date-fns/locale'
 import 'react-date-range/dist/styles.css'
@@ -15,11 +15,8 @@ const PAYMENT_TYPE_VALUES = [0, 1, 2, 3, 4, 5, 6]
 
 export default function FiscalBills() {
   const { t } = useTranslation()
-  const { user: currentUser } = useAuth()
-  const isSuperAdmin = currentUser?.roleName === 'SUPERADMIN'
+  const { activeOrgId } = useOrg()
 
-  const [orgs, setOrgs] = useState([])
-  const [selectedOrgId, setSelectedOrgId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [fiscalBills, setFiscalBills] = useState([])
@@ -80,20 +77,20 @@ export default function FiscalBills() {
   }, [])
 
   useEffect(() => {
-    const loadOrgs = isSuperAdmin ? orgsApi.list() : orgsApi.myAccess()
-    loadOrgs
-      .then((list) => {
-        setOrgs(list)
-        if (list.length === 1) {
-          setSelectedOrgId(String(list[0].orgId))
-        }
-      })
-      .catch(() => setOrgs([]))
-  }, [isSuperAdmin])
+    setFiscalBills([])
+    setHasFetched(false)
+    setTablePage(1)
+    setDetails(null)
+    setDetailsError(null)
+    setSelectedFiscalBillId('')
+    setIsDetailsModalOpen(false)
+    setError(null)
+    setSuccessMsg('')
+  }, [activeOrgId])
 
   async function handleLoadFiscalBills(e) {
     if (e) e.preventDefault()
-    if (!selectedOrgId) {
+    if (!activeOrgId) {
       setError(t('fiscalBills.selectOrgRequired'))
       return
     }
@@ -106,7 +103,7 @@ export default function FiscalBills() {
     setSelectedFiscalBillId('')
     setHasFetched(true)
     try {
-      const data = await fiscalBillApi.list(Number(selectedOrgId))
+      const data = await fiscalBillApi.list(Number(activeOrgId))
       setFiscalBills(data)
     } catch (err) {
       const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('fiscalBills.loadFailed')
@@ -375,19 +372,6 @@ export default function FiscalBills() {
 
       <form className="filters-panel" onSubmit={handleLoadFiscalBills} style={{ marginBottom: '1rem' }}>
         <div className="filter-grid">
-          <label className="field">
-            <span>{t('common.organization')}</span>
-            <select
-              value={selectedOrgId}
-              onChange={(e) => setSelectedOrgId(e.target.value)}
-              required
-            >
-              <option value="">{t('common.selectOrgPlaceholder')}</option>
-              {orgs.map((org) => (
-                <option key={org.orgId} value={org.orgId}>{org.name}</option>
-              ))}
-            </select>
-          </label>
           <label className="field fiscal-date-range-field" ref={dateRangeFieldRef}>
             <span>{t('fiscalBills.taDateRange')}</span>
             <button
@@ -468,7 +452,7 @@ export default function FiscalBills() {
           </label>
         </div>
         <div className="inline-actions">
-          <button className="primary-button" type="submit" disabled={loading}>
+          <button className="primary-button" type="submit" disabled={loading || !activeOrgId}>
             {loading ? t('common.loading') : t('fiscalBills.loadFiscalBills')}
           </button>
           {hasFetched && (
@@ -481,9 +465,13 @@ export default function FiscalBills() {
         </div>
       </form>
 
+      {!activeOrgId && (
+        <p className="muted org-scope-hint">{t('orgSwitcher.selectPrompt')}</p>
+      )}
+
       <div className="card" style={{ marginBottom: '1rem' }}>
         <h3 style={{ marginBottom: '0.75rem' }}>{t('fiscalBills.listTitle')}</h3>
-        {!hasFetched ? (
+        {!activeOrgId ? null : !hasFetched ? (
           <div className="empty-state">
             <p>{t('fiscalBills.selectOrgPrompt')}</p>
           </div>

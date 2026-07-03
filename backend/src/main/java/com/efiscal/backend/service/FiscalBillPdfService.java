@@ -69,6 +69,8 @@ public class FiscalBillPdfService {
             FiscalBillPayRepository fiscalBillPayRepository,
             OrgRepository orgRepository,
             TaxRepository taxRepository) {
+            OrgRepository orgRepository,
+            TaxRepository taxRepository) {
         this.fiscalBillRepository = fiscalBillRepository;
         this.fiscalBillLineRepository = fiscalBillLineRepository;
         this.fiscalBillTaxRepository = fiscalBillTaxRepository;
@@ -88,12 +90,14 @@ public class FiscalBillPdfService {
         List<FiscalBillLineEntity> lines = fiscalBillLineRepository.findByFiscalbillId(fiscalBillId);
         List<FiscalBillTaxEntity> taxes = fiscalBillTaxRepository.findByFiscalbillId(fiscalBillId);
         List<FiscalBillPayEntity> payments = fiscalBillPayRepository.findByFiscalbillId(fiscalBillId);
+        OrgEntity org = bill.getOrgId() != null ? orgRepository.findById(bill.getOrgId()).orElse(null) : null;
 
         String template = readTemplate(resolveTemplatePath(format));
-        return renderTemplate(template, bill, lines, taxes, payments);
-    }
+        String html = renderTemplate(template, bill, lines, taxes, payments, org);
+        return html;
+        }
 
-    public byte[] generatePdf(Long fiscalBillId, PdfTemplateFormat format) {
+        public byte[] generatePdf(Long fiscalBillId, PdfTemplateFormat format) {
         String html = generateHtml(fiscalBillId, format);
 
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -211,7 +215,8 @@ public class FiscalBillPdfService {
             FiscalBillEntity bill,
             List<FiscalBillLineEntity> lines,
             List<FiscalBillTaxEntity> taxes,
-            List<FiscalBillPayEntity> payments) {
+            List<FiscalBillPayEntity> payments,
+            OrgEntity org) {
 
         BigDecimal totalTax = taxes.stream()
                 .map(FiscalBillTaxEntity::getAmount)
@@ -220,7 +225,6 @@ public class FiscalBillPdfService {
         Map<String, String> taxNameByLabel = resolveTaxNameByLabel(taxes);
 
         String html = template;
-        OrgEntity org = orgRepository.findById(bill.getOrgId()).orElse(null);
         html = replace(html, "{{BUSINESS_NAME}}", safe(bill.getEfiscalBusinessname()));
         html = replace(html, "{{BUSINESS_ADDRESS}}", safe(bill.getEfiscalAddress()));
         html = replace(html, "{{BUSINESS_TIN}}", safe(bill.getEfiscalTin()));
@@ -240,6 +244,15 @@ public class FiscalBillPdfService {
         html = html.replace("{{LINE_ITEMS_ROWS}}", renderLineRows(lines));
         html = html.replace("{{TAX_ROWS}}", renderTaxRows(taxes, taxNameByLabel));
         html = html.replace("{{PAYMENT_ROWS}}", renderPaymentRows(payments));
+
+        // Advertisement block — rendered as raw HTML (not escaped) only when org has it enabled
+        String adBlock = "";
+        if (org != null && org.isAdvertisementEnabled()
+                && org.getAdvertisementHtml() != null && !org.getAdvertisementHtml().isBlank()) {
+            adBlock = org.getAdvertisementHtml();
+        }
+        html = html.replace("{{ADVERTISEMENT_BLOCK}}", adBlock);
+
         return html;
     }
 

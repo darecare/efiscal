@@ -31,6 +31,7 @@ Represents authenticated users of the eFiscal application.
 | deleted_at     | TIMESTAMPTZ  | NULL                     | Soft delete                   |
 | preferred_language | VARCHAR(10) | NULL                  | UI locale: `en`, `sr`, or NULL (browser default) |
 | full_name      | VARCHAR(255) | NOT NULL                 | Display name                  |
+| cashier        | VARCHAR(255) | NULL                     | Cashier name/code injected into the Tax Authority CREATE_INVOICE call when non-null |
 
 Rules:
 - Bootstrap SuperAdmin may have NULL subscription dates and is not blocked by expiration checks.
@@ -77,6 +78,8 @@ On Organization level is defined connection to mail server. From this mail addre
 | smtp_password  | VARCHAR(255) | NULL                     | SMTP authentication password (sensitive) |
 | smtp_connection_security | VARCHAR(20) | NULL            | Allowed: `STARTTLS`, `SSL_TLS` |
 | logo_image     | TEXT         | NULL                     | Optional organization logo (typically Data URL image) |
+| advertisement_html     | TEXT         | NULL                     | HTML content rendered on fiscal bill PDFs when advertisement is enabled |
+| advertisement_enabled  | BOOLEAN      | NOT NULL, DEFAULT FALSE  | Toggle for rendering the advertisement block on PDFs |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | deleted_at     | TIMESTAMPTZ  | NULL                     | Soft delete                   |

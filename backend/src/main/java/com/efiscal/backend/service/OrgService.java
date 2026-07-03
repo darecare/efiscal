@@ -93,6 +93,8 @@ public class OrgService {
         org.setSmtpPassword(normalizeOptional(req.smtpPassword()));
         org.setSmtpConnectionSecurity(validateAndNormalizeSmtpConnectionSecurity(req.smtpConnectionSecurity()));
         org.setLogoImage(validateAndNormalizeLogoImage(req.logoImage()));
+        org.setAdvertisementHtml(normalizeOptional(req.advertisementHtml()));
+        org.setAdvertisementEnabled(req.advertisementEnabled() != null && req.advertisementEnabled());
         return toDto(orgRepository.save(org));
     }
 
@@ -127,6 +129,8 @@ public class OrgService {
             org.setSmtpConnectionSecurity(validateAndNormalizeSmtpConnectionSecurity(req.smtpConnectionSecurity()));
         }
         if (req.logoImage() != null) org.setLogoImage(validateAndNormalizeLogoImage(req.logoImage()));
+        if (req.advertisementHtml() != null) org.setAdvertisementHtml(normalizeOptional(req.advertisementHtml()));
+        if (req.advertisementEnabled() != null) org.setAdvertisementEnabled(req.advertisementEnabled());
         return toDto(orgRepository.save(org));
     }
 
@@ -187,7 +191,12 @@ public class OrgService {
             o.getSmtpUsername(),
             o.getSmtpConnectionSecurity(),
             o.getLogoImage(),
-            o.getCreatedAt()
+            o.getCreatedAt(),
+            o.getAdvertisementHtml(),
+            o.isAdvertisementEnabled()
+            o.getLogoImage(),
+            o.getAdvertisementHtml(),
+            o.isAdvertisementEnabled()
         );
     }
 
@@ -245,9 +254,11 @@ public class OrgService {
         String emailFrom,
         String smtpUsername,
         String smtpConnectionSecurity,
+        OffsetDateTime createdAt,
         @Size(max = 2097152, message = "Organization logo image payload must not exceed 2MB")
         String logoImage,
-        OffsetDateTime createdAt
+        String advertisementHtml,
+        boolean advertisementEnabled
     ) {}
 
     public record CreateOrgRequest(
@@ -290,7 +301,10 @@ public class OrgService {
         String smtpConnectionSecurity,
 
         @Size(max = 2097152, message = "Organization logo image payload must not exceed 2MB")
-        String logoImage
+        String logoImage,
+
+        String advertisementHtml,
+        Boolean advertisementEnabled
     ) {}
 
     public record UpdateOrgRequest(
@@ -328,6 +342,9 @@ public class OrgService {
         String smtpConnectionSecurity,
 
         @Size(max = 2097152, message = "Organization logo image payload must not exceed 2MB")
-        String logoImage
+        String logoImage,
+
+        String advertisementHtml,
+        Boolean advertisementEnabled
     ) {}
 }

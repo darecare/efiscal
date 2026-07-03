@@ -2,10 +2,116 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
+import { useOrg } from '../contexts/OrgContext'
 import { useSyncContext } from '../contexts/SyncContext'
 import { hasAction, hasAnyAction } from '../utils/permissions'
 import { appInfoApi, usersApi } from '../services/api'
 import i18n from '../i18n'
+
+function OrganizationSwitcher() {
+  const { t } = useTranslation()
+  const { orgs, activeOrgId, activeOrg, loading, error, setActiveOrgId } = useOrg()
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onPointerDown = (e) => {
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false)
+    }
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  function selectOrg(orgId) {
+    setActiveOrgId(orgId)
+    setOpen(false)
+  }
+
+  if (loading && orgs.length === 0) {
+    return (
+      <div className="org-switcher">
+        <span className="org-switcher__label">{t('orgSwitcher.label')}</span>
+        <span className="org-switcher__pill org-switcher__pill--muted">{t('common.loading')}</span>
+      </div>
+    )
+  }
+
+  if (orgs.length === 0 && error) {
+    return (
+      <div className="org-switcher">
+        <span className="org-switcher__label">{t('orgSwitcher.label')}</span>
+        <span className="org-switcher__pill org-switcher__pill--error">{t('orgSwitcher.loadFailed')}</span>
+      </div>
+    )
+  }
+
+  if (orgs.length === 0) {
+    return (
+      <div className="org-switcher">
+        <span className="org-switcher__label">{t('orgSwitcher.label')}</span>
+        <span className="org-switcher__pill org-switcher__pill--muted">{t('orgSwitcher.noOrganizations')}</span>
+      </div>
+    )
+  }
+
+  if (orgs.length === 1) {
+    return (
+      <div className="org-switcher">
+        <span className="org-switcher__label">{t('orgSwitcher.label')}</span>
+        <span className="org-switcher__pill">{activeOrg?.name ?? orgs[0].name}</span>
+      </div>
+    )
+  }
+
+  const displayName = activeOrg?.name ?? t('common.selectOrgPlaceholder')
+
+  return (
+    <div className="org-switcher" ref={rootRef}>
+      <span className="org-switcher__label">{t('orgSwitcher.label')}</span>
+      <div className="org-switcher__control">
+        <button
+          type="button"
+          className="org-switcher__trigger"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-label={t('orgSwitcher.triggerAriaLabel')}
+        >
+          <span className="org-switcher__value">{displayName}</span>
+          <span className="org-switcher__chevron" aria-hidden="true" />
+        </button>
+        {open && (
+          <ul className="org-switcher__menu" role="listbox" aria-label={t('orgSwitcher.menuAriaLabel')}>
+            {orgs.map((org) => {
+              const isActive = String(org.orgId) === String(activeOrgId)
+              return (
+                <li key={org.orgId} role="presentation">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isActive}
+                    className={`org-switcher__option${isActive ? ' is-active' : ''}`}
+                    onClick={() => selectOrg(org.orgId)}
+                  >
+                    {org.name}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function LanguageSwitcher() {
   const { t } = useTranslation()
@@ -116,7 +222,7 @@ function HelpMenu({ onAbout }) {
         aria-haspopup="menu"
         aria-label={t('about.menuLabel')}
       >
-        i
+        {t('about.triggerLabel')}
       </button>
       {open && (
         <div className="help-menu__menu" role="menu" aria-label={t('about.menuLabel')}>
@@ -244,6 +350,7 @@ export default function AppShell({ title, subtitle, actions, children }) {
                   : t('products.pulling')}
             </span>
           )}
+          <OrganizationSwitcher />
           <LanguageSwitcher />
           <HelpMenu onAbout={openAbout} />
           <span className="badge">{user?.roleName}</span>

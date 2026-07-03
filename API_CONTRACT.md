@@ -520,10 +520,12 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
     "subscriptionExpiresAt": "2026-12-31T23:59:59Z",
     "isActive": true,
     "orgIds": [1002, 1003],
-    "preferredLanguage": "sr"
+    "preferredLanguage": "sr",
+    "cashier": "Marko M."
   }
 ]
 ```
+- `cashier` is nullable. When non-null, it is included as the `cashier` field in the Tax Authority `CREATE_INVOICE` call for fiscal bills issued by this user.
 - Errors: `401`, `403`, `500`
 
 ### PATCH /users/me/language
@@ -557,10 +559,12 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   "subscriptionStartAt": "2026-01-01T00:00:00Z",
   "subscriptionExpiresAt": "2026-12-31T23:59:59Z",
   "orgIds": [1002, 1003],
-  "preferredLanguage": "sr"
+  "preferredLanguage": "sr",
+  "cashier": "Marko M."
 }
 ```
 - `preferredLanguage` is optional; when omitted or null, the user has no stored preference (browser/local default applies until they choose a language in the UI).
+- `cashier` is optional/nullable; when non-null it is injected into Tax Authority invoice calls issued by this user.
 - 201 Response: Created user object matching the shape above.
 - Errors: `400`, `401`, `403`, `409` (email in use), `500`
 
@@ -578,7 +582,8 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   "isActive": true,
   "newPassword": "NewPassword123!",
   "orgIds": [1002, 1003],
-  "preferredLanguage": "en"
+  "preferredLanguage": "en",
+  "cashier": "Marko M."
 }
 ```
 - 200 Response: Updated user object.
@@ -633,13 +638,16 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
     "smtpUsername": "smtp-user",
     "smtpConnectionSecurity": "STARTTLS",
     "logoImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
-    "createdAt": "2026-03-24T10:00:00Z"
+    "createdAt": "2026-03-24T10:00:00Z",
+    "advertisementHtml": "<p>Special offer!</p>",
+    "advertisementEnabled": false
   }
 ]
 ```
 - Notes:
   - `smtpPassword` is write-only and is never returned in API responses.
   - `logoImage` is optional and, when present, should be a Data URL image string.
+  - `advertisementHtml` is nullable; when non-null and `advertisementEnabled` is `true`, the HTML is injected into the `{{ADVERTISEMENT_BLOCK}}` placeholder in generated PDFs.
 - Errors: `401`, `403`, `500`
 
 ### GET /orgs/{orgId}
@@ -746,6 +754,60 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 - Description: Soft-delete an email template.
 - 204 Response: No Content
 - Errors: `401`, `403`, `404`, `500`
+
+## 5F. Fiscal Bill Endpoints
+
+### POST /fiscalbill/manual
+- Description: Create a manual fiscal bill (spec 4.2).
+- Auth: `FISCAL_CREATE_BILL` action required; valid org scope.
+- Headers: `Idempotency-Key: <uuid>` (required on all calls to prevent duplicates).
+- Query: `orgId` (required), `clientId` (required).
+- Request:
+```json
+{
+  "orderId": "12345",
+  "customerName": "Acme d.o.o.",
+  "customerEmail": "customer@example.com",
+  "sendEmail": false,
+  "invoiceType": 0,
+  "transactionType": 0,
+  "buyerType": "10",
+  "buyerVat": "101234567",
+  "referentDocumentNumber": null,
+  "items": [
+    {
+      "name": "Product A",
+      "quantity": 1,
+      "unitPrice": 1200.00,
+      "totalAmount": 1200.00,
+      "taxLabel": "A",
+      "taxPrefix": "20",
+      "gtin": null,
+      "productId": null,
+      "sku": "SKU-001"
+    }
+  ],
+  "payments": [
+    { "paymentType": 1, "amount": 1200.00 }
+  ]
+}
+```
+- `invoiceType` values: `0` = Normal, `2` = Copy, `4` = Advance.
+- `transactionType` values: `0` = Sale, `1` = Refund.
+- `referentDocumentNumber` (optional, nullable): Reference document number for Copy, Refund, chained Advance, or close-advance flows. When provided, the backend looks up the referenced fiscal bill in the same organization by Tax Authority invoice number (`efiscal_sdc_invoiceno`) and populates both `referentDocumentNumber` and `referentDocumentDT` in the Tax Authority request. Returns `400` if the referenced bill is not found or is missing datetime.
+- `orderId` (optional, nullable): When provided, the backend applies **order-linked fiscal-chain checks** scoped to `orgId`: duplicate protection for the same `orderId` + `invoiceType` + `transactionType`, advance-close chain (Normal Sale after prior Advance Sale bills), and automatic referent-field resolution when `referentDocumentNumber` is omitted. Does **not** fetch or validate MerchantPro order data; use `POST /fiscalbill/from-order` for full order-based fiscalization.
+- Payment total validation: sum of `payments[].amount` must equal sum of `items[].totalAmount` (tolerance `0.01`). Each payment amount must be positive. Returns `400` with message `Payment total does not match fiscal bill total` on mismatch.
+- `cashier` is not sent by the client; it is resolved server-side from the authenticated user's `cashier` field.
+- 201 Response:
+```json
+{
+  "fiscalbillId": 5001,
+  "status": "SUCCESS",
+  "sdcInvoiceNumber": "ABCD1234-ABCD1234-12345",
+  "lastError": null
+}
+```
+- Errors: `400` (validation: payment total mismatch, missing line items, invalid referent document, missing tax labels), `401`, `403`, `409` (duplicate bill for order or Idempotency-Key conflict), `502` (Tax Authority failure; response body may include fiscal bill with `status: FAILED`), `500`
 
 ## 6. Error Model
 All non-2xx responses should follow:

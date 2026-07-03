@@ -102,6 +102,7 @@ public class UserManagementService {
         user.setSubscriptionStartAt(req.subscriptionStartAt());
         user.setSubscriptionExpiresAt(req.subscriptionExpiresAt());
         user.setPreferredLanguage(normalizePreferredLanguage(req.preferredLanguage()));
+        user.setCashier(normalizeOptional(req.cashier()));
         user.setActive(true);
         AppUserEntity savedUser = userRepository.save(user);
 
@@ -145,6 +146,7 @@ public class UserManagementService {
             user.setPasswordHash(passwordEncoder.encode(req.newPassword()));
         }
         user.setPreferredLanguage(normalizePreferredLanguage(req.preferredLanguage()));
+        user.setCashier(normalizeOptional(req.cashier()));
 
         Long targetClientId = user.getClient().getClientId();
         if (req.clientId() != null) {
@@ -216,6 +218,13 @@ public class UserManagementService {
         return preferredLanguage.trim();
     }
 
+    private static String normalizeOptional(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
     private void validateRoleScope(RoleEntity role, Long targetClientId, boolean isSuperAdmin) {
         if (role.getClient() != null && !role.getClient().getClientId().equals(targetClientId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot assign a role belonging to another client");
@@ -243,7 +252,8 @@ public class UserManagementService {
             u.getSubscriptionExpiresAt(),
             u.isActive(),
             orgIds,
-            u.getPreferredLanguage()
+            u.getPreferredLanguage(),
+            u.getCashier()
         );
     }
 
@@ -261,7 +271,8 @@ public class UserManagementService {
         OffsetDateTime subscriptionExpiresAt,
         boolean isActive,
         List<Long> orgIds,
-        String preferredLanguage
+        String preferredLanguage,
+        String cashier
     ) {}
 
     public record CreateUserRequest(
@@ -290,7 +301,8 @@ public class UserManagementService {
         OffsetDateTime subscriptionStartAt,
         OffsetDateTime subscriptionExpiresAt,
         List<Long> orgIds,
-        String preferredLanguage
+        String preferredLanguage,
+        String cashier
     ) {}
 
     public record UpdateUserRequest(
@@ -310,7 +322,10 @@ public class UserManagementService {
         @Size(max = 100, message = "Password must not exceed 100 characters")
         String newPassword,
         List<Long> orgIds,
-        String preferredLanguage
+        String preferredLanguage,
+
+        @Size(max = 255, message = "Cashier must not exceed 255 characters")
+        String cashier
     ) {}
 
     public record UpdateMyLanguageRequest(
