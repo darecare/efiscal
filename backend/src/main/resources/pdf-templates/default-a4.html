@@ -10,7 +10,7 @@
     }
 
     body {
-      font-family: "DejaVu Sans", "Roboto", Arial, sans-serif;
+      font-family: "Roboto", "DejaVu Sans", Arial, sans-serif;
       font-size: 12px;
       color: #111;
       margin: 0;
@@ -198,17 +198,34 @@
       border-bottom: 1px dotted #ddd;
     }
 
+    .item-gtin {
+      font-size: 10px;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    .line-items-total td {
+      border-top: 2px solid #333;
+      border-bottom: none;
+      font-weight: 700;
+      padding-top: 4px;
+    }
+
     .muted {
       color: #777;
       text-align: center;
       font-style: italic;
     }
 
+    .items-table{
+      margin-top: 1rem;
+    }
+
     .tax-payment-grid {
       display: table;
       width: 100%;
       table-layout: fixed;
-      margin-top: 8px;
+      margin-top: 3rem;
     }
 
     .tax-payment-col {
@@ -328,11 +345,18 @@
       </div>
     
     <!-- <div class="section-title">Artikli</div> -->
-    <table>
+    <table class="items-table">
+      <colgroup>
+        <col style="width: auto;" />
+        <col style="width: 7%;" />
+        <col style="width: 14%;" />
+        <col style="width: 8%;" />
+        <col style="width: 14%;" />
+      </colgroup>
       <thead>
         <tr>
           <th>Naziv</th>
-          <th>Oznaka</th>
+          <th>Ozn.</th>
           <th class="num">Jed. cena</th>
           <th class="num">Kol.</th>
           <th class="num">Ukupno</th>

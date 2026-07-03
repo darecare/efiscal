@@ -130,6 +130,27 @@ public class FiscalBillPdfService {
     private void registerFonts(PdfRendererBuilder builder) {
         registerFontWithFallback(
                 builder,
+                "pdf-fonts/Roboto-Regular.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "Roboto",
+                400,
+                PdfRendererBuilder.FontStyle.NORMAL);
+        registerFontWithFallback(
+                builder,
+                "pdf-fonts/Roboto-Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "Roboto",
+                700,
+                PdfRendererBuilder.FontStyle.NORMAL);
+        registerFontWithFallback(
+                builder,
+                "pdf-fonts/Roboto-Italic.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
+                "Roboto",
+                400,
+                PdfRendererBuilder.FontStyle.ITALIC);
+        registerFontWithFallback(
+                builder,
                 "pdf-fonts/DejaVuSans.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
                 "DejaVu Sans",
@@ -142,20 +163,6 @@ public class FiscalBillPdfService {
                 "DejaVu Sans",
                 700,
                 PdfRendererBuilder.FontStyle.NORMAL);
-        registerFontWithFallback(
-                builder,
-                "pdf-fonts/DejaVuSans-Oblique.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
-                "DejaVu Sans",
-                400,
-                PdfRendererBuilder.FontStyle.ITALIC);
-        registerFontWithFallback(
-                builder,
-                "pdf-fonts/DejaVuSans-BoldOblique.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
-                "DejaVu Sans",
-                700,
-                PdfRendererBuilder.FontStyle.ITALIC);
     }
 
     private void registerFontWithFallback(
@@ -241,22 +248,30 @@ public class FiscalBillPdfService {
             return "<tr><td colspan=\"5\" class=\"muted\">Nema stavki.</td></tr>";
         }
         StringBuilder sb = new StringBuilder();
+        BigDecimal lineTotal = BigDecimal.ZERO;
         for (FiscalBillLineEntity line : lines) {
+            StringBuilder nameCellContent = new StringBuilder();
+            nameCellContent.append(escapeHtml(safe(line.getName())));
+            if (line.getGtin() != null && !line.getGtin().isBlank()) {
+                nameCellContent.append("<div class=\"item-gtin\">GTIN: ")
+                        .append(escapeHtml(line.getGtin()))
+                        .append("</div>");
+            }
             sb.append("<tr>")
-                    .append("<td>").append(escapeHtml(safe(line.getName()))).append("</td>")
+                    .append("<td>").append(nameCellContent).append("</td>")
                     .append("<td>").append(escapeHtml(safe(line.getTaxLabel()))).append("</td>")
                     .append("<td class=\"num\">").append(formatAmount(line.getUnitPrice())).append("</td>")
                     .append("<td class=\"num\">").append(formatAmount(line.getQuantity())).append("</td>")
                     .append("<td class=\"num\">").append(formatAmount(line.getTotalAmount())).append("</td>")
                     .append("</tr>");
-            if (line.getGtin() != null && !line.getGtin().isBlank()) {
-                sb.append("<tr>")
-                        .append("<td colspan=\"5\" class=\"subline\">GTIN: ")
-                        .append(escapeHtml(line.getGtin()))
-                        .append("</td>")
-                        .append("</tr>");
+            if (line.getTotalAmount() != null) {
+                lineTotal = lineTotal.add(line.getTotalAmount());
             }
         }
+        sb.append("<tr class=\"line-items-total\">")
+                .append("<td colspan=\"4\" class=\"label\">Ukupno:</td>")
+                .append("<td class=\"num value\">").append(formatAmount(lineTotal)).append("</td>")
+                .append("</tr>");
         return sb.toString();
     }
 
