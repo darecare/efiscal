@@ -10,6 +10,7 @@ import com.efiscal.backend.repository.FiscalBillPayRepository;
 import com.efiscal.backend.repository.FiscalBillRepository;
 import com.efiscal.backend.repository.FiscalBillTaxRepository;
 import com.efiscal.backend.repository.PayTypeMapRepository;
+import com.efiscal.backend.repository.ProductRepository;
 import com.efiscal.backend.repository.TaxRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -62,6 +63,7 @@ class FiscalBillServiceManualTest {
     @Mock private FiscalBillIdempotencyKeyRepository idempotencyKeyRepository;
     @Mock private FiscalBillConfigRepository fiscalBillConfigRepository;
     @Mock private PayTypeMapRepository payTypeMapRepository;
+        @Mock private ProductRepository productRepository;
     @Mock private TaxRepository taxRepository;
     @Mock private TaxAuthorityService taxAuthorityService;
     @Mock private FiscalBillEmailService fiscalBillEmailService;
@@ -79,6 +81,7 @@ class FiscalBillServiceManualTest {
                 idempotencyKeyRepository,
                 fiscalBillConfigRepository,
                 payTypeMapRepository,
+                productRepository,
                 taxRepository,
                 taxAuthorityService,
                 fiscalBillEmailService,

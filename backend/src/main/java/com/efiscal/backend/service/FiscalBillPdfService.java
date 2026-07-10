@@ -69,8 +69,6 @@ public class FiscalBillPdfService {
             FiscalBillPayRepository fiscalBillPayRepository,
             OrgRepository orgRepository,
             TaxRepository taxRepository) {
-            OrgRepository orgRepository,
-            TaxRepository taxRepository) {
         this.fiscalBillRepository = fiscalBillRepository;
         this.fiscalBillLineRepository = fiscalBillLineRepository;
         this.fiscalBillTaxRepository = fiscalBillTaxRepository;
@@ -95,9 +93,9 @@ public class FiscalBillPdfService {
         String template = readTemplate(resolveTemplatePath(format));
         String html = renderTemplate(template, bill, lines, taxes, payments, org);
         return html;
-        }
+    }
 
-        public byte[] generatePdf(Long fiscalBillId, PdfTemplateFormat format) {
+    public byte[] generatePdf(Long fiscalBillId, PdfTemplateFormat format) {
         String html = generateHtml(fiscalBillId, format);
 
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {

@@ -190,10 +190,7 @@ public class OrgService {
             o.getEmailFrom(),
             o.getSmtpUsername(),
             o.getSmtpConnectionSecurity(),
-            o.getLogoImage(),
             o.getCreatedAt(),
-            o.getAdvertisementHtml(),
-            o.isAdvertisementEnabled()
             o.getLogoImage(),
             o.getAdvertisementHtml(),
             o.isAdvertisementEnabled()
