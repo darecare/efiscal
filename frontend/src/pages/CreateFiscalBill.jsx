@@ -327,7 +327,13 @@ export default function CreateFiscalBill() {
 
   function scrollToFirstError(nextFieldErrors, nextItemErrors, nextPaymentErrors) {
     const target = (() => {
-      if (nextFieldErrors.orgId || nextFieldErrors.clientId || nextFieldErrors.buyerType || nextFieldErrors.referentDocumentNumber) {
+      if (
+        nextFieldErrors.orgId ||
+        nextFieldErrors.clientId ||
+        nextFieldErrors.buyerType ||
+        nextFieldErrors.buyerIdValue ||
+        nextFieldErrors.referentDocumentNumber
+      ) {
         return headerSectionRef.current
       }
       if (Object.keys(nextItemErrors).length > 0) {
@@ -357,9 +363,17 @@ export default function CreateFiscalBill() {
       globalError = nextFieldErrors.clientId
     }
 
-    if (buyerIdValue && !buyerType) {
+    const trimmedBuyerIdValue = buyerIdValue.trim()
+    const hasBuyerType = Boolean(buyerType)
+
+    if (trimmedBuyerIdValue && !hasBuyerType) {
       nextFieldErrors.buyerType = t('createFiscalBill.buyerTypeRequired')
       globalError = globalError || nextFieldErrors.buyerType
+    }
+
+    if (hasBuyerType && !trimmedBuyerIdValue) {
+      nextFieldErrors.buyerIdValue = t('createFiscalBill.buyerIdValueRequired')
+      globalError = globalError || nextFieldErrors.buyerIdValue
     }
 
     if (showReferenceField && !referentDocumentNumber.trim()) {
@@ -454,6 +468,12 @@ export default function CreateFiscalBill() {
       amount: parseFloat(p.amount),
     }))
 
+    const normalizedBuyerType = buyerType || null
+    const normalizedBuyerIdValue = buyerIdValue.trim() || null
+    const composedBuyerId = normalizedBuyerType && normalizedBuyerIdValue
+      ? `${normalizedBuyerType}:${normalizedBuyerIdValue}`
+      : null
+
     const payload = {
       orderId: orderId || null,
       customerName: customerName || null,
@@ -461,8 +481,9 @@ export default function CreateFiscalBill() {
       sendEmail,
       invoiceType: parseInt(invoiceType),
       transactionType: parseInt(transactionType),
-      buyerType: buyerIdValue && buyerType ? buyerType : null,
-      buyerVat: buyerIdValue || null,
+      buyerId: composedBuyerId,
+      buyerType: normalizedBuyerType,
+      buyerVat: normalizedBuyerIdValue,
       items: payloadItems,
       payments: payloadPayments,
       referentDocumentNumber: showReferenceField && referentDocumentNumber.trim() ? referentDocumentNumber.trim() : null,
@@ -632,35 +653,6 @@ export default function CreateFiscalBill() {
                 <input className="fiscal-input fiscal-input--text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('createFiscalBill.customerNamePlaceholder')} />
               </div>
 
-              <div className="fiscal-field fiscal-field--checkbox">
-                <label className="fiscal-field-label fiscal-field-label--inline">
-                  <input
-                    type="checkbox"
-                    checked={sendEmail}
-                    onChange={(e) => setSendEmail(e.target.checked)}
-                  />
-                  {' '}{t('createFiscalBill.sendEmail')}
-                </label>
-              </div>
-
-              {sendEmail && (
-                <div className="fiscal-field">
-                  <label className="fiscal-field-label">{t('createFiscalBill.customerEmailOptional')}</label>
-                  <input
-                    className="fiscal-input fiscal-input--text"
-                    type="email"
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                    placeholder={t('createFiscalBill.customerEmailPlaceholder')}
-                  />
-                </div>
-              )}
-
-              <div className="fiscal-field">
-                <label className="fiscal-field-label">{t('createFiscalBill.buyerIdValueOptional')}</label>
-                <input className="fiscal-input fiscal-input--text" value={buyerIdValue} onChange={handleBuyerIdChange} placeholder={t('createFiscalBill.buyerIdValuePlaceholder')} />
-              </div>
-
               <div className="fiscal-field">
                 <label className="fiscal-field-label">{t('createFiscalBill.buyerIdTypeOptional')}</label>
                 <select
@@ -674,6 +666,18 @@ export default function CreateFiscalBill() {
                 </select>
                 {fieldErrors.buyerType && <span className="error-text fiscal-error">{fieldErrors.buyerType}</span>}
                 {buyerIdAutoMsg && <span className="buyer-id-auto-msg">{t('createFiscalBill.buyerIdAutoSelected')}</span>}
+              </div>
+
+              <div className="fiscal-field">
+                <label className="fiscal-field-label">{t('createFiscalBill.buyerIdValueOptional')}</label>
+                <input
+                  className={`fiscal-input fiscal-input--text${fieldErrors.buyerIdValue ? ' fiscal-input--invalid' : ''}`}
+                  value={buyerIdValue}
+                  onChange={handleBuyerIdChange}
+                  placeholder={t('createFiscalBill.buyerIdValuePlaceholder')}
+                  aria-invalid={fieldErrors.buyerIdValue ? 'true' : undefined}
+                />
+                {fieldErrors.buyerIdValue && <span className="error-text fiscal-error">{fieldErrors.buyerIdValue}</span>}
               </div>
 
               {showCloseAdvanceCheckbox && (
@@ -705,6 +709,30 @@ export default function CreateFiscalBill() {
                   {fieldErrors.referentDocumentNumber && (
                     <span className="error-text fiscal-error">{fieldErrors.referentDocumentNumber}</span>
                   )}
+                </div>
+              )}
+
+              <div className="fiscal-field fiscal-field--checkbox">
+                <label className="fiscal-field-label fiscal-field-label--inline">
+                  <input
+                    type="checkbox"
+                    checked={sendEmail}
+                    onChange={(e) => setSendEmail(e.target.checked)}
+                  />
+                  {' '}{t('createFiscalBill.sendEmail')}
+                </label>
+              </div>
+
+              {sendEmail && (
+                <div className="fiscal-field">
+                  <label className="fiscal-field-label">{t('createFiscalBill.customerEmailOptional')}</label>
+                  <input
+                    className="fiscal-input fiscal-input--text"
+                    type="email"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    placeholder={t('createFiscalBill.customerEmailPlaceholder')}
+                  />
                 </div>
               )}
             </div>

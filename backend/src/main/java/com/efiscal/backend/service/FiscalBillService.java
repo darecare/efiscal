@@ -256,7 +256,7 @@ public class FiscalBillService {
         String requestBody = buildManualRequestBody(orgId, clientId, orderId,
                 request.invoiceType(), request.transactionType(),
             enrichedItems, request.payments(),
-                request.buyerType(), request.buyerVat(), config,
+                request.buyerId(), request.buyerType(), request.buyerVat(), config,
                 request.referentDocumentNumber(), request.cashier());
 
         FiscalBillEntity entity = createPendingEntity(orgId, clientId, orderId,
@@ -609,7 +609,7 @@ public class FiscalBillService {
     private String buildManualRequestBody(Long orgId, Long clientId, String orderId,
             int invoiceType, int transactionType,
             List<FiscalBillItemRequest> items, List<PaymentRequest> payments,
-            String buyerType, String buyerVat,
+            String buyerId, String buyerType, String buyerVat,
             FiscalBillConfigEntity config, String referentDocumentNumber, String cashier) {
 
         Map<String, Object> body = new HashMap<>();
@@ -626,8 +626,9 @@ public class FiscalBillService {
         }
 
         // BuyerId (4.2.1)
-        if (buyerType != null && buyerVat != null && !buyerVat.isBlank()) {
-            body.put("buyerId", buyerType + ":" + buyerVat);
+        String resolvedBuyerId = resolveManualBuyerId(buyerId, buyerType, buyerVat);
+        if (resolvedBuyerId != null) {
+            body.put("buyerId", resolvedBuyerId);
         }
 
         // Reference fields: explicit override resolves DT from local DB; else auto-resolve when orderId set.
@@ -648,6 +649,16 @@ public class FiscalBillService {
         }
 
         return toJson(body);
+    }
+
+    private String resolveManualBuyerId(String buyerId, String buyerType, String buyerVat) {
+        if (buyerId != null && !buyerId.isBlank()) {
+            return buyerId.trim();
+        }
+        if (buyerType != null && buyerVat != null && !buyerVat.isBlank()) {
+            return buyerType + ":" + buyerVat;
+        }
+        return null;
     }
 
     private String buildCopyRequestBody(
@@ -1524,6 +1535,7 @@ public class FiscalBillService {
             boolean sendEmail,
             int invoiceType,
             int transactionType,
+            String buyerId,             // Optional full buyer identifier (e.g. "10:123456789")
             String buyerType,           // Optional buyer type prefix (e.g. "10")
             String buyerVat,            // Optional company VAT
             List<FiscalBillItemRequest> items,

@@ -438,6 +438,10 @@
     "invoiceTypes": {
       "0": "0 – Normalan",
       "4": "4 – Avans"
+    },
+    "transactionTypes": {
+      "0": "0 – Prodaja",
+      "1": "1 – Refundacija"
     }
   },
   "fiscalBills": {
@@ -631,6 +635,7 @@
     "selectOrgRequired": "Izaberite organizaciju.",
     "orgNotMapped": "Izabrana organizacija nije mapirana na klijenta.",
     "buyerTypeRequired": "Izaberite tip ID kupca kada je uneta vrednost ID kupca.",
+    "buyerIdValueRequired": "Unesite vrednost ID kupca kada je izabran tip ID kupca.",
     "requestFailed": "Zahtev nije uspeo.",
     "itemsTab": "Stavke ({{count}})",
     "paymentsTab": "Plaćanja ({{count}})",

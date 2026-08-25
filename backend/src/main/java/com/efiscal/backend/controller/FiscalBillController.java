@@ -244,6 +244,7 @@ public class FiscalBillController {
                 request.orderId(), request.customerName(),
             request.customerEmail(), request.sendEmail(),
                 request.invoiceType(), request.transactionType(),
+                request.buyerId(),
                 request.buyerType(), request.buyerVat(),
                 items, payments,
                 request.referentDocumentNumber(),
@@ -363,6 +364,7 @@ public class FiscalBillController {
             boolean sendEmail,
             int invoiceType,
             int transactionType,
+            String buyerId,        // optional full buyer id (e.g. "10:123456789")
             String buyerType,      // optional buyer type prefix
             String buyerVat,       // optional company VAT
             List<ItemRequest> items,

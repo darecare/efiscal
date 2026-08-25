@@ -5,6 +5,7 @@ import { fiscalBillApi, ordersApi } from '../services/api'
 import { useOrg } from '../contexts/OrgContext'
 
 const INVOICE_TYPE_VALUES = [0, 4]
+const TRANSACTION_TYPE_VALUES = [0, 1]
 const PAGE_SIZE_OPTIONS = [20, 50, 100]
 const SHIPPING_STATUS_VALUES = ['awaiting', 'in_process', 'shipped', 'delivered', 'cancelled']
 
@@ -36,6 +37,7 @@ export default function Orders() {
   // Fiscalize modal state
   const [fiscalModal, setFiscalModal] = useState(null) // { orders } or null
   const [fiscalInvoiceType, setFiscalInvoiceType] = useState(0)
+  const [fiscalTransactionType, setFiscalTransactionType] = useState(0)
   const [sendEmail, setSendEmail] = useState(true)
   const [fiscalError, setFiscalError] = useState(null)
   const [fiscalSubmitting, setFiscalSubmitting] = useState(false)
@@ -133,6 +135,7 @@ export default function Orders() {
     if (!ordersToSubmit || ordersToSubmit.length === 0) return
     setFiscalModal({ orders: ordersToSubmit })
     setFiscalInvoiceType(0)
+    setFiscalTransactionType(0)
     setSendEmail(true)
     setFiscalError(null)
   }
@@ -207,7 +210,7 @@ export default function Orders() {
         customerEmail: order.customerEmail || null,
         sendEmail,
         invoiceType: parseInt(fiscalInvoiceType),
-        transactionType: 0,
+        transactionType: parseInt(fiscalTransactionType),
         billingType: order.billingType || null,
         billingCompanyVat: order.billingCompanyVat || null,
         paymentMethodCode: order.paymentMethodCode || null,
@@ -513,15 +516,17 @@ export default function Orders() {
                 />
                 <span className="form-label" style={{ marginBottom: 0 }}>{t('orders.sendEmail')}</span>
               </label>
-              <div className="form-group">
-                <label className="form-label">{t('orders.invoiceType')}</label>
-                <select className="form-input" value={fiscalInvoiceType} onChange={(e) => setFiscalInvoiceType(e.target.value)}>
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px 20px' }}>
+                <label className="form-label" style={{ marginBottom: 0, minWidth: 140 }}>{t('orders.invoiceType')}</label>
+                <select className="form-input" style={{ marginBottom: 0, flex: 1 }} value={fiscalInvoiceType} onChange={(e) => setFiscalInvoiceType(e.target.value)}>
                   {INVOICE_TYPE_VALUES.map((v) => <option key={v} value={v}>{t(`orders.invoiceTypes.${v}`)}</option>)}
                 </select>
               </div>
-              <div className="form-group">
-                <label className="form-label">{t('orders.transactionType')}</label>
-                <input className="form-input" value={t('orders.transactionTypeSale')} disabled readOnly />
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px 20px' }}>
+                <label className="form-label" style={{ marginBottom: 0, minWidth: 140 }}>{t('orders.transactionType')}</label>
+                <select className="form-input" style={{ marginBottom: 0, flex: 1 }} value={fiscalTransactionType} onChange={(e) => setFiscalTransactionType(e.target.value)}>
+                  {TRANSACTION_TYPE_VALUES.map((v) => <option key={v} value={v}>{t(`orders.transactionTypes.${v}`)}</option>)}
+                </select>
               </div>
             </div>
             {fiscalError && <p style={{ color: 'red', marginTop: '0.75rem' }}>{fiscalError}</p>}

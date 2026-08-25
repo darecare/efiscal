@@ -429,6 +429,10 @@
     "invoiceTypes": {
       "0": "0 – Normal",
       "4": "4 – Advance"
+    },
+    "transactionTypes": {
+      "0": "0 – Sale",
+      "1": "1 – Refund"
     }
   },
   "fiscalBills": {
@@ -622,6 +626,7 @@
     "selectOrgRequired": "Please select organization.",
     "orgNotMapped": "Selected organization is not mapped to a client.",
     "buyerTypeRequired": "Please select Buyer ID Type when Buyer ID Value is entered.",
+    "buyerIdValueRequired": "Please enter Buyer ID Value when Buyer ID Type is selected.",
     "requestFailed": "Request failed.",
     "itemsTab": "Items ({{count}})",
     "paymentsTab": "Payments ({{count}})",

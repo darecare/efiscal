@@ -771,6 +771,7 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   "sendEmail": false,
   "invoiceType": 0,
   "transactionType": 0,
+  "buyerId": "10:101234567",
   "buyerType": "10",
   "buyerVat": "101234567",
   "referentDocumentNumber": null,
@@ -794,6 +795,8 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 ```
 - `invoiceType` values: `0` = Normal, `2` = Copy, `4` = Advance.
 - `transactionType` values: `0` = Sale, `1` = Refund.
+- `buyerId` (optional, nullable): Full buyer identifier sent to the Tax Authority (for example `10:123456789`).
+- Backward compatibility: clients may still send `buyerType` + `buyerVat`; backend derives `buyerId` as `<buyerType>:<buyerVat>` when `buyerId` is not explicitly provided.
 - `referentDocumentNumber` (optional, nullable): Reference document number for Copy, Refund, chained Advance, or close-advance flows. When provided, the backend looks up the referenced fiscal bill in the same organization by Tax Authority invoice number (`efiscal_sdc_invoiceno`) and populates both `referentDocumentNumber` and `referentDocumentDT` in the Tax Authority request. Returns `400` if the referenced bill is not found or is missing datetime.
 - `orderId` (optional, nullable): When provided, the backend applies **order-linked fiscal-chain checks** scoped to `orgId`: duplicate protection for the same `orderId` + `invoiceType` + `transactionType`, advance-close chain (Normal Sale after prior Advance Sale bills), and automatic referent-field resolution when `referentDocumentNumber` is omitted. Does **not** fetch or validate MerchantPro order data; use `POST /fiscalbill/from-order` for full order-based fiscalization.
 - Payment total validation: sum of `payments[].amount` must equal sum of `items[].totalAmount` (tolerance `0.01`). Each payment amount must be positive. Returns `400` with message `Payment total does not match fiscal bill total` on mismatch.
