@@ -7,6 +7,7 @@ import com.efiscal.backend.model.FiscalBillLineEntity;
 import com.efiscal.backend.model.FiscalBillPayEntity;
 import com.efiscal.backend.model.FiscalBillTaxEntity;
 import com.efiscal.backend.model.PayTypeMapEntity;
+import com.efiscal.backend.model.ProductEntity;
 import com.efiscal.backend.model.TaxEntity;
 import com.efiscal.backend.repository.FiscalBillConfigRepository;
 import com.efiscal.backend.repository.FiscalBillIdempotencyKeyRepository;
@@ -15,6 +16,7 @@ import com.efiscal.backend.repository.FiscalBillPayRepository;
 import com.efiscal.backend.repository.FiscalBillRepository;
 import com.efiscal.backend.repository.FiscalBillTaxRepository;
 import com.efiscal.backend.repository.PayTypeMapRepository;
+import com.efiscal.backend.repository.ProductRepository;
 import com.efiscal.backend.repository.TaxRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -79,6 +81,7 @@ public class FiscalBillService {
     private final FiscalBillIdempotencyKeyRepository idempotencyKeyRepository;
     private final FiscalBillConfigRepository fiscalBillConfigRepository;
     private final PayTypeMapRepository payTypeMapRepository;
+    private final ProductRepository productRepository;
     private final TaxRepository taxRepository;
     private final TaxAuthorityService taxAuthorityService;
     private final FiscalBillEmailService fiscalBillEmailService;
@@ -92,6 +95,7 @@ public class FiscalBillService {
             FiscalBillIdempotencyKeyRepository idempotencyKeyRepository,
             FiscalBillConfigRepository fiscalBillConfigRepository,
             PayTypeMapRepository payTypeMapRepository,
+            ProductRepository productRepository,
             TaxRepository taxRepository,
             TaxAuthorityService taxAuthorityService,
             FiscalBillEmailService fiscalBillEmailService,
@@ -103,6 +107,7 @@ public class FiscalBillService {
         this.idempotencyKeyRepository = idempotencyKeyRepository;
         this.fiscalBillConfigRepository = fiscalBillConfigRepository;
         this.payTypeMapRepository = payTypeMapRepository;
+        this.productRepository = productRepository;
         this.taxRepository = taxRepository;
         this.taxAuthorityService = taxAuthorityService;
         this.fiscalBillEmailService = fiscalBillEmailService;
@@ -147,7 +152,7 @@ public class FiscalBillService {
         }
 
         // Resolve order item tax labels before any dependent flow (including advance-refund chain).
-        List<FiscalBillItemRequest> resolvedItems = resolveVatLabelsForOrderItems(orderData.items());
+        List<FiscalBillItemRequest> resolvedItems = enrichItemsWithGtin(orgId, resolveVatLabelsForOrderItems(orderData.items()));
 
         // --- 4.1.5  Advance closing chain ---
         // If creating Normal Sale and Advance Sale exists → first create Advance Refund
@@ -245,12 +250,13 @@ public class FiscalBillService {
         }
 
         FiscalBillConfigEntity config = resolveConfig(orgId);
+        List<FiscalBillItemRequest> enrichedItems = enrichItemsWithGtin(orgId, request.items());
 
         // Build request body — manual items, manual payments
         String requestBody = buildManualRequestBody(orgId, clientId, orderId,
                 request.invoiceType(), request.transactionType(),
-                request.items(), request.payments(),
-                request.buyerType(), request.buyerVat(), config,
+            enrichedItems, request.payments(),
+                request.buyerId(), request.buyerType(), request.buyerVat(), config,
                 request.referentDocumentNumber(), request.cashier());
 
         FiscalBillEntity entity = createPendingEntity(orgId, clientId, orderId,
@@ -261,12 +267,12 @@ public class FiscalBillService {
         try {
             String response = taxAuthorityService.call(orgId, "CREATE_INVOICE", requestBody);
             processTaxAuthorityResponse(entity, response, request.invoiceType(), request.transactionType(),
-                    request.items(), clientId, orgId);
+                enrichedItems, clientId, orgId);
             fiscalBillRepository.save(entity);
             // Save payment records from manual payment rows
             saveManualPaymentRecords(entity.getFiscalbillId(), clientId, orgId, request.payments());
             // Save line items
-            saveLineItems(entity.getFiscalbillId(), clientId, orgId, request.items());
+            saveLineItems(entity.getFiscalbillId(), clientId, orgId, enrichedItems);
             fiscalBillEmailService.sendIfRequested(orgId, entity, request.sendEmail(), request.customerEmail(), request.customerName(), orderId);
         } catch (ResponseStatusException rse) {
             entity.setStatus(STATUS_FAILED);
@@ -603,7 +609,7 @@ public class FiscalBillService {
     private String buildManualRequestBody(Long orgId, Long clientId, String orderId,
             int invoiceType, int transactionType,
             List<FiscalBillItemRequest> items, List<PaymentRequest> payments,
-            String buyerType, String buyerVat,
+            String buyerId, String buyerType, String buyerVat,
             FiscalBillConfigEntity config, String referentDocumentNumber, String cashier) {
 
         Map<String, Object> body = new HashMap<>();
@@ -620,8 +626,9 @@ public class FiscalBillService {
         }
 
         // BuyerId (4.2.1)
-        if (buyerType != null && buyerVat != null && !buyerVat.isBlank()) {
-            body.put("buyerId", buyerType + ":" + buyerVat);
+        String resolvedBuyerId = resolveManualBuyerId(buyerId, buyerType, buyerVat);
+        if (resolvedBuyerId != null) {
+            body.put("buyerId", resolvedBuyerId);
         }
 
         // Reference fields: explicit override resolves DT from local DB; else auto-resolve when orderId set.
@@ -642,6 +649,16 @@ public class FiscalBillService {
         }
 
         return toJson(body);
+    }
+
+    private String resolveManualBuyerId(String buyerId, String buyerType, String buyerVat) {
+        if (buyerId != null && !buyerId.isBlank()) {
+            return buyerId.trim();
+        }
+        if (buyerType != null && buyerVat != null && !buyerVat.isBlank()) {
+            return buyerType + ":" + buyerVat;
+        }
+        return null;
     }
 
     private String buildCopyRequestBody(
@@ -1061,6 +1078,72 @@ public class FiscalBillService {
         return resolvedItems;
     }
 
+    private List<FiscalBillItemRequest> enrichItemsWithGtin(Long orgId, List<FiscalBillItemRequest> items) {
+        if (items == null || items.isEmpty()) {
+            return items;
+        }
+
+        List<FiscalBillItemRequest> enriched = new ArrayList<>();
+        for (FiscalBillItemRequest item : items) {
+            enriched.add(new FiscalBillItemRequest(
+                    item.name(),
+                    item.quantity(),
+                    item.unitPrice(),
+                    item.totalAmount(),
+                    item.taxLabel(),
+                    item.taxPrefix(),
+                    resolveGtinForItem(orgId, item),
+                    item.productId(),
+                    item.sku(),
+                    item.taxValue(),
+                    item.taxCategoryName(),
+                    item.labels()));
+        }
+        return enriched;
+    }
+
+    private String resolveGtinForItem(Long orgId, FiscalBillItemRequest item) {
+        String gtin = trimToNull(item.gtin());
+        if (gtin != null) {
+            return gtin;
+        }
+
+        Long productId = parseLongOrNull(item.productId());
+        if (productId != null) {
+            Optional<ProductEntity> product = productRepository.findVisibleByProductId(productId);
+            String ean = product.map(ProductEntity::getEan).map(FiscalBillService::trimToNull).orElse(null);
+            if (ean != null) {
+                return ean;
+            }
+        }
+
+        String sku = trimToNull(item.sku());
+        if (sku != null) {
+            Optional<ProductEntity> product = productRepository.findManualByOrgIdAndSku(orgId, sku);
+            if (product.isEmpty()) {
+                product = productRepository.findMerchantProByOrgIdAndSkuIncludingHidden(orgId, sku);
+            }
+            String ean = product.map(ProductEntity::getEan).map(FiscalBillService::trimToNull).orElse(null);
+            if (ean != null) {
+                return ean;
+            }
+        }
+
+        return null;
+    }
+
+    private static Long parseLongOrNull(String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(trimmed);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
     private FiscalBillItemRequest toCopyItemRequest(FiscalBillLineEntity line) {
         String taxLabel = line.getTaxLabel() == null ? null : line.getTaxLabel().trim();
         List<String> labels = (taxLabel == null || taxLabel.isBlank()) ? null : List.of(taxLabel);
@@ -1256,6 +1339,14 @@ public class FiscalBillService {
         return o == null ? null : String.valueOf(o);
     }
 
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     private static String trimTo(String s, int max) {
         if (s == null) return null;
         return s.length() > max ? s.substring(0, max) : s;
@@ -1444,6 +1535,7 @@ public class FiscalBillService {
             boolean sendEmail,
             int invoiceType,
             int transactionType,
+            String buyerId,             // Optional full buyer identifier (e.g. "10:123456789")
             String buyerType,           // Optional buyer type prefix (e.g. "10")
             String buyerVat,            // Optional company VAT
             List<FiscalBillItemRequest> items,

@@ -187,6 +187,11 @@
     "fromEmailPlaceholder": "e.g. no-reply@company.com",
     "smtpUsername": "Username",
     "smtpPassword": "Password",
+    "logoImage": "Organization Logo",
+    "logoImagePreviewAlt": "Organization logo preview",
+    "logoImageTypeError": "Please select an image file.",
+    "logoImageSizeError": "Logo image must be 1MB or smaller.",
+    "logoImageReadError": "Failed to read selected image.",
     "connectionSecurity": "Connection Security",
     "connectionSecurityLabels": {
       "STARTTLS": "STARTTLS",
@@ -424,6 +429,10 @@
     "invoiceTypes": {
       "0": "0 – Normal",
       "4": "4 – Advance"
+    },
+    "transactionTypes": {
+      "0": "0 – Sale",
+      "1": "1 – Refund"
     }
   },
   "fiscalBills": {
@@ -458,10 +467,14 @@
     "copyFailed": "Failed to create copy fiscal bill.",
     "refundFailed": "Failed to create refund fiscal bill.",
     "detailsTitle": "Fiscal Bill Details",
+    "previewHtmlA4": "Preview HTML (A4)",
+    "previewingHtml": "Opening preview…",
     "downloadPdfA4": "Download PDF (A4)",
     "downloadPdfRoll80": "Download PDF (Roll 57-80mm)",
     "downloadingPdf": "Downloading PDF…",
     "downloadPdfFailed": "Failed to download fiscal bill PDF.",
+    "previewPopupBlocked": "Popup blocked. Allow popups to open the HTML preview.",
+    "previewHtmlFailed": "Failed to open HTML preview.",
     "loadingDetails": "Loading details…",
     "fiscalBillId": "Fiscal Bill ID:",
     "taInvoiceNoLabel": "TA Invoice No",
@@ -613,6 +626,7 @@
     "selectOrgRequired": "Please select organization.",
     "orgNotMapped": "Selected organization is not mapped to a client.",
     "buyerTypeRequired": "Please select Buyer ID Type when Buyer ID Value is entered.",
+    "buyerIdValueRequired": "Please enter Buyer ID Value when Buyer ID Type is selected.",
     "requestFailed": "Request failed.",
     "itemsTab": "Items ({{count}})",
     "paymentsTab": "Payments ({{count}})",

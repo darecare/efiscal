@@ -92,6 +92,9 @@ public class OrgService {
         org.setSmtpUsername(normalizeOptional(req.smtpUsername()));
         org.setSmtpPassword(normalizeOptional(req.smtpPassword()));
         org.setSmtpConnectionSecurity(validateAndNormalizeSmtpConnectionSecurity(req.smtpConnectionSecurity()));
+        org.setLogoImage(validateAndNormalizeLogoImage(req.logoImage()));
+        org.setAdvertisementHtml(normalizeOptional(req.advertisementHtml()));
+        org.setAdvertisementEnabled(req.advertisementEnabled() != null && req.advertisementEnabled());
         return toDto(orgRepository.save(org));
     }
 
@@ -125,6 +128,7 @@ public class OrgService {
         if (req.smtpConnectionSecurity() != null) {
             org.setSmtpConnectionSecurity(validateAndNormalizeSmtpConnectionSecurity(req.smtpConnectionSecurity()));
         }
+        if (req.logoImage() != null) org.setLogoImage(validateAndNormalizeLogoImage(req.logoImage()));
         if (req.advertisementHtml() != null) org.setAdvertisementHtml(normalizeOptional(req.advertisementHtml()));
         if (req.advertisementEnabled() != null) org.setAdvertisementEnabled(req.advertisementEnabled());
         return toDto(orgRepository.save(org));
@@ -187,6 +191,7 @@ public class OrgService {
             o.getSmtpUsername(),
             o.getSmtpConnectionSecurity(),
             o.getCreatedAt(),
+            o.getLogoImage(),
             o.getAdvertisementHtml(),
             o.isAdvertisementEnabled()
         );
@@ -215,6 +220,21 @@ public class OrgService {
         return upper;
     }
 
+    private String validateAndNormalizeLogoImage(String value) {
+        String normalized = normalizeOptional(value);
+        if (normalized == null) {
+            return null;
+        }
+        String lower = normalized.toLowerCase(Locale.ROOT);
+        if (!(lower.startsWith("data:image/png;") || lower.startsWith("data:image/jpeg;") || lower.startsWith("data:image/jpg;"))) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Logo image must be a PNG or JPEG Data URL"
+            );
+        }
+        return normalized;
+    }
+
     public record OrgDto(
         Long orgId,
         Long clientId,
@@ -232,6 +252,8 @@ public class OrgService {
         String smtpUsername,
         String smtpConnectionSecurity,
         OffsetDateTime createdAt,
+        @Size(max = 2097152, message = "Organization logo image payload must not exceed 2MB")
+        String logoImage,
         String advertisementHtml,
         boolean advertisementEnabled
     ) {}
@@ -273,7 +295,13 @@ public class OrgService {
         String smtpPassword,
 
         @Size(max = 20, message = "SMTP connection security must not exceed 20 characters")
-        String smtpConnectionSecurity
+        String smtpConnectionSecurity,
+
+        @Size(max = 2097152, message = "Organization logo image payload must not exceed 2MB")
+        String logoImage,
+
+        String advertisementHtml,
+        Boolean advertisementEnabled
     ) {}
 
     public record UpdateOrgRequest(
@@ -309,6 +337,9 @@ public class OrgService {
 
         @Size(max = 20, message = "SMTP connection security must not exceed 20 characters")
         String smtpConnectionSecurity,
+
+        @Size(max = 2097152, message = "Organization logo image payload must not exceed 2MB")
+        String logoImage,
 
         String advertisementHtml,
         Boolean advertisementEnabled

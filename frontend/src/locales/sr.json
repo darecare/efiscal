@@ -196,6 +196,11 @@
     "fromEmailPlaceholder": "npr. no-reply@company.com",
     "smtpUsername": "Korisničko ime",
     "smtpPassword": "Lozinka",
+    "logoImage": "Logo organizacije",
+    "logoImagePreviewAlt": "Pregled logotipa organizacije",
+    "logoImageTypeError": "Izaberite sliku kao fajl.",
+    "logoImageSizeError": "Logo slika mora biti 1MB ili manja.",
+    "logoImageReadError": "Nije moguće učitati izabranu sliku.",
     "connectionSecurity": "Sigurnost konekcije",
     "connectionSecurityLabels": {
       "STARTTLS": "STARTTLS",
@@ -433,6 +438,10 @@
     "invoiceTypes": {
       "0": "0 – Normalan",
       "4": "4 – Avans"
+    },
+    "transactionTypes": {
+      "0": "0 – Prodaja",
+      "1": "1 – Refundacija"
     }
   },
   "fiscalBills": {
@@ -467,10 +476,14 @@
     "copyFailed": "Kreiranje kopije fiskalnog računa nije uspelo.",
     "refundFailed": "Kreiranje refundacije fiskalnog računa nije uspelo.",
     "detailsTitle": "Detalji fiskalnog računa",
+    "previewHtmlA4": "Pregled HTML-a (A4)",
+    "previewingHtml": "Otvaranje pregleda…",
     "downloadPdfA4": "Preuzmi PDF (A4)",
     "downloadPdfRoll80": "Preuzmi PDF (rolna 57-80mm)",
     "downloadingPdf": "Preuzimanje PDF-a…",
     "downloadPdfFailed": "Preuzimanje PDF fiskalnog računa nije uspelo.",
+    "previewPopupBlocked": "Popup je blokiran. Dozvolite otvaranje popup prozora za HTML pregled.",
+    "previewHtmlFailed": "Otvaranje HTML pregleda nije uspelo.",
     "loadingDetails": "Učitavanje detalja…",
     "fiscalBillId": "ID fiskalnog računa:",
     "taInvoiceNoLabel": "TA broj računa",
@@ -622,6 +635,7 @@
     "selectOrgRequired": "Izaberite organizaciju.",
     "orgNotMapped": "Izabrana organizacija nije mapirana na klijenta.",
     "buyerTypeRequired": "Izaberite tip ID kupca kada je uneta vrednost ID kupca.",
+    "buyerIdValueRequired": "Unesite vrednost ID kupca kada je izabran tip ID kupca.",
     "requestFailed": "Zahtev nije uspeo.",
     "itemsTab": "Stavke ({{count}})",
     "paymentsTab": "Plaćanja ({{count}})",

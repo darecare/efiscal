@@ -77,6 +77,7 @@ On Organization level is defined connection to mail server. From this mail addre
 | smtp_username  | VARCHAR(255) | NULL                     | SMTP authentication username  |
 | smtp_password  | VARCHAR(255) | NULL                     | SMTP authentication password (sensitive) |
 | smtp_connection_security | VARCHAR(20) | NULL            | Allowed: `STARTTLS`, `SSL_TLS` |
+| logo_image     | TEXT         | NULL                     | Optional organization logo (typically Data URL image) |
 | advertisement_html     | TEXT         | NULL                     | HTML content rendered on fiscal bill PDFs when advertisement is enabled |
 | advertisement_enabled  | BOOLEAN      | NOT NULL, DEFAULT FALSE  | Toggle for rendering the advertisement block on PDFs |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |

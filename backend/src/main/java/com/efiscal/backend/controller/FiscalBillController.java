@@ -10,6 +10,7 @@ import com.efiscal.backend.service.FiscalBillService.OrderFiscalizeRequest;
 import com.efiscal.backend.service.FiscalBillService.PaymentRequest;
 import com.efiscal.backend.service.FiscalBillPdfService;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpHeaders;
@@ -135,8 +136,29 @@ public class FiscalBillController {
         String suffix = fiscalBillPdfService.filenameSuffix(templateFormat);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=fiscal-bill-" + id + "-" + suffix + ".pdf")
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0")
+                .header(HttpHeaders.PRAGMA, "no-cache")
+                .header(HttpHeaders.EXPIRES, "0")
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
+    }
+
+    /** GET /api/v1/fiscalbill/{id}/html — Render HTML preview of the selected template */
+    @GetMapping(value = "/{id}/html", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> previewFiscalBillHtml(
+            @PathVariable Long id,
+            @RequestParam(name = "format", required = false, defaultValue = "a4") String format) {
+        authorizationService.requireAction("FISCAL_VIEW_BILLS");
+        validateFiscalBill(id);
+        FiscalBillPdfService.PdfTemplateFormat templateFormat = fiscalBillPdfService.parseTemplateFormat(format);
+        String html = fiscalBillPdfService.generateHtml(id, templateFormat);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=fiscal-bill-" + id + "-" + fiscalBillPdfService.filenameSuffix(templateFormat) + ".html")
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0")
+                .header(HttpHeaders.PRAGMA, "no-cache")
+                .header(HttpHeaders.EXPIRES, "0")
+                .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))
+                .body(html);
     }
 
     /**
@@ -222,6 +244,7 @@ public class FiscalBillController {
                 request.orderId(), request.customerName(),
             request.customerEmail(), request.sendEmail(),
                 request.invoiceType(), request.transactionType(),
+                request.buyerId(),
                 request.buyerType(), request.buyerVat(),
                 items, payments,
                 request.referentDocumentNumber(),
@@ -341,6 +364,7 @@ public class FiscalBillController {
             boolean sendEmail,
             int invoiceType,
             int transactionType,
+            String buyerId,        // optional full buyer id (e.g. "10:123456789")
             String buyerType,      // optional buyer type prefix
             String buyerVat,       // optional company VAT
             List<ItemRequest> items,

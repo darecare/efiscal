@@ -179,6 +179,7 @@ Subscription behavior:
 - Notes:
   - `createdAfter` and `shippingStatus` are the primary MVP filter fields.
   - Backend resolves and validates allowed filter keys, then maps to provider URL query parameters.
+  - Order line items expose the provider `product_ean` value as `ean` when MerchantPro returns it; fiscalization uses that value as the `gtin` source.
 - 202 Response:
 ```json
 {
@@ -636,6 +637,7 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
     "emailFrom": "no-reply@example.com",
     "smtpUsername": "smtp-user",
     "smtpConnectionSecurity": "STARTTLS",
+    "logoImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
     "createdAt": "2026-03-24T10:00:00Z",
     "advertisementHtml": "<p>Special offer!</p>",
     "advertisementEnabled": false
@@ -644,6 +646,7 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 ```
 - Notes:
   - `smtpPassword` is write-only and is never returned in API responses.
+  - `logoImage` is optional and, when present, should be a Data URL image string.
   - `advertisementHtml` is nullable; when non-null and `advertisementEnabled` is `true`, the HTML is injected into the `{{ADVERTISEMENT_BLOCK}}` placeholder in generated PDFs.
 - Errors: `401`, `403`, `500`
 
@@ -668,12 +671,14 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   "emailFrom": "no-reply@example.com",
   "smtpUsername": "smtp-user",
   "smtpPassword": "secret",
-  "smtpConnectionSecurity": "STARTTLS"
+  "smtpConnectionSecurity": "STARTTLS",
+  "logoImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
 }
 ```
 - Validation:
   - `smtpPort` range: `1..65535`
   - `smtpConnectionSecurity` allowed values: `STARTTLS`, `SSL_TLS`
+  - `logoImage` max payload length: `2097152` characters
 - 201 Response: Created organization object (same as `GET /orgs`, excluding `smtpPassword`).
 - Errors: `400`, `401`, `403`, `404`, `500`
 
@@ -766,6 +771,7 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   "sendEmail": false,
   "invoiceType": 0,
   "transactionType": 0,
+  "buyerId": "10:101234567",
   "buyerType": "10",
   "buyerVat": "101234567",
   "referentDocumentNumber": null,
@@ -789,6 +795,8 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 ```
 - `invoiceType` values: `0` = Normal, `2` = Copy, `4` = Advance.
 - `transactionType` values: `0` = Sale, `1` = Refund.
+- `buyerId` (optional, nullable): Full buyer identifier sent to the Tax Authority (for example `10:123456789`).
+- Backward compatibility: clients may still send `buyerType` + `buyerVat`; backend derives `buyerId` as `<buyerType>:<buyerVat>` when `buyerId` is not explicitly provided.
 - `referentDocumentNumber` (optional, nullable): Reference document number for Copy, Refund, chained Advance, or close-advance flows. When provided, the backend looks up the referenced fiscal bill in the same organization by Tax Authority invoice number (`efiscal_sdc_invoiceno`) and populates both `referentDocumentNumber` and `referentDocumentDT` in the Tax Authority request. Returns `400` if the referenced bill is not found or is missing datetime.
 - `orderId` (optional, nullable): When provided, the backend applies **order-linked fiscal-chain checks** scoped to `orgId`: duplicate protection for the same `orderId` + `invoiceType` + `transactionType`, advance-close chain (Normal Sale after prior Advance Sale bills), and automatic referent-field resolution when `referentDocumentNumber` is omitted. Does **not** fetch or validate MerchantPro order data; use `POST /fiscalbill/from-order` for full order-based fiscalization.
 - Payment total validation: sum of `payments[].amount` must equal sum of `items[].totalAmount` (tolerance `0.01`). Each payment amount must be positive. Returns `400` with message `Payment total does not match fiscal bill total` on mismatch.

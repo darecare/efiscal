@@ -51,6 +51,9 @@ public class OrgEntity {
     @Column(name = "smtp_connection_security", length = 20)
     private String smtpConnectionSecurity;
 
+    @Column(name = "logo_image")
+    private String logoImage;
+
     @Column(name = "advertisement_html", columnDefinition = "TEXT")
     private String advertisementHtml;
 
@@ -94,6 +97,8 @@ public class OrgEntity {
     public void setSmtpPassword(String smtpPassword) { this.smtpPassword = smtpPassword; }
     public String getSmtpConnectionSecurity() { return smtpConnectionSecurity; }
     public void setSmtpConnectionSecurity(String smtpConnectionSecurity) { this.smtpConnectionSecurity = smtpConnectionSecurity; }
+    public String getLogoImage() { return logoImage; }
+    public void setLogoImage(String logoImage) { this.logoImage = logoImage; }
     public String getAdvertisementHtml() { return advertisementHtml; }
     public void setAdvertisementHtml(String advertisementHtml) { this.advertisementHtml = advertisementHtml; }
     public boolean isAdvertisementEnabled() { return advertisementEnabled; }

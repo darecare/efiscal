@@ -28,6 +28,7 @@ export default function FiscalBills() {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('tax')
   const [downloadingPdfFormat, setDownloadingPdfFormat] = useState('')
+  const [previewingHtmlFormat, setPreviewingHtmlFormat] = useState('')
   const [copyingBillIds, setCopyingBillIds] = useState({})
   const [refundingBillIds, setRefundingBillIds] = useState({})
   const [copyConfirmBill, setCopyConfirmBill] = useState(null)
@@ -210,6 +211,7 @@ export default function FiscalBills() {
     setIsDetailsModalOpen(false)
     setDetailsError(null)
     setDownloadingPdfFormat('')
+    setPreviewingHtmlFormat('')
   }
 
   async function handleDownloadPdf(format) {
@@ -233,6 +235,35 @@ export default function FiscalBills() {
       setDetailsError(typeof msg === 'string' ? msg : t('fiscalBills.downloadPdfFailed'))
     } finally {
       setDownloadingPdfFormat('')
+    }
+  }
+
+  async function handlePreviewHtml(format) {
+    const fiscalBillId = details?.fiscalBill?.fiscalbillId
+    if (!fiscalBillId) return
+
+    setDetailsError(null)
+    setPreviewingHtmlFormat(format)
+
+    const previewWindow = window.open('', '_blank')
+    if (!previewWindow) {
+      setDetailsError(t('fiscalBills.previewPopupBlocked'))
+      setPreviewingHtmlFormat('')
+      return
+    }
+
+    try {
+      const html = await fiscalBillApi.previewHtml(fiscalBillId, format)
+      previewWindow.document.open()
+      previewWindow.document.write(html)
+      previewWindow.document.close()
+      previewWindow.focus()
+    } catch (err) {
+      previewWindow.close()
+      const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('fiscalBills.previewHtmlFailed')
+      setDetailsError(typeof msg === 'string' ? msg : t('fiscalBills.previewHtmlFailed'))
+    } finally {
+      setPreviewingHtmlFormat('')
     }
   }
 
@@ -610,6 +641,14 @@ export default function FiscalBills() {
                 ) : null}
 
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => handlePreviewHtml('a4')}
+                    disabled={previewingHtmlFormat !== ''}
+                  >
+                    {previewingHtmlFormat === 'a4' ? t('fiscalBills.previewingHtml') : t('fiscalBills.previewHtmlA4')}
+                  </button>
                   <button
                     type="button"
                     className="secondary-button"

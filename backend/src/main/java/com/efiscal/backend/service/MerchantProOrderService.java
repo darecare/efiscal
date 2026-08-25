@@ -159,7 +159,8 @@ public class MerchantProOrderService {
                     String taxValue    = str(l.getOrDefault("product_tax_percent",
                             l.getOrDefault("tax_value", l.getOrDefault("tax_rate", ""))));
                     String taxCategoryName = str(l.getOrDefault("product_tax_name", l.getOrDefault("tax_name", "")));
-                    orderLines.add(new DemoDataService.OrderLineView(productId, productName, sku, qty, unitPrice, taxValue, taxCategoryName));
+                    String ean = str(l.getOrDefault("product_ean", l.getOrDefault("ean", "")));
+                    orderLines.add(new DemoDataService.OrderLineView(productId, productName, sku, ean, qty, unitPrice, taxValue, taxCategoryName));
                 }
             }
         }

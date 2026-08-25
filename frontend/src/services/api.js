@@ -215,6 +215,12 @@ export const fiscalBillApi = {
     })
     return response.data
   },
+  async previewHtml(fiscalbillId, format = 'a4') {
+    const response = await api.get(`/fiscalbill/${fiscalbillId}/html`, {
+      params: { format },
+    })
+    return response.data
+  },
   async createFromOrder(payload, idempotencyKey, orgId, clientId) {
     const response = await api.post('/fiscalbill/from-order', payload, {
       headers: { 'Idempotency-Key': idempotencyKey },
