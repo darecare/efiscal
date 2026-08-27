@@ -117,14 +117,36 @@
   color: var(--text-main, #334155);
 }
 
-.fiscal-item-grid, .fiscal-payment-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+.fiscal-item-grid {
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
 }
 
+.fiscal-item-row {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.fiscal-item-row--name {
+  grid-template-columns: minmax(0, 2.2fr) minmax(140px, 1fr);
+}
+
+.fiscal-item-row--amounts {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.fiscal-item-row .fiscal-field,
+.fiscal-item-row .fiscal-input {
+  min-width: 0;
+  width: 100%;
+}
+
 .fiscal-payment-grid {
+  display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 1rem;
 }
 
 .fiscal-submit-row {

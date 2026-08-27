@@ -102,7 +102,7 @@
 - **Auto-Calculations:** `totalAmount` is automatically calculated from `quantity * unitPrice`. The first payment row automatically syncs to match the remaining items total unless split explicitly by the user.
 - **Validation:** Structured inline field errors with scroll-to-first-error; submit disabled until payment balance is zero; status-aware success/failure result panel.
 - **Buyer ID Inference:** Entering a 9-digit or 13-digit `buyerIdValue` automatically pre-selects the corresponding `buyerType` (PIB or JMBG) using functional state updates to avoid stale closure bugs.
-- **Tax labels:** Item tax-label dropdown is populated from `GET /taxes` via `taxApi.list()`, with static fallback labels if the request fails.
+- **Tax labels:** Item tax-label dropdown is populated from `GET /taxes` via `taxApi.list()`, showing `label - rate%` (e.g. `A - 10%`). Static fallback labels are used if the request fails.
 - **Email:** Optional `sendEmail` checkbox and `customerEmail` field are sent on `POST /fiscalbill/manual` when enabled.
 - **Post-success actions:** Success result card offers verification link (when present), PDF download, navigation to fiscal bills list, and a reset flow for creating another bill.
 - **Payment match:** The `=` match-total control updates the payment amount without disabling single-payment auto-sync.

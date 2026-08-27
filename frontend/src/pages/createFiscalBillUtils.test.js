@@ -3,6 +3,7 @@ import {
   calcPaymentMatchAmount,
   calcTotalAmount,
   FALLBACK_TAX_LABELS,
+  FALLBACK_TAX_LABEL_OPTIONS,
   inferBuyerTypeFromNumericId,
   isFiscalResultFailed,
   isFiscalResultSuccess,
@@ -49,17 +50,21 @@ describe('createFiscalBillUtils', () => {
   })
 
   describe('normalizeTaxLabelOptions', () => {
-    it('uses active API labels when available', () => {
+    it('uses active API labels and rates when available', () => {
       expect(normalizeTaxLabelOptions([
-        { label: 'A', isActive: true },
-        { label: 'E', isActive: true },
-        { label: 'Z', isActive: false },
-      ])).toEqual(['A', 'E'])
+        { label: 'A', rate: 10, isActive: true },
+        { label: 'E', rate: 20.00, isActive: true },
+        { label: 'Z', rate: 0, isActive: false },
+      ])).toEqual([
+        { label: 'A', rate: '10' },
+        { label: 'E', rate: '20' },
+      ])
     })
 
     it('falls back when API returns no usable labels', () => {
-      expect(normalizeTaxLabelOptions([])).toEqual(FALLBACK_TAX_LABELS)
-      expect(normalizeTaxLabelOptions(null)).toEqual(FALLBACK_TAX_LABELS)
+      expect(normalizeTaxLabelOptions([])).toEqual(FALLBACK_TAX_LABEL_OPTIONS)
+      expect(normalizeTaxLabelOptions(null)).toEqual(FALLBACK_TAX_LABEL_OPTIONS)
+      expect(FALLBACK_TAX_LABEL_OPTIONS.map((option) => option.label)).toEqual(FALLBACK_TAX_LABELS)
     })
   })
 

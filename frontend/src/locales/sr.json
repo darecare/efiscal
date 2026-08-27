@@ -576,6 +576,7 @@
     "selectImportOrg": "Izaberite organizaciju",
     "importOrgRequired": "Izaberite organizaciju.",
     "importTaxesHint": "Uvozi trenutne poreske stope iz statusa Poreske uprave. Postojeće poreske kategorije i oznake se preskaču.",
+    "importSummary": "Poreske stope su uspešno uvezene.",
     "importCompleted": "Uvoz završen: {{createdCategories}} kategorija kreirano, {{createdTaxes}} poreza kreirano, {{skippedTaxes}} poreza preskočeno.",
     "importFailed": "Uvoz poreza nije uspeo",
     "taxCreated": "Porez je kreiran",
@@ -657,6 +658,7 @@
     "unitPrice": "Jedinična cena",
     "total": "Ukupno",
     "taxLabel": "Poreska oznaka",
+    "taxOption": "{{label}} - {{rate}}%",
     "taxPrefix": "Poreski prefiks",
     "gtin": "GTIN",
     "addItem": "+ Dodaj stavku",
@@ -770,7 +772,7 @@
       "name": "Naziv",
       "sku": "SKU",
       "ean": "EAN",
-      "price": "Poslednja poznata cena",
+      "price": "Cena",
       "active": "Aktivan"
     },
     "modal": {

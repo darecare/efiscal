@@ -1,5 +1,18 @@
 export const FALLBACK_TAX_LABELS = ['A', 'E', 'G', 'Đ', 'N']
 
+export const FALLBACK_TAX_LABEL_OPTIONS = FALLBACK_TAX_LABELS.map((label) => ({ label, rate: null }))
+
+export function formatTaxRate(rate) {
+  if (rate === null || rate === undefined || rate === '') return null
+  const n = Number(rate)
+  if (!Number.isFinite(n)) return null
+  return String(n)
+}
+
+function toTaxLabelOptions(labels) {
+  return labels.map((label) => ({ label, rate: null }))
+}
+
 export function isFiscalResultSuccess(result) {
   return result?.status === 'SUCCESS'
 }
@@ -34,13 +47,16 @@ export function calcPaymentMatchAmount(itemsTotal, paymentsTotal, paymentAmount)
 
 export function normalizeTaxLabelOptions(taxes, fallback = FALLBACK_TAX_LABELS) {
   if (!Array.isArray(taxes) || taxes.length === 0) {
-    return [...fallback]
+    return toTaxLabelOptions(fallback)
   }
-  const labels = [...new Set(
-    taxes
-      .filter((tax) => tax.isActive !== false)
-      .map((tax) => tax.label)
-      .filter(Boolean),
-  )]
-  return labels.length > 0 ? labels : [...fallback]
+  const seen = new Set()
+  const options = []
+  for (const tax of taxes) {
+    if (tax?.isActive === false) continue
+    const label = tax?.label
+    if (!label || seen.has(label)) continue
+    seen.add(label)
+    options.push({ label, rate: formatTaxRate(tax.rate) })
+  }
+  return options.length > 0 ? options : toTaxLabelOptions(fallback)
 }
