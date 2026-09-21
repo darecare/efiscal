@@ -1,6 +1,5 @@
 package com.efiscal.backend.service;
 
-import com.efiscal.backend.model.FiscalBillConfigEntity;
 import com.efiscal.backend.model.FiscalBillEntity;
 import com.efiscal.backend.model.FiscalBillIdempotencyKeyEntity;
 import com.efiscal.backend.model.FiscalBillLineEntity;
@@ -9,7 +8,6 @@ import com.efiscal.backend.model.FiscalBillTaxEntity;
 import com.efiscal.backend.model.PayTypeMapEntity;
 import com.efiscal.backend.model.ProductEntity;
 import com.efiscal.backend.model.TaxEntity;
-import com.efiscal.backend.repository.FiscalBillConfigRepository;
 import com.efiscal.backend.repository.FiscalBillIdempotencyKeyRepository;
 import com.efiscal.backend.repository.FiscalBillLineRepository;
 import com.efiscal.backend.repository.FiscalBillPayRepository;
@@ -22,9 +20,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -47,7 +47,7 @@ import org.springframework.web.server.ResponseStatusException;
  * - Retry failed fiscal bills
  *
  * Business rules applied equally to order-based and manual creation:
- * - Header fields: invoiceType, transactionType, dateAndTime (Belgrade TZ), invoiceNumber from fiscalbillconfig
+ * - Header fields: invoiceType, transactionType, dateAndTime (Belgrade TZ), invoiceNumber from the ESIR number
  * - Reference fields: based on previously issued fiscal bills (4.1.4)
  * - Advance closing chain: create Advance Refund before Normal Sale if Advance exists (4.1.5)
  * - Payment mapping: from paytype_map table per client (4.1.6)
@@ -68,6 +68,11 @@ public class FiscalBillService {
     public static final int TRANSACTION_TYPE_SALE = 0;
     public static final int TRANSACTION_TYPE_REFUND = 1;
 
+    /** How far in the past an advance payment moment may be set. */
+    private static final int ADVANCE_PAYMENT_MAX_DAYS_IN_PAST = 3;
+
+    private static final ZoneId BELGRADE_ZONE = ZoneId.of("Europe/Belgrade");
+
     /** Fiscal status strings */
     public static final String STATUS_PENDING = "PENDING";
     public static final String STATUS_SUCCESS = "SUCCESS";
@@ -79,12 +84,12 @@ public class FiscalBillService {
     private final FiscalBillPayRepository fiscalBillPayRepository;
     private final FiscalBillLineRepository fiscalBillLineRepository;
     private final FiscalBillIdempotencyKeyRepository idempotencyKeyRepository;
-    private final FiscalBillConfigRepository fiscalBillConfigRepository;
     private final PayTypeMapRepository payTypeMapRepository;
     private final ProductRepository productRepository;
     private final TaxRepository taxRepository;
     private final TaxAuthorityService taxAuthorityService;
     private final FiscalBillEmailService fiscalBillEmailService;
+    private final EsirNumberService esirNumberService;
     private final ObjectMapper objectMapper;
 
     public FiscalBillService(
@@ -93,24 +98,24 @@ public class FiscalBillService {
             FiscalBillPayRepository fiscalBillPayRepository,
             FiscalBillLineRepository fiscalBillLineRepository,
             FiscalBillIdempotencyKeyRepository idempotencyKeyRepository,
-            FiscalBillConfigRepository fiscalBillConfigRepository,
             PayTypeMapRepository payTypeMapRepository,
             ProductRepository productRepository,
             TaxRepository taxRepository,
             TaxAuthorityService taxAuthorityService,
             FiscalBillEmailService fiscalBillEmailService,
+            EsirNumberService esirNumberService,
             ObjectMapper objectMapper) {
         this.fiscalBillRepository = fiscalBillRepository;
         this.fiscalBillTaxRepository = fiscalBillTaxRepository;
         this.fiscalBillPayRepository = fiscalBillPayRepository;
         this.fiscalBillLineRepository = fiscalBillLineRepository;
         this.idempotencyKeyRepository = idempotencyKeyRepository;
-        this.fiscalBillConfigRepository = fiscalBillConfigRepository;
         this.payTypeMapRepository = payTypeMapRepository;
         this.productRepository = productRepository;
         this.taxRepository = taxRepository;
         this.taxAuthorityService = taxAuthorityService;
         this.fiscalBillEmailService = fiscalBillEmailService;
+        this.esirNumberService = esirNumberService;
         this.objectMapper = objectMapper;
     }
 
@@ -162,18 +167,21 @@ public class FiscalBillService {
                             orgId, orderId, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE);
             if (!advanceBills.isEmpty()) {
                 // Create Advance Refund to close the chain
-            createAdvanceRefund(orgId, clientId, orderId, advanceBills, orderData, resolvedItems);
+            createAdvanceRefund(orgId, clientId, orderId, advanceBills, orderData, resolvedItems, null);
             }
         }
 
         // Build and send request
-        FiscalBillConfigEntity config = resolveConfig(orgId);
-        String requestBody = buildRequestBody(orgId, clientId, orderId, invoiceType, transactionType,
+        BuiltTaxAuthorityRequest builtRequest = buildRequestBody(orgId, clientId, orderId, invoiceType, transactionType,
             resolvedItems, orderData.paymentMethodCode(), orderData.billingType(),
-                orderData.billingCompanyVat(), config, orderData.cashier());
+                orderData.billingCompanyVat(), orderData.cashier(), orderData.buyerCostCenterId(),
+                orderData.dateAndTimeOfIssue());
+        String requestBody = builtRequest.json();
 
         FiscalBillEntity entity = createPendingEntity(orgId, clientId, orderId,
-            invoiceType, transactionType, orderData.customerName(), requestBody);
+            invoiceType, transactionType, orderData.customerName(), orderData.customerEmail(),
+            builtRequest.buyerId(), builtRequest.buyerCostCenterId(), requestBody, builtRequest.referentFiscalbillId(),
+            builtRequest.dateAndTimeOfIssue());
         fiscalBillRepository.save(entity);
         registerIdempotencyKey(idempotencyKey, entity);
 
@@ -184,9 +192,11 @@ public class FiscalBillService {
             // Save payment records
             savePaymentRecords(entity.getFiscalbillId(), clientId, orgId, orderData.paymentMethodCode(),
                     entity.getEfiscalTotalamount());
-            // Save line items after successful fiscalization
-            saveLineItems(entity.getFiscalbillId(), clientId, orgId, resolvedItems);
-            fiscalBillEmailService.sendIfRequested(orgId, entity, orderData.sendEmail(), orderData.customerEmail(), orderData.customerName(), orderId);
+            // Save line items after successful fiscalization (Advance: summarized tax lines)
+            saveLineItems(entity.getFiscalbillId(), clientId, orgId, linesToPersist(invoiceType, resolvedItems));
+            FiscalBillEmailService.EmailSendResult emailResult = fiscalBillEmailService.sendIfRequested(
+                    orgId, entity, orderData.sendEmail(), orderData.customerEmail(), orderData.customerName(), orderId);
+            return FiscalBillCreateResult.ofCreated(toView(entity, emailResult));
         } catch (ResponseStatusException rse) {
             entity.setStatus(STATUS_FAILED);
             entity.setLastError(rse.getReason());
@@ -200,8 +210,6 @@ public class FiscalBillService {
             fiscalBillRepository.save(entity);
             return FiscalBillCreateResult.ofFailed(toView(entity));
         }
-
-        return FiscalBillCreateResult.ofCreated(toView(entity));
     }
 
     // -----------------------------------------------------------------------
@@ -232,8 +240,11 @@ public class FiscalBillService {
 
         // If an orderId is provided, apply order-linked fiscal-chain checks (spec 4.2.1)
         String orderId = request.orderId();
+        if (orderId != null && orderId.isBlank()) {
+            orderId = null;
+        }
 
-        if (orderId != null && !orderId.isBlank()) {
+        if (orderId != null) {
             applyManualOrderLinkedChecks(orgId, orderId, request);
 
             // 4.1.5 Advance closing chain (also applies when orderId is provided in manual creation)
@@ -244,23 +255,27 @@ public class FiscalBillService {
                 if (!advanceBills.isEmpty()) {
                     OrderFiscalizeRequest syntheticOrder = buildSyntheticOrderFromManual(request);
                     createAdvanceRefund(orgId, clientId, orderId, advanceBills, syntheticOrder,
-                            resolveItemsForFiscalChain(request.items()));
+                            resolveItemsForFiscalChain(request.items()), request.payments());
                 }
             }
         }
 
-        FiscalBillConfigEntity config = resolveConfig(orgId);
         List<FiscalBillItemRequest> enrichedItems = enrichItemsWithGtin(orgId, request.items());
 
         // Build request body — manual items, manual payments
-        String requestBody = buildManualRequestBody(orgId, clientId, orderId,
+        BuiltTaxAuthorityRequest builtRequest = buildManualRequestBody(orgId, clientId, orderId,
                 request.invoiceType(), request.transactionType(),
             enrichedItems, request.payments(),
-                request.buyerId(), request.buyerType(), request.buyerVat(), config,
-                request.referentDocumentNumber(), request.cashier());
+                request.buyerId(), request.buyerType(), request.buyerVat(),
+                request.buyerCostCenterId(),
+                request.referentDocumentNumber(), request.cashier(),
+                request.dateAndTimeOfIssue());
+        String requestBody = builtRequest.json();
 
         FiscalBillEntity entity = createPendingEntity(orgId, clientId, orderId,
-            request.invoiceType(), request.transactionType(), request.customerName(), requestBody);
+            request.invoiceType(), request.transactionType(), request.customerName(), request.customerEmail(),
+            builtRequest.buyerId(), builtRequest.buyerCostCenterId(), requestBody, builtRequest.referentFiscalbillId(),
+            builtRequest.dateAndTimeOfIssue());
         fiscalBillRepository.save(entity);
         registerIdempotencyKey(idempotencyKey, entity);
 
@@ -271,9 +286,12 @@ public class FiscalBillService {
             fiscalBillRepository.save(entity);
             // Save payment records from manual payment rows
             saveManualPaymentRecords(entity.getFiscalbillId(), clientId, orgId, request.payments());
-            // Save line items
-            saveLineItems(entity.getFiscalbillId(), clientId, orgId, enrichedItems);
-            fiscalBillEmailService.sendIfRequested(orgId, entity, request.sendEmail(), request.customerEmail(), request.customerName(), orderId);
+            // Save line items (Advance: summarized tax lines with configured advance names)
+            saveLineItems(entity.getFiscalbillId(), clientId, orgId,
+                    linesToPersist(request.invoiceType(), enrichedItems));
+            FiscalBillEmailService.EmailSendResult emailResult = fiscalBillEmailService.sendIfRequested(
+                    orgId, entity, request.sendEmail(), request.customerEmail(), request.customerName(), orderId);
+            return FiscalBillCreateResult.ofCreated(toView(entity, emailResult));
         } catch (ResponseStatusException rse) {
             entity.setStatus(STATUS_FAILED);
             entity.setLastError(rse.getReason());
@@ -287,8 +305,6 @@ public class FiscalBillService {
             fiscalBillRepository.save(entity);
             return FiscalBillCreateResult.ofFailed(toView(entity));
         }
-
-        return FiscalBillCreateResult.ofCreated(toView(entity));
     }
 
     // -----------------------------------------------------------------------
@@ -336,7 +352,7 @@ public class FiscalBillService {
     }
 
     @Transactional
-    public FiscalBillCreateResult createCopyFiscalBill(Long sourceFiscalBillId, String idempotencyKey) {
+    public FiscalBillCreateResult createCopyFiscalBill(Long sourceFiscalBillId, String idempotencyKey, String cashier) {
         Optional<FiscalBillIdempotencyKeyEntity> existingKey = idempotencyKeyRepository.findById(idempotencyKey);
         if (existingKey.isPresent()) {
             return FiscalBillCreateResult.ofAlreadyExists(toView(existingKey.get().getFiscalBill()));
@@ -375,8 +391,7 @@ public class FiscalBillService {
             copyPayments = List.of(new PaymentRequest(0, source.getEfiscalTotalamount()));
         }
 
-        FiscalBillConfigEntity config = resolveConfig(source.getOrgId());
-        String requestBody = buildCopyRequestBody(source, copyItems, copyPayments, config);
+        String requestBody = buildCopyRequestBody(source, copyItems, copyPayments, cashier);
 
         int copyTransactionType = source.getEfiscalTransactiontype() == null
                 ? TRANSACTION_TYPE_SALE
@@ -388,8 +403,13 @@ public class FiscalBillService {
                 source.getOrderId(),
                 INVOICE_TYPE_COPY,
                 copyTransactionType,
-                source.getEfiscalCustomername(),
-                requestBody);
+                source.getCustomerName(),
+                source.getCustomerEmail(),
+                source.getCustomerId(),
+                source.getCustomerCostCenterId(),
+                requestBody,
+                source.getFiscalbillId(),
+                null); // Copy never sends dateAndTimeOfIssue
         fiscalBillRepository.save(entity);
         registerIdempotencyKey(idempotencyKey, entity);
 
@@ -418,7 +438,7 @@ public class FiscalBillService {
     }
 
     @Transactional
-    public FiscalBillCreateResult createRefundFiscalBill(Long sourceFiscalBillId, String idempotencyKey) {
+    public FiscalBillCreateResult createRefundFiscalBill(Long sourceFiscalBillId, String idempotencyKey, String cashier) {
         Optional<FiscalBillIdempotencyKeyEntity> existingKey = idempotencyKeyRepository.findById(idempotencyKey);
         if (existingKey.isPresent()) {
             return FiscalBillCreateResult.ofAlreadyExists(toView(existingKey.get().getFiscalBill()));
@@ -465,8 +485,7 @@ public class FiscalBillService {
             refundPayments = List.of(new PaymentRequest(0, source.getEfiscalTotalamount()));
         }
 
-        FiscalBillConfigEntity config = resolveConfig(source.getOrgId());
-        String requestBody = buildRefundRequestBody(source, refundItems, refundPayments, config);
+        String requestBody = buildRefundRequestBody(source, refundItems, refundPayments, cashier);
 
         int refundInvoiceType = source.getEfiscalInvoicetype() == null
                 ? INVOICE_TYPE_NORMAL
@@ -478,8 +497,13 @@ public class FiscalBillService {
                 source.getOrderId(),
                 refundInvoiceType,
                 TRANSACTION_TYPE_REFUND,
-                source.getEfiscalCustomername(),
-                requestBody);
+                source.getCustomerName(),
+                source.getCustomerEmail(),
+                source.getCustomerId(),
+                source.getCustomerCostCenterId(),
+                requestBody,
+                source.getFiscalbillId(),
+                null); // Refund never sends dateAndTimeOfIssue
         fiscalBillRepository.save(entity);
         registerIdempotencyKey(idempotencyKey, entity);
 
@@ -562,31 +586,34 @@ public class FiscalBillService {
     /**
      * Build Tax Authority request body for order-based fiscalization.
      */
-    private String buildRequestBody(Long orgId, Long clientId, String orderId,
+    private BuiltTaxAuthorityRequest buildRequestBody(Long orgId, Long clientId, String orderId,
             int invoiceType, int transactionType,
             List<FiscalBillItemRequest> items, String paymentMethodCode,
             String billingType, String billingCompanyVat,
-            FiscalBillConfigEntity config, String cashier) {
+            String cashier, String buyerCostCenterId, String dateAndTimeOfIssue) {
 
         Map<String, Object> body = new HashMap<>();
 
         // Header (4.1.2)
         body.put("invoiceType", invoiceType);
         body.put("transactionType", transactionType);
-        body.put("dateAndTimeOfIssue", belgradeNow());
-        if (config != null && config.getEsirno() != null) {
-            body.put("invoiceNumber", config.getEsirno());
-        }
-        if (cashier != null && !cashier.isBlank()) {
-            body.put("cashier", cashier);
-        }
+        String sentDateAndTimeOfIssue =
+                putDateAndTimeOfIssueIfAllowed(body, invoiceType, transactionType, dateAndTimeOfIssue);
+        putInvoiceNumberIfPresent(body);
+        putCashierIfPresent(body, cashier);
 
         // BuyerId (4.1.7)
         String buyerId = resolveBuyerIdFromOrder(billingType, billingCompanyVat);
         if (buyerId != null) body.put("buyerId", buyerId);
 
+        // Optional customer field — only when buyerId is present and value provided
+        String resolvedCostCenterId = resolveBuyerCostCenterId(buyerCostCenterId, buyerId);
+        if (resolvedCostCenterId != null) {
+            body.put("buyerCostCenterId", resolvedCostCenterId);
+        }
+
         // Reference fields (4.1.4)
-        setReferentFields(body, orgId, orderId, invoiceType, transactionType);
+        Long referentFiscalbillId = setReferentFields(body, orgId, orderId, invoiceType, transactionType);
 
         // Payment (4.1.6)
         body.put("payment", buildPaymentArrayFromCode(clientId, paymentMethodCode,
@@ -600,30 +627,28 @@ public class FiscalBillService {
             body.put("items", buildLineItems(items));
         }
 
-        return toJson(body);
+        return new BuiltTaxAuthorityRequest(toJson(body), referentFiscalbillId, buyerId, resolvedCostCenterId,
+                sentDateAndTimeOfIssue);
     }
 
     /**
      * Build Tax Authority request body for manual fiscalization.
      */
-    private String buildManualRequestBody(Long orgId, Long clientId, String orderId,
+    private BuiltTaxAuthorityRequest buildManualRequestBody(Long orgId, Long clientId, String orderId,
             int invoiceType, int transactionType,
             List<FiscalBillItemRequest> items, List<PaymentRequest> payments,
-            String buyerId, String buyerType, String buyerVat,
-            FiscalBillConfigEntity config, String referentDocumentNumber, String cashier) {
+            String buyerId, String buyerType, String buyerVat, String buyerCostCenterId,
+            String referentDocumentNumber, String cashier, String dateAndTimeOfIssue) {
 
         Map<String, Object> body = new HashMap<>();
 
         // Header (4.1.2 / 4.2.1)
         body.put("invoiceType", invoiceType);
         body.put("transactionType", transactionType);
-        body.put("dateAndTimeOfIssue", belgradeNow());
-        if (config != null && config.getEsirno() != null) {
-            body.put("invoiceNumber", config.getEsirno());
-        }
-        if (cashier != null && !cashier.isBlank()) {
-            body.put("cashier", cashier);
-        }
+        String sentDateAndTimeOfIssue =
+                putDateAndTimeOfIssueIfAllowed(body, invoiceType, transactionType, dateAndTimeOfIssue);
+        putInvoiceNumberIfPresent(body);
+        putCashierIfPresent(body, cashier);
 
         // BuyerId (4.2.1)
         String resolvedBuyerId = resolveManualBuyerId(buyerId, buyerType, buyerVat);
@@ -631,11 +656,17 @@ public class FiscalBillService {
             body.put("buyerId", resolvedBuyerId);
         }
 
+        String resolvedCostCenterId = resolveBuyerCostCenterId(buyerCostCenterId, resolvedBuyerId);
+        if (resolvedCostCenterId != null) {
+            body.put("buyerCostCenterId", resolvedCostCenterId);
+        }
+
         // Reference fields: explicit override resolves DT from local DB; else auto-resolve when orderId set.
+        Long referentFiscalbillId = null;
         if (referentDocumentNumber != null && !referentDocumentNumber.isBlank()) {
-            applyManualReferentFields(body, orgId, referentDocumentNumber.trim());
+            referentFiscalbillId = applyManualReferentFields(body, orgId, referentDocumentNumber.trim());
         } else if (orderId != null && !orderId.isBlank()) {
-            setReferentFields(body, orgId, orderId, invoiceType, transactionType);
+            referentFiscalbillId = setReferentFields(body, orgId, orderId, invoiceType, transactionType);
         }
 
         // Payment from manually entered payment rows (4.2.3)
@@ -648,7 +679,8 @@ public class FiscalBillService {
             body.put("items", buildLineItems(items));
         }
 
-        return toJson(body);
+        return new BuiltTaxAuthorityRequest(toJson(body), referentFiscalbillId, resolvedBuyerId, resolvedCostCenterId,
+                sentDateAndTimeOfIssue);
     }
 
     private String resolveManualBuyerId(String buyerId, String buyerType, String buyerVat) {
@@ -661,11 +693,21 @@ public class FiscalBillService {
         return null;
     }
 
+    private String resolveBuyerCostCenterId(String buyerCostCenterId, String buyerId) {
+        if (buyerId == null || buyerId.isBlank()) {
+            return null;
+        }
+        if (buyerCostCenterId == null || buyerCostCenterId.isBlank()) {
+            return null;
+        }
+        return buyerCostCenterId.trim();
+    }
+
     private String buildCopyRequestBody(
             FiscalBillEntity source,
             List<FiscalBillItemRequest> items,
             List<PaymentRequest> payments,
-            FiscalBillConfigEntity config) {
+            String cashier) {
 
         Map<String, Object> body = new HashMap<>();
         int sourceTransactionType = source.getEfiscalTransactiontype() == null
@@ -674,10 +716,8 @@ public class FiscalBillService {
 
         body.put("invoiceType", INVOICE_TYPE_COPY);
         body.put("transactionType", sourceTransactionType);
-        body.put("dateAndTimeOfIssue", belgradeNow());
-        if (config != null && config.getEsirno() != null) {
-            body.put("invoiceNumber", config.getEsirno());
-        }
+        putInvoiceNumberIfPresent(body);
+        putCashierIfPresent(body, cashier);
 
         body.put("referentDocumentNumber", source.getEfiscalSdcInvoiceno());
         if (source.getEfiscalSdcdatetime() != null && !source.getEfiscalSdcdatetime().isBlank()) {
@@ -697,7 +737,7 @@ public class FiscalBillService {
             FiscalBillEntity source,
             List<FiscalBillItemRequest> items,
             List<PaymentRequest> payments,
-            FiscalBillConfigEntity config) {
+            String cashier) {
 
         Map<String, Object> body = new HashMap<>();
         int refundInvoiceType = source.getEfiscalInvoicetype() == null
@@ -706,10 +746,8 @@ public class FiscalBillService {
 
         body.put("invoiceType", refundInvoiceType);
         body.put("transactionType", TRANSACTION_TYPE_REFUND);
-        body.put("dateAndTimeOfIssue", belgradeNow());
-        if (config != null && config.getEsirno() != null) {
-            body.put("invoiceNumber", config.getEsirno());
-        }
+        putInvoiceNumberIfPresent(body);
+        putCashierIfPresent(body, cashier);
 
         body.put("referentDocumentNumber", source.getEfiscalSdcInvoiceno());
         if (source.getEfiscalSdcdatetime() != null && !source.getEfiscalSdcdatetime().isBlank()) {
@@ -723,6 +761,70 @@ public class FiscalBillService {
             body.put("items", buildLineItems(items));
         }
         return toJson(body);
+    }
+
+    /**
+     * Tax Authority {@code dateAndTimeOfIssue} — sent only on Advance Sale bills for which the caller supplied
+     * an advance payment moment. Every other invoice/transaction type must omit it, and an Advance Sale without
+     * a chosen moment omits it too, so the Tax Authority stamps the bill itself.
+     *
+     * @return the value put in the request body, or null when the field is omitted
+     */
+    private String putDateAndTimeOfIssueIfAllowed(Map<String, Object> body,
+            int invoiceType, int transactionType, String dateAndTimeOfIssue) {
+        if (dateAndTimeOfIssue == null || dateAndTimeOfIssue.isBlank()) {
+            return null;
+        }
+        if (invoiceType != INVOICE_TYPE_ADVANCE || transactionType != TRANSACTION_TYPE_SALE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "dateAndTimeOfIssue is allowed only for Advance Sale fiscal bills");
+        }
+        String normalized = normalizeAdvancePaymentDateTime(dateAndTimeOfIssue.trim());
+        body.put("dateAndTimeOfIssue", normalized);
+        return normalized;
+    }
+
+    /** Validates the advance payment moment is in the past, at most {@code ADVANCE_PAYMENT_MAX_DAYS_IN_PAST} days back. */
+    private String normalizeAdvancePaymentDateTime(String value) {
+        ZonedDateTime selected = parseBelgradeDateTime(value);
+        ZonedDateTime now = ZonedDateTime.now(BELGRADE_ZONE);
+        if (selected.isAfter(now)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "dateAndTimeOfIssue must not be in the future");
+        }
+        if (selected.isBefore(now.minusDays(ADVANCE_PAYMENT_MAX_DAYS_IN_PAST))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "dateAndTimeOfIssue must not be more than "
+                            + ADVANCE_PAYMENT_MAX_DAYS_IN_PAST + " days in the past");
+        }
+        return selected.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+    }
+
+    private ZonedDateTime parseBelgradeDateTime(String value) {
+        try {
+            return OffsetDateTime.parse(value).atZoneSameInstant(BELGRADE_ZONE);
+        } catch (DateTimeParseException withoutOffset) {
+            try {
+                return LocalDateTime.parse(value).atZone(BELGRADE_ZONE);
+            } catch (DateTimeParseException ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Invalid dateAndTimeOfIssue: " + value);
+            }
+        }
+    }
+
+    /** Tax Authority {@code invoiceNumber} — ESIR number of this installation, as printed on receipts. */
+    private void putInvoiceNumberIfPresent(Map<String, Object> body) {
+        String esirNumber = esirNumberService.resolveEsirNumber();
+        if (!esirNumber.isBlank()) {
+            body.put("invoiceNumber", esirNumber);
+        }
+    }
+
+    private void putCashierIfPresent(Map<String, Object> body, String cashier) {
+        if (cashier != null && !cashier.isBlank()) {
+            body.put("cashier", cashier.trim());
+        }
     }
 
     /**
@@ -750,10 +852,16 @@ public class FiscalBillService {
 
     /**
      * Advance line items — summarized per tax rate (4.1.3 rule 2).
-     * Name is resolved from tax table: efiscal_advanceprefix + efiscal_advancename.
+     * Name format: {@code advancePrefix advanceName (taxMark)} from tax table.
      */
     private List<Map<String, Object>> buildAdvanceLineItems(List<FiscalBillItemRequest> items) {
-        // Group items by tax label and sum totalAmount.
+        return toTaxAuthorityItems(buildAdvanceItemRequests(items));
+    }
+
+    /**
+     * Group source items by tax label into Advance line requests (qty=1, name from tax config).
+     */
+    private List<FiscalBillItemRequest> buildAdvanceItemRequests(List<FiscalBillItemRequest> items) {
         Map<String, BigDecimal> groupedByLabel = new HashMap<>();
         for (FiscalBillItemRequest item : items) {
             String label = resolvePrimaryLabel(item);
@@ -765,19 +873,47 @@ public class FiscalBillService {
 
         Map<String, String> advanceNameByLabel = resolveAdvanceNameByLabel(groupedByLabel.keySet());
 
-        List<Map<String, Object>> result = new ArrayList<>();
+        List<FiscalBillItemRequest> result = new ArrayList<>();
         for (Map.Entry<String, BigDecimal> entry : groupedByLabel.entrySet()) {
             String label = entry.getKey();
             BigDecimal total = entry.getValue();
+            result.add(new FiscalBillItemRequest(
+                    advanceNameByLabel.get(label),
+                    BigDecimal.ONE,
+                    total,
+                    total,
+                    label,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    List.of(label)
+            ));
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> toTaxAuthorityItems(List<FiscalBillItemRequest> items) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (FiscalBillItemRequest item : items) {
             Map<String, Object> line = new HashMap<>();
-            line.put("name", advanceNameByLabel.get(label));
-            line.put("quantity", BigDecimal.ONE);
-            line.put("unitPrice", total);
-            line.put("totalAmount", total);
-            line.put("labels", List.of(label));
+            line.put("name", item.name());
+            line.put("quantity", item.quantity());
+            line.put("unitPrice", item.unitPrice());
+            line.put("totalAmount", item.totalAmount());
+            line.put("labels", item.labels() != null ? item.labels() : List.of(resolvePrimaryLabel(item)));
             result.add(line);
         }
         return result;
+    }
+
+    private List<FiscalBillItemRequest> linesToPersist(int invoiceType, List<FiscalBillItemRequest> items) {
+        if (invoiceType == INVOICE_TYPE_ADVANCE) {
+            return buildAdvanceItemRequests(items);
+        }
+        return items;
     }
 
     private Map<String, String> resolveAdvanceNameByLabel(Set<String> labels) {
@@ -810,15 +946,20 @@ public class FiscalBillService {
                         "Tax label '" + label + "' is missing efiscal_advancename");
             }
 
-            resolved.put(label, tax.getEfiscalAdvanceprefix().trim() + tax.getEfiscalAdvancename().trim());
+            resolved.put(label, AdvanceLineNameResolver.format(
+                    tax.getEfiscalAdvanceprefix(),
+                    tax.getEfiscalAdvancename(),
+                    label));
         }
         return resolved;
     }
 
     /**
      * Set referentDocumentNumber and referentDocumentDT fields (4.1.4).
+     *
+     * @return local fiscalbill_id of the referenced bill, or null when no referent applies
      */
-    private void setReferentFields(Map<String, Object> body, Long orgId, String orderId,
+    private Long setReferentFields(Map<String, Object> body, Long orgId, String orderId,
             int invoiceType, int transactionType) {
         FiscalBillEntity ref = null;
 
@@ -844,13 +985,17 @@ public class FiscalBillService {
             if (ref.getEfiscalSdcdatetime() != null) {
                 body.put("referentDocumentDT", ref.getEfiscalSdcdatetime());
             }
+            return ref.getFiscalbillId();
         }
+        return null;
     }
 
     /**
      * Apply user-supplied referent document number and resolve datetime from local fiscal bill (4.2.1 / 4.1.4).
+     *
+     * @return local fiscalbill_id of the referenced bill
      */
-    private void applyManualReferentFields(Map<String, Object> body, Long orgId, String referentDocumentNumber) {
+    private Long applyManualReferentFields(Map<String, Object> body, Long orgId, String referentDocumentNumber) {
         FiscalBillEntity ref = fiscalBillRepository
                 .findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(orgId, referentDocumentNumber)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -861,6 +1006,7 @@ public class FiscalBillService {
         }
         body.put("referentDocumentNumber", referentDocumentNumber);
         body.put("referentDocumentDT", ref.getEfiscalSdcdatetime());
+        return ref.getFiscalbillId();
     }
 
     /**
@@ -1001,20 +1147,29 @@ public class FiscalBillService {
      * Format: "10:" + billing_company_vat when billing_type = "company"
      */
     private String resolveBuyerIdFromOrder(String billingType, String billingCompanyVat) {
-        if ("company".equalsIgnoreCase(billingType)
-                && billingCompanyVat != null && !billingCompanyVat.isBlank()) {
-            return "10:" + billingCompanyVat;
+        if (billingType == null || !"company".equalsIgnoreCase(billingType.trim())) {
+            return null;
         }
-        return null;
+        if (billingCompanyVat == null || billingCompanyVat.isBlank()) {
+            return null;
+        }
+        String vat = billingCompanyVat.trim().replaceAll("\\s+", "");
+        if (vat.regionMatches(true, 0, "10:", 0, 3)) {
+            vat = vat.substring(3);
+        }
+        if (vat.isBlank()) {
+            return null;
+        }
+        return "10:" + vat;
     }
 
     // -----------------------------------------------------------------------
     // 4.1.5  Advance closing chain
     // -----------------------------------------------------------------------
 
-        private void createAdvanceRefund(Long orgId, Long clientId, String orderId,
+    private void createAdvanceRefund(Long orgId, Long clientId, String orderId,
             List<FiscalBillEntity> advanceBills, OrderFiscalizeRequest orderData,
-            List<FiscalBillItemRequest> resolvedItems) {
+            List<FiscalBillItemRequest> resolvedItems, List<PaymentRequest> sourcePayments) {
         // Summarize all previous Advance Normal amounts
         BigDecimal totalAdvanceAmount = advanceBills.stream()
                 .filter(b -> STATUS_SUCCESS.equals(b.getStatus()))
@@ -1026,18 +1181,15 @@ public class FiscalBillService {
         // Get the last advance bill as reference
         FiscalBillEntity lastAdvance = advanceBills.get(0);
 
-        FiscalBillConfigEntity config = resolveConfig(orgId);
-
-        // Build refund items that mirror the advance items but as refund
-        List<FiscalBillItemRequest> refundItems = buildAdvanceRefundItems(orderId, totalAdvanceAmount, resolvedItems);
+        List<FiscalBillItemRequest> refundSourceItems = collectAdvanceSaleItems(advanceBills, resolvedItems);
+        List<FiscalBillItemRequest> advanceLines = buildAdvanceItemRequests(refundSourceItems);
+        List<PaymentRequest> refundPayments = buildAdvanceRefundPayments(
+                clientId, orderData.paymentMethodCode(), sourcePayments, lastAdvance, totalAdvanceAmount);
 
         Map<String, Object> body = new HashMap<>();
         body.put("invoiceType", INVOICE_TYPE_ADVANCE);
         body.put("transactionType", TRANSACTION_TYPE_REFUND);
-        body.put("dateAndTimeOfIssue", belgradeNow());
-        if (config != null && config.getEsirno() != null) {
-            body.put("invoiceNumber", config.getEsirno());
-        }
+        putInvoiceNumberIfPresent(body);
         // Reference the last advance bill
         if (lastAdvance.getEfiscalSdcInvoiceno() != null) {
             body.put("referentDocumentNumber", lastAdvance.getEfiscalSdcInvoiceno());
@@ -1045,22 +1197,38 @@ public class FiscalBillService {
                 body.put("referentDocumentDT", lastAdvance.getEfiscalSdcdatetime());
             }
         }
-        body.put("payment", buildPaymentArrayFromCode(clientId,
-                orderData.paymentMethodCode(), totalAdvanceAmount));
-        body.put("items", buildAdvanceLineItems(refundItems));
+        String buyerId = resolveBuyerIdFromOrder(orderData.billingType(), orderData.billingCompanyVat());
+        if (buyerId != null) {
+            body.put("buyerId", buyerId);
+        }
+        String resolvedCostCenterId = resolveBuyerCostCenterId(orderData.buyerCostCenterId(), buyerId);
+        if (resolvedCostCenterId != null) {
+            body.put("buyerCostCenterId", resolvedCostCenterId);
+        }
+        putCashierIfPresent(body, orderData.cashier());
+        body.put("payment", buildPaymentArrayFromRows(refundPayments));
+        body.put("items", toTaxAuthorityItems(advanceLines));
 
         String advanceRefundRequestBody = toJson(body);
 
         FiscalBillEntity refundEntity = createPendingEntity(orgId, clientId, orderId,
-            INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_REFUND, orderData.customerName(), advanceRefundRequestBody);
+            INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_REFUND, orderData.customerName(), orderData.customerEmail(),
+            buyerId, resolvedCostCenterId, advanceRefundRequestBody, lastAdvance.getFiscalbillId(),
+            null); // Advance Refund never sends dateAndTimeOfIssue
         fiscalBillRepository.save(refundEntity);
 
         try {
             String response = taxAuthorityService.call(orgId, "CREATE_INVOICE", advanceRefundRequestBody);
             processTaxAuthorityResponse(refundEntity, response, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_REFUND,
-                    refundItems, clientId, orgId);
+                    advanceLines, clientId, orgId);
+            if (refundEntity.getEfiscalTotalamount() == null) {
+                refundEntity.setEfiscalTotalamount(totalAdvanceAmount);
+            }
             fiscalBillRepository.save(refundEntity);
-            log.info("Advance Refund created: {}", refundEntity.getFiscalbillId());
+            saveManualPaymentRecords(refundEntity.getFiscalbillId(), clientId, orgId, refundPayments);
+            saveLineItems(refundEntity.getFiscalbillId(), clientId, orgId, advanceLines);
+            log.info("Advance Refund created: {} ({} line(s), {} payment(s))",
+                    refundEntity.getFiscalbillId(), advanceLines.size(), refundPayments.size());
         } catch (Exception ex) {
             log.error("Failed to create Advance Refund for order {}", orderId, ex);
             refundEntity.setStatus(STATUS_FAILED);
@@ -1072,10 +1240,40 @@ public class FiscalBillService {
         }
     }
 
-    private List<FiscalBillItemRequest> buildAdvanceRefundItems(String orderId,
-            BigDecimal totalAmount, List<FiscalBillItemRequest> resolvedItems) {
-        // Use resolved order items so labels are always available for advance summarization.
-        return resolvedItems;
+    /**
+     * Prefer persisted Advance Sale lines when closing the chain; fall back to the
+     * incoming Normal Sale items so labels are still available.
+     */
+    private List<FiscalBillItemRequest> collectAdvanceSaleItems(
+            List<FiscalBillEntity> advanceBills, List<FiscalBillItemRequest> fallbackItems) {
+        List<FiscalBillItemRequest> fromPriorBills = new ArrayList<>();
+        for (FiscalBillEntity advance : advanceBills) {
+            if (advance.getFiscalbillId() == null || !STATUS_SUCCESS.equals(advance.getStatus())) {
+                continue;
+            }
+            for (FiscalBillLineEntity line : fiscalBillLineRepository.findByFiscalbillId(advance.getFiscalbillId())) {
+                fromPriorBills.add(toCopyItemRequest(line));
+            }
+        }
+        return fromPriorBills.isEmpty() ? fallbackItems : fromPriorBills;
+    }
+
+    private List<PaymentRequest> buildAdvanceRefundPayments(
+            Long clientId,
+            String paymentMethodCode,
+            List<PaymentRequest> sourcePayments,
+            FiscalBillEntity lastAdvance,
+            BigDecimal totalAdvanceAmount) {
+        if (sourcePayments != null && !sourcePayments.isEmpty()) {
+            return List.of(new PaymentRequest(sourcePayments.get(0).paymentType(), totalAdvanceAmount));
+        }
+        if (lastAdvance != null && lastAdvance.getFiscalbillId() != null) {
+            List<FiscalBillPayEntity> priorPays = fiscalBillPayRepository.findByFiscalbillId(lastAdvance.getFiscalbillId());
+            if (!priorPays.isEmpty() && priorPays.get(0).getPaymentType() != null) {
+                return List.of(new PaymentRequest(priorPays.get(0).getPaymentType(), totalAdvanceAmount));
+            }
+        }
+        return List.of(new PaymentRequest(resolvePaymentType(clientId, paymentMethodCode), totalAdvanceAmount));
     }
 
     private List<FiscalBillItemRequest> enrichItemsWithGtin(Long orgId, List<FiscalBillItemRequest> items) {
@@ -1188,6 +1386,8 @@ public class FiscalBillService {
         entity.setEfiscalBusinessname(str(resp.get("businessName")));
         entity.setEfiscalTin(str(resp.get("tin")));
         entity.setEfiscalAddress(str(resp.get("address")));
+        entity.setEfiscalLocationname(str(resp.get("locationName")));
+        entity.setEfiscalDistrict(str(resp.get("district")));
         entity.setEfiscalMrc(str(resp.get("mrc")));
         entity.setEfiscalInvoicetype(invoiceType);
         entity.setEfiscalTransactiontype(transactionType);
@@ -1289,18 +1489,29 @@ public class FiscalBillService {
     // Shared helpers
     // -----------------------------------------------------------------------
 
+    private record BuiltTaxAuthorityRequest(
+            String json, Long referentFiscalbillId, String buyerId, String buyerCostCenterId,
+            String dateAndTimeOfIssue) {}
+
     private FiscalBillEntity createPendingEntity(Long orgId, Long clientId,
-            String orderId, int invoiceType, int transactionType, String customerName, String requestBody) {
+            String orderId, int invoiceType, int transactionType, String customerName, String customerEmail,
+            String customerId, String customerCostCenterId, String requestBody, Long referentFiscalbillId,
+            String dateAndTimeOfIssue) {
         FiscalBillEntity e = new FiscalBillEntity();
         e.setOrgId(orgId);
         e.setClientId(clientId);
         e.setOrderId(orderId);
+        e.setReferentFiscalbillId(referentFiscalbillId);
         e.setRequestBody(requestBody);
         e.setStatus(STATUS_PENDING);
         e.setAttemptCount(1);
         e.setEfiscalInvoicetype(invoiceType);
         e.setEfiscalTransactiontype(transactionType);
-        e.setEfiscalCustomername(customerName);
+        e.setCustomerName(trimToNull(customerName));
+        e.setCustomerEmail(trimToNull(customerEmail));
+        e.setCustomerId(trimToNull(customerId));
+        e.setCustomerCostCenterId(trimToNull(customerCostCenterId));
+        e.setDateAndTimeOfIssue(trimToNull(dateAndTimeOfIssue));
         e.setIsactive("Y");
         e.setProcessed("N");
         LocalDateTime now = LocalDateTime.now();
@@ -1315,15 +1526,6 @@ public class FiscalBillService {
         key.setFiscalBill(entity);
         key.setCreatedAt(java.time.OffsetDateTime.now());
         idempotencyKeyRepository.save(key);
-    }
-
-    private FiscalBillConfigEntity resolveConfig(Long orgId) {
-        return fiscalBillConfigRepository.findFirstByOrgIdAndIsactive(orgId, "Y").orElse(null);
-    }
-
-    private String belgradeNow() {
-        return ZonedDateTime.now(ZoneId.of("Europe/Belgrade"))
-                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
     }
 
     private String toJson(Map<String, Object> body) {
@@ -1451,23 +1653,31 @@ public class FiscalBillService {
                 null, // no billing VAT
                 null, // no payment method code
                 request.items(),
-                request.cashier()
+                request.cashier(),
+                request.buyerCostCenterId(),
+                null // Advance Refund never carries dateAndTimeOfIssue
         );
     }
 
     private FiscalBillView toView(FiscalBillEntity e) {
+        return toView(e, null);
+    }
+
+    private FiscalBillView toView(FiscalBillEntity e, FiscalBillEmailService.EmailSendResult emailResult) {
         return new FiscalBillView(
                 e.getFiscalbillId(),
                 e.getOrderId(),
                 e.getStatus(),
                 e.getProviderReference(),
                 e.getEfiscalSdcInvoiceno(),
-            e.getEfiscalLink(),
-            e.getEfiscalQr(),
+                e.getEfiscalLink(),
+                e.getEfiscalQr(),
                 e.getLastError(),
                 e.getAttemptCount(),
                 e.getCreated() != null ? e.getCreated().toString() : null,
-                e.getUpdated() != null ? e.getUpdated().toString() : null
+                e.getUpdated() != null ? e.getUpdated().toString() : null,
+                emailResult != null ? emailResult.status() : null,
+                emailResult != null ? emailResult.errorMessage() : null
         );
     }
 
@@ -1476,7 +1686,7 @@ public class FiscalBillService {
                 e.getFiscalbillId(),
                 e.getOrderId(),
                 e.getStatus(),
-                e.getEfiscalCustomername(),
+                e.getCustomerName(),
                 e.getEfiscalInvoicetype(),
                 e.getEfiscalTransactiontype(),
                 e.getEfiscalSdcInvoiceno(),
@@ -1524,7 +1734,9 @@ public class FiscalBillService {
             String billingCompanyVat,
             String paymentMethodCode,    // e.g. cash_delivery, wire
             List<FiscalBillItemRequest> items,
-            String cashier               // Optional — resolved from the issuing user's cashier field
+            String cashier,              // Optional — resolved from the issuing user's cashier field
+            String buyerCostCenterId,    // Optional customer field (e.g. "30:099999999"); applied only with buyerId
+            String dateAndTimeOfIssue    // Optional advance payment moment; Advance Sale only
     ) {}
 
     /** Request object for manual fiscal bill creation. */
@@ -1538,10 +1750,12 @@ public class FiscalBillService {
             String buyerId,             // Optional full buyer identifier (e.g. "10:123456789")
             String buyerType,           // Optional buyer type prefix (e.g. "10")
             String buyerVat,            // Optional company VAT
+            String buyerCostCenterId,   // Optional customer field (e.g. "30:099999999")
             List<FiscalBillItemRequest> items,
             List<PaymentRequest> payments,
             String referentDocumentNumber, // Optional — user-supplied reference for Copy/Refund/Advance chain
-            String cashier              // Optional — resolved from the issuing user's cashier field
+            String cashier,             // Optional — resolved from the issuing user's cashier field
+            String dateAndTimeOfIssue   // Optional advance payment moment; Advance Sale only
     ) {}
 
     public record FiscalBillView(
@@ -1555,7 +1769,9 @@ public class FiscalBillService {
             String lastError,
             Integer attemptCount,
             String createdAt,
-            String updatedAt
+            String updatedAt,
+            String emailStatus,
+            String emailError
     ) {}
 
             public record FiscalBillListView(

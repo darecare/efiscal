@@ -5,17 +5,27 @@ import AppShell from '../components/AppShell'
 import { fiscalBillApi, orgsApi, productsApi, taxApi } from '../services/api'
 import { useOrg } from '../contexts/OrgContext'
 import {
+  ADVANCE_PAYMENT_MAX_DAYS_IN_PAST,
+  advancePaymentDateTimeBounds,
+  calcBillTotalTax,
+  calcLineTaxValue,
   calcPaymentMatchAmount,
   calcTotalAmount,
-  FALLBACK_TAX_LABELS,
+  BUYER_COST_CENTER_TYPE_VALUES,
+  composeBuyerCostCenterId,
+  FALLBACK_TAX_LABEL_OPTIONS,
   inferBuyerTypeFromNumericId,
+  isAdvanceSale,
+  validateAdvancePaymentDateTime,
   isFiscalResultFailed,
   isFiscalResultSuccess,
   normalizeTaxLabelOptions,
+  resolveTaxRateForLabel,
+  sanitizeQuantityInput,
 } from './createFiscalBillUtils'
 import './CreateFiscalBill.css'
 
-const INVOICE_TYPE_VALUES = [0, 2, 4]
+const INVOICE_TYPE_VALUES = [0, 1, 2, 3, 4]
 const TRANSACTION_TYPE_VALUES = [0, 1]
 const PAYMENT_TYPE_VALUES = [0, 1, 2, 3, 4, 5, 6]
 const BUYER_ID_TYPE_VALUES = ['10', '11', '12', '13', '14', '15', '16', '20', '21', '22', '23', '30', '31', '32', '33', '34', '35', '36', '40']
@@ -61,8 +71,13 @@ export default function CreateFiscalBill() {
   const [buyerType, setBuyerType] = useState('')
   const [buyerIdValue, setBuyerIdValue] = useState('')
   const [buyerIdAutoMsg, setBuyerIdAutoMsg] = useState(false)
+  const [optionalBuyerFieldEnabled, setOptionalBuyerFieldEnabled] = useState(false)
+  const [buyerCostCenterType, setBuyerCostCenterType] = useState('')
+  const [buyerCostCenterValue, setBuyerCostCenterValue] = useState('')
   const [referentDocumentNumber, setReferentDocumentNumber] = useState('')
   const [closeAdvance, setCloseAdvance] = useState(false)
+  const [advancePaymentDateEnabled, setAdvancePaymentDateEnabled] = useState(false)
+  const [advancePaymentDateValue, setAdvancePaymentDateValue] = useState('')
 
   // Items
   const [items, setItems] = useState([emptyItem()])
@@ -77,7 +92,7 @@ export default function CreateFiscalBill() {
   const [fieldErrors, setFieldErrors] = useState({})
   const [itemErrors, setItemErrors] = useState({})
   const [paymentErrors, setPaymentErrors] = useState({})
-  const [taxLabelOptions, setTaxLabelOptions] = useState(FALLBACK_TAX_LABELS)
+  const [taxLabelOptions, setTaxLabelOptions] = useState(FALLBACK_TAX_LABEL_OPTIONS)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   const suggestDebounceRef = useRef({})
@@ -90,7 +105,7 @@ export default function CreateFiscalBill() {
   useEffect(() => {
     taxApi.list()
       .then((taxes) => setTaxLabelOptions(normalizeTaxLabelOptions(taxes)))
-      .catch(() => setTaxLabelOptions(FALLBACK_TAX_LABELS))
+      .catch(() => setTaxLabelOptions(FALLBACK_TAX_LABEL_OPTIONS))
   }, [])
 
   useEffect(() => {
@@ -132,6 +147,7 @@ export default function CreateFiscalBill() {
   }
 
   const currentItemsTotal = itemsTotal()
+  const currentBillTotalTax = calcBillTotalTax(items, taxLabelOptions)
 
   // Auto-sync the payment amount if user hasn't explicitly set up multiple payments
   useEffect(() => {
@@ -145,12 +161,10 @@ export default function CreateFiscalBill() {
   function setItemField(id, field, value) {
     setItems(prev => prev.map(item => {
       if (item.id === id) {
-        const next = { ...item, [field]: value }
+        const nextValue = field === 'quantity' ? sanitizeQuantityInput(value) : value
+        const next = { ...item, [field]: nextValue }
         if (field === 'quantity' || field === 'unitPrice') {
           next.totalAmount = calcTotalAmount(next.quantity, next.unitPrice, next.totalAmount)
-        } else if (field === 'totalAmount') {
-          // If user manually overrides total, we update it
-          next.totalAmount = value
         }
         return next
       }
@@ -313,11 +327,37 @@ export default function CreateFiscalBill() {
   }
 
   const showCloseAdvanceCheckbox = Number(invoiceType) === 0 && Number(transactionType) === 0
+  const showAdvancePaymentDate = isAdvanceSale(invoiceType, transactionType)
+  const advancePaymentBounds = advancePaymentDateTimeBounds()
   const showReferenceField =
     Number(invoiceType) === 2 ||
     Number(transactionType) === 1 ||
     (Number(invoiceType) === 4 && Number(transactionType) === 0) ||
     closeAdvance
+  // Advance Sale may reference a previous advance, but is free to start a new chain.
+  const referenceFieldRequired =
+    Number(invoiceType) === 2 ||
+    Number(transactionType) === 1 ||
+    closeAdvance
+
+  function resetAdvancePaymentDate() {
+    setAdvancePaymentDateEnabled(false)
+    setAdvancePaymentDateValue('')
+  }
+
+  function changeInvoiceType(value) {
+    setInvoiceType(value)
+    if (!isAdvanceSale(value, transactionType)) {
+      resetAdvancePaymentDate()
+    }
+  }
+
+  function changeTransactionType(value) {
+    setTransactionType(value)
+    if (!isAdvanceSale(invoiceType, value)) {
+      resetAdvancePaymentDate()
+    }
+  }
 
   function clearValidationErrors() {
     setFieldErrors({})
@@ -332,7 +372,10 @@ export default function CreateFiscalBill() {
         nextFieldErrors.clientId ||
         nextFieldErrors.buyerType ||
         nextFieldErrors.buyerIdValue ||
-        nextFieldErrors.referentDocumentNumber
+        nextFieldErrors.buyerCostCenterType ||
+        nextFieldErrors.buyerCostCenterValue ||
+        nextFieldErrors.referentDocumentNumber ||
+        nextFieldErrors.advancePaymentDate
       ) {
         return headerSectionRef.current
       }
@@ -376,9 +419,35 @@ export default function CreateFiscalBill() {
       globalError = globalError || nextFieldErrors.buyerIdValue
     }
 
-    if (showReferenceField && !referentDocumentNumber.trim()) {
+    if (optionalBuyerFieldEnabled) {
+      const trimmedCostCenterValue = buyerCostCenterValue.trim()
+      if (!hasBuyerType || !trimmedBuyerIdValue) {
+        nextFieldErrors.buyerCostCenterRequiresBuyerId = t('createFiscalBill.buyerCostCenterRequiresBuyerId')
+        globalError = globalError || nextFieldErrors.buyerCostCenterRequiresBuyerId
+      }
+      if (!buyerCostCenterType) {
+        nextFieldErrors.buyerCostCenterType = t('createFiscalBill.buyerCostCenterTypeRequired')
+        globalError = globalError || nextFieldErrors.buyerCostCenterType
+      }
+      if (!trimmedCostCenterValue) {
+        nextFieldErrors.buyerCostCenterValue = t('createFiscalBill.buyerCostCenterValueRequired')
+        globalError = globalError || nextFieldErrors.buyerCostCenterValue
+      }
+    }
+
+    if (referenceFieldRequired && !referentDocumentNumber.trim()) {
       nextFieldErrors.referentDocumentNumber = t('createFiscalBill.validation.referentDocumentRequired')
       globalError = globalError || nextFieldErrors.referentDocumentNumber
+    }
+
+    if (showAdvancePaymentDate && advancePaymentDateEnabled) {
+      const errorCode = validateAdvancePaymentDateTime(advancePaymentDateValue)
+      if (errorCode) {
+        nextFieldErrors.advancePaymentDate = t(`createFiscalBill.advancePaymentDateErrors.${errorCode}`, {
+          days: ADVANCE_PAYMENT_MAX_DAYS_IN_PAST,
+        })
+        globalError = globalError || nextFieldErrors.advancePaymentDate
+      }
     }
 
     if (items.length === 0) {
@@ -474,10 +543,15 @@ export default function CreateFiscalBill() {
       ? `${normalizedBuyerType}:${normalizedBuyerIdValue}`
       : null
 
+    let composedBuyerCostCenterId = null
+    if (composedBuyerId && optionalBuyerFieldEnabled) {
+      composedBuyerCostCenterId = composeBuyerCostCenterId(buyerCostCenterType, buyerCostCenterValue)
+    }
+
     const payload = {
       orderId: orderId || null,
-      customerName: customerName || null,
-      customerEmail: sendEmail && customerEmail.trim() ? customerEmail.trim() : null,
+      customerName: customerName.trim() || null,
+      customerEmail: customerEmail.trim() || null,
       sendEmail,
       invoiceType: parseInt(invoiceType),
       transactionType: parseInt(transactionType),
@@ -487,6 +561,12 @@ export default function CreateFiscalBill() {
       items: payloadItems,
       payments: payloadPayments,
       referentDocumentNumber: showReferenceField && referentDocumentNumber.trim() ? referentDocumentNumber.trim() : null,
+    }
+    if (composedBuyerCostCenterId) {
+      payload.buyerCostCenterId = composedBuyerCostCenterId
+    }
+    if (showAdvancePaymentDate && advancePaymentDateEnabled && advancePaymentDateValue) {
+      payload.dateAndTimeOfIssue = advancePaymentDateValue
     }
 
     const idempotencyKey = crypto.randomUUID()
@@ -521,8 +601,12 @@ export default function CreateFiscalBill() {
     setBuyerType('')
     setBuyerIdValue('')
     setBuyerIdAutoMsg(false)
+    setOptionalBuyerFieldEnabled(false)
+    setBuyerCostCenterType('')
+    setBuyerCostCenterValue('')
     setReferentDocumentNumber('')
     setCloseAdvance(false)
+    resetAdvancePaymentDate()
     setItems([emptyItem()])
     setPayments([emptyPayment()])
     setUserModifiedPayment(false)
@@ -631,14 +715,14 @@ export default function CreateFiscalBill() {
 
               <div className="fiscal-field">
                 <label className="fiscal-field-label">{t('createFiscalBill.invoiceType')}</label>
-                <select className="fiscal-input fiscal-input--select" value={invoiceType} onChange={e => setInvoiceType(e.target.value)}>
+                <select className="fiscal-input fiscal-input--select" value={invoiceType} onChange={e => changeInvoiceType(e.target.value)}>
                   {INVOICE_TYPE_VALUES.map(v => <option key={v} value={v}>{t(`createFiscalBill.invoiceTypes.${v}`)}</option>)}
                 </select>
               </div>
 
               <div className="fiscal-field">
                 <label className="fiscal-field-label">{t('createFiscalBill.transactionType')}</label>
-                <select className="fiscal-input fiscal-input--select" value={transactionType} onChange={e => setTransactionType(e.target.value)}>
+                <select className="fiscal-input fiscal-input--select" value={transactionType} onChange={e => changeTransactionType(e.target.value)}>
                   {TRANSACTION_TYPE_VALUES.map(v => <option key={v} value={v}>{t(`createFiscalBill.transactionTypes.${v}`)}</option>)}
                 </select>
               </div>
@@ -680,6 +764,67 @@ export default function CreateFiscalBill() {
                 {fieldErrors.buyerIdValue && <span className="error-text fiscal-error">{fieldErrors.buyerIdValue}</span>}
               </div>
 
+              <div className="fiscal-field fiscal-field--checkbox">
+                <label className="fiscal-field-label fiscal-field-label--inline">
+                  <input
+                    type="checkbox"
+                    checked={optionalBuyerFieldEnabled}
+                    onChange={(e) => {
+                      const enabled = e.target.checked
+                      setOptionalBuyerFieldEnabled(enabled)
+                      if (!enabled) {
+                        setBuyerCostCenterType('')
+                        setBuyerCostCenterValue('')
+                      }
+                    }}
+                  />
+                  {' '}{t('createFiscalBill.optionalBuyerField')}
+                </label>
+                {fieldErrors.buyerCostCenterRequiresBuyerId && (
+                  <span className="error-text fiscal-error">{fieldErrors.buyerCostCenterRequiresBuyerId}</span>
+                )}
+              </div>
+
+              {optionalBuyerFieldEnabled && (
+                <>
+                  <div className="fiscal-field">
+                    <label className="fiscal-field-label">{t('createFiscalBill.buyerCostCenterType')}</label>
+                    <select
+                      className={`fiscal-input fiscal-input--select${fieldErrors.buyerCostCenterType ? ' fiscal-input--invalid' : ''}`}
+                      value={buyerCostCenterType}
+                      onChange={(e) => setBuyerCostCenterType(e.target.value)}
+                      aria-invalid={fieldErrors.buyerCostCenterType ? 'true' : undefined}
+                    >
+                      <option value="">{t('createFiscalBill.selectBuyerCostCenterType')}</option>
+                      {BUYER_COST_CENTER_TYPE_VALUES.map((v) => (
+                        <option key={v} value={v}>{t(`createFiscalBill.buyerCostCenterTypes.${v}`)}</option>
+                      ))}
+                    </select>
+                    {fieldErrors.buyerCostCenterType && (
+                      <span className="error-text fiscal-error">{fieldErrors.buyerCostCenterType}</span>
+                    )}
+                  </div>
+
+                  <div className="fiscal-field">
+                    <label className="fiscal-field-label">{t('createFiscalBill.buyerCostCenterValue')}</label>
+                    <input
+                      className={`fiscal-input fiscal-input--text${fieldErrors.buyerCostCenterValue ? ' fiscal-input--invalid' : ''}`}
+                      value={buyerCostCenterValue}
+                      onChange={(e) => setBuyerCostCenterValue(e.target.value)}
+                      placeholder={
+                        buyerCostCenterType === '60'
+                          ? t('createFiscalBill.buyerCostCenterValuePlaceholder60')
+                          : t('createFiscalBill.buyerCostCenterValuePlaceholder')
+                      }
+                      aria-invalid={fieldErrors.buyerCostCenterValue ? 'true' : undefined}
+                    />
+                    {fieldErrors.buyerCostCenterValue && (
+                      <span className="error-text fiscal-error">{fieldErrors.buyerCostCenterValue}</span>
+                    )}
+                  </div>
+                </>
+              )}
+
               {showCloseAdvanceCheckbox && (
                 <div className="fiscal-field fiscal-field--checkbox">
                   <label className="fiscal-field-label fiscal-field-label--inline">
@@ -696,9 +841,47 @@ export default function CreateFiscalBill() {
                 </div>
               )}
 
+              {showAdvancePaymentDate && (
+                <div className="fiscal-field fiscal-field--checkbox">
+                  <label className="fiscal-field-label fiscal-field-label--inline">
+                    <input
+                      type="checkbox"
+                      checked={advancePaymentDateEnabled}
+                      onChange={e => {
+                        setAdvancePaymentDateEnabled(e.target.checked)
+                        if (!e.target.checked) setAdvancePaymentDateValue('')
+                      }}
+                    />
+                    {' '}{t('createFiscalBill.advancePaymentDate')}
+                  </label>
+                </div>
+              )}
+
+              {showAdvancePaymentDate && advancePaymentDateEnabled && (
+                <div className="fiscal-field">
+                  <label className="fiscal-field-label">{t('createFiscalBill.advancePaymentDateTime')}</label>
+                  <input
+                    className={`fiscal-input fiscal-input--text${fieldErrors.advancePaymentDate ? ' fiscal-input--invalid' : ''}`}
+                    type="datetime-local"
+                    value={advancePaymentDateValue}
+                    min={advancePaymentBounds.min}
+                    max={advancePaymentBounds.max}
+                    onChange={e => setAdvancePaymentDateValue(e.target.value)}
+                    aria-invalid={fieldErrors.advancePaymentDate ? 'true' : undefined}
+                  />
+                  {fieldErrors.advancePaymentDate && (
+                    <span className="error-text fiscal-error">{fieldErrors.advancePaymentDate}</span>
+                  )}
+                </div>
+              )}
+
               {showReferenceField && (
                 <div className="fiscal-field">
-                  <label className="fiscal-field-label">{t('createFiscalBill.referentDocumentNumber')}</label>
+                  <label className="fiscal-field-label">
+                    {referenceFieldRequired
+                      ? t('createFiscalBill.referentDocumentNumber')
+                      : t('createFiscalBill.referentDocumentNumberOptional')}
+                  </label>
                   <input
                     className={`fiscal-input fiscal-input--text${fieldErrors.referentDocumentNumber ? ' fiscal-input--invalid' : ''}`}
                     value={referentDocumentNumber}
@@ -717,7 +900,10 @@ export default function CreateFiscalBill() {
                   <input
                     type="checkbox"
                     checked={sendEmail}
-                    onChange={(e) => setSendEmail(e.target.checked)}
+                    onChange={(e) => {
+                      setSendEmail(e.target.checked)
+                      if (!e.target.checked) setCustomerEmail('')
+                    }}
                   />
                   {' '}{t('createFiscalBill.sendEmail')}
                 </label>
@@ -759,125 +945,149 @@ export default function CreateFiscalBill() {
                     </button>
                   </div>
                   <div className="fiscal-item-grid">
-                    <div className="fiscal-field fiscal-field--with-search" style={{ gridColumn: '1 / -1' }}>
-                      <label className="fiscal-field-label">{t('createFiscalBill.productName')}</label>
-                      <div className="product-name-combobox">
-                        <input
-                          className={`fiscal-input fiscal-input--text${itemErrors[item.id]?.name ? ' fiscal-input--invalid' : ''}`}
-                          value={item.name}
-                          onChange={e => handleNameChange(item.id, e.target.value)}
-                          onFocus={() => {
-                            if (item.name.trim().length >= 2) {
-                              patchItem(item.id, { showSuggestions: true })
-                            }
-                          }}
-                          onBlur={() => {
-                            setTimeout(() => hideSuggestions(item.id), 150)
-                          }}
-                          placeholder={t('createFiscalBill.searchPlaceholder')}
-                          disabled={!activeOrgId}
-                          autoComplete="off"
-                          aria-autocomplete="list"
-                          aria-expanded={item.showSuggestions && item.suggestions.length > 0}
-                          aria-invalid={itemErrors[item.id]?.name ? 'true' : undefined}
-                        />
-                        {item.showSuggestions && activeOrgId && item.name.trim().length >= 2 && (
-                          <ul className="product-suggest-list" role="listbox">
-                            {item.suggestLoading && (
-                              <li className="product-suggest-item product-suggest-item--muted">{t('common.loadingDots')}</li>
-                            )}
-                            {item.suggestError && (
-                              <li className="product-suggest-item product-suggest-item--error">{item.suggestError}</li>
-                            )}
-                            {!item.suggestLoading && !item.suggestError && item.suggestions.length === 0 && (
-                              <li className="product-suggest-item product-suggest-item--muted">{t('createFiscalBill.searchNoResults')}</li>
-                            )}
-                            {!item.suggestLoading && item.suggestions.map((p) => (
-                              <li key={p.productId} role="option">
-                                <button
-                                  type="button"
-                                  className="product-suggest-option"
-                                  onMouseDown={(e) => e.preventDefault()}
-                                  onClick={() => selectProduct(item.id, p)}
-                                >
-                                  <span className="product-suggest-name">{p.name}</span>
-                                  <span className="product-suggest-meta">
-                                    {p.sku ? `${t('products.columns.sku')}: ${p.sku}` : ''}
-                                    {p.sku && p.ean ? ' · ' : ''}
-                                    {p.ean ? `${t('products.columns.ean')}: ${p.ean}` : ''}
-                                  </span>
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
+                    <div className="fiscal-item-row fiscal-item-row--name">
+                      <div className="fiscal-field fiscal-field--with-search">
+                        <label className="fiscal-field-label">{t('createFiscalBill.productName')}</label>
+                        <div className="product-name-combobox">
+                          <input
+                            className={`fiscal-input fiscal-input--text${itemErrors[item.id]?.name ? ' fiscal-input--invalid' : ''}`}
+                            value={item.name}
+                            onChange={e => handleNameChange(item.id, e.target.value)}
+                            onFocus={() => {
+                              if (item.name.trim().length >= 2) {
+                                patchItem(item.id, { showSuggestions: true })
+                              }
+                            }}
+                            onBlur={() => {
+                              setTimeout(() => hideSuggestions(item.id), 150)
+                            }}
+                            placeholder={t('createFiscalBill.searchPlaceholder')}
+                            disabled={!activeOrgId}
+                            autoComplete="off"
+                            aria-autocomplete="list"
+                            aria-expanded={item.showSuggestions && item.suggestions.length > 0}
+                            aria-invalid={itemErrors[item.id]?.name ? 'true' : undefined}
+                          />
+                          {item.showSuggestions && activeOrgId && item.name.trim().length >= 2 && (
+                            <ul className="product-suggest-list" role="listbox">
+                              {item.suggestLoading && (
+                                <li className="product-suggest-item product-suggest-item--muted">{t('common.loadingDots')}</li>
+                              )}
+                              {item.suggestError && (
+                                <li className="product-suggest-item product-suggest-item--error">{item.suggestError}</li>
+                              )}
+                              {!item.suggestLoading && !item.suggestError && item.suggestions.length === 0 && (
+                                <li className="product-suggest-item product-suggest-item--muted">{t('createFiscalBill.searchNoResults')}</li>
+                              )}
+                              {!item.suggestLoading && item.suggestions.map((p) => (
+                                <li key={p.productId} role="option">
+                                  <button
+                                    type="button"
+                                    className="product-suggest-option"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => selectProduct(item.id, p)}
+                                  >
+                                    <span className="product-suggest-name">{p.name}</span>
+                                    <span className="product-suggest-meta">
+                                      {p.sku ? `${t('products.columns.sku')}: ${p.sku}` : ''}
+                                      {p.sku && p.ean ? ' · ' : ''}
+                                      {p.ean ? `${t('products.columns.ean')}: ${p.ean}` : ''}
+                                    </span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {!activeOrgId && (
+                            <span className="muted fiscal-price-hint">{t('orgSwitcher.selectPrompt')}</span>
+                          )}
+                        </div>
+                        {itemErrors[item.id]?.name && (
+                          <span className="error-text fiscal-error">{itemErrors[item.id].name}</span>
                         )}
-                        {!activeOrgId && (
-                          <span className="muted fiscal-price-hint">{t('orgSwitcher.selectPrompt')}</span>
+                        {item.priceVerifying && (
+                          <span className="muted fiscal-price-hint">{t('createFiscalBill.priceVerifying')}</span>
+                        )}
+                        {!item.priceVerifying && item.priceStatus === 'verified' && (
+                          <span className="fiscal-price-hint fiscal-price-hint--ok">{t('createFiscalBill.priceVerified')}</span>
+                        )}
+                        {!item.priceVerifying && item.priceStatus === 'unverified' && (
+                          <span className="fiscal-price-hint fiscal-price-hint--warn">{t('createFiscalBill.priceUnverified')}</span>
                         )}
                       </div>
-                      {itemErrors[item.id]?.name && (
-                        <span className="error-text fiscal-error">{itemErrors[item.id].name}</span>
-                      )}
-                      {item.priceVerifying && (
-                        <span className="muted fiscal-price-hint">{t('createFiscalBill.priceVerifying')}</span>
-                      )}
-                      {!item.priceVerifying && item.priceStatus === 'verified' && (
-                        <span className="fiscal-price-hint fiscal-price-hint--ok">{t('createFiscalBill.priceVerified')}</span>
-                      )}
-                      {!item.priceVerifying && item.priceStatus === 'unverified' && (
-                        <span className="fiscal-price-hint fiscal-price-hint--warn">{t('createFiscalBill.priceUnverified')}</span>
-                      )}
+                      <div className="fiscal-field">
+                        <label className="fiscal-field-label">{t('createFiscalBill.gtin')}</label>
+                        <input className="fiscal-input fiscal-input--text" value={item.gtin} onChange={e => setItemField(item.id, 'gtin', e.target.value)} placeholder={t('common.optional')} />
+                      </div>
                     </div>
-                    
-                    <div className="fiscal-field">
-                      <label className="fiscal-field-label">{t('createFiscalBill.quantity')}</label>
-                      <input
-                        className={`fiscal-input fiscal-input--number${itemErrors[item.id]?.quantity ? ' fiscal-input--invalid' : ''}`}
-                        type="number"
-                        value={item.quantity}
-                        onChange={e => setItemField(item.id, 'quantity', e.target.value)}
-                        placeholder="1"
-                        min="0.01"
-                        step="any"
-                        aria-invalid={itemErrors[item.id]?.quantity ? 'true' : undefined}
-                      />
-                      {itemErrors[item.id]?.quantity && (
-                        <span className="error-text fiscal-error">{itemErrors[item.id].quantity}</span>
-                      )}
-                    </div>
-                    <div className="fiscal-field">
-                      <label className="fiscal-field-label">{t('createFiscalBill.unitPrice')}</label>
-                      <input
-                        className={`fiscal-input fiscal-input--number${itemErrors[item.id]?.unitPrice ? ' fiscal-input--invalid' : ''}`}
-                        type="number"
-                        value={item.unitPrice}
-                        onChange={e => setItemField(item.id, 'unitPrice', e.target.value)}
-                        placeholder="0.00"
-                        min="0"
-                        step="0.01"
-                        aria-invalid={itemErrors[item.id]?.unitPrice ? 'true' : undefined}
-                      />
-                      {itemErrors[item.id]?.unitPrice && (
-                        <span className="error-text fiscal-error">{itemErrors[item.id].unitPrice}</span>
-                      )}
-                    </div>
-                    <div className="fiscal-field">
-                      <label className="fiscal-field-label">{t('createFiscalBill.total')}</label>
-                      <input className="fiscal-input fiscal-input--number fiscal-input--readonly" type="number" value={item.totalAmount} onChange={e => setItemField(item.id, 'totalAmount', e.target.value)} placeholder="0.00" />
-                    </div>
-                    <div className="fiscal-field">
-                      <label className="fiscal-field-label">{t('createFiscalBill.taxLabel')}</label>
-                      <select className="fiscal-input fiscal-input--select" value={item.taxLabel} onChange={e => setItemField(item.id, 'taxLabel', e.target.value)}>
-                        {taxLabelOptions.map(l => <option key={l} value={l}>{l}</option>)}
-                      </select>
-                    </div>
-                    <div className="fiscal-field">
-                      <label className="fiscal-field-label">{t('createFiscalBill.taxPrefix')}</label>
-                      <input className="fiscal-input fiscal-input--text" value={item.taxPrefix} onChange={e => setItemField(item.id, 'taxPrefix', e.target.value)} placeholder="20" />
-                    </div>
-                    <div className="fiscal-field">
-                      <label className="fiscal-field-label">{t('createFiscalBill.gtin')}</label>
-                      <input className="fiscal-input fiscal-input--text" value={item.gtin} onChange={e => setItemField(item.id, 'gtin', e.target.value)} placeholder={t('common.optional')} />
+
+                    <div className="fiscal-item-row fiscal-item-row--amounts">
+                      <div className="fiscal-field">
+                        <label className="fiscal-field-label">{t('createFiscalBill.unitPrice')}</label>
+                        <input
+                          className={`fiscal-input fiscal-input--number${itemErrors[item.id]?.unitPrice ? ' fiscal-input--invalid' : ''}`}
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={e => setItemField(item.id, 'unitPrice', e.target.value)}
+                          placeholder="0.00"
+                          min="0"
+                          step="0.01"
+                          aria-invalid={itemErrors[item.id]?.unitPrice ? 'true' : undefined}
+                        />
+                        {itemErrors[item.id]?.unitPrice && (
+                          <span className="error-text fiscal-error">{itemErrors[item.id].unitPrice}</span>
+                        )}
+                      </div>
+                      <div className="fiscal-field fiscal-field--qty">
+                        <label className="fiscal-field-label">{t('createFiscalBill.quantity')}</label>
+                        <input
+                          className={`fiscal-input fiscal-input--number${itemErrors[item.id]?.quantity ? ' fiscal-input--invalid' : ''}`}
+                          type="number"
+                          value={item.quantity}
+                          onChange={e => setItemField(item.id, 'quantity', e.target.value)}
+                          placeholder="1"
+                          min="0.01"
+                          step="1"
+                          aria-invalid={itemErrors[item.id]?.quantity ? 'true' : undefined}
+                        />
+                        {itemErrors[item.id]?.quantity && (
+                          <span className="error-text fiscal-error">{itemErrors[item.id].quantity}</span>
+                        )}
+                      </div>
+                      <div className="fiscal-field fiscal-field--tax-type">
+                        <label className="fiscal-field-label">{t('createFiscalBill.taxLabel')}</label>
+                        <select className="fiscal-input fiscal-input--select" value={item.taxLabel} onChange={e => setItemField(item.id, 'taxLabel', e.target.value)}>
+                          {taxLabelOptions.map((option) => (
+                            <option key={option.label} value={option.label}>
+                              {option.rate == null
+                                ? option.label
+                                : t('createFiscalBill.taxOption', { label: option.label, rate: option.rate })}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="fiscal-field fiscal-field--tax-value">
+                        <label className="fiscal-field-label">{t('createFiscalBill.taxValue')}</label>
+                        <input
+                          className="fiscal-input fiscal-input--number fiscal-input--readonly"
+                          type="text"
+                          readOnly
+                          tabIndex={-1}
+                          value={calcLineTaxValue(item.totalAmount, resolveTaxRateForLabel(taxLabelOptions, item.taxLabel))}
+                          aria-readonly="true"
+                        />
+                      </div>
+                      <div className="fiscal-field">
+                        <label className="fiscal-field-label">{t('createFiscalBill.total')}</label>
+                        <input
+                          className="fiscal-input fiscal-input--number fiscal-input--readonly"
+                          type="text"
+                          readOnly
+                          tabIndex={-1}
+                          value={item.totalAmount}
+                          aria-readonly="true"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -899,6 +1109,10 @@ export default function CreateFiscalBill() {
               <div className="fiscal-summary-row fiscal-summary-row--total">
                 <span>{t('createFiscalBill.summary.itemsTotalLabel')}</span>
                 <span>{currentItemsTotal}</span>
+              </div>
+              <div className="fiscal-summary-row">
+                <span>{t('createFiscalBill.summary.billTotalTaxLabel')}</span>
+                <span>{currentBillTotalTax}</span>
               </div>
               <div className="fiscal-summary-row">
                 <span>{t('createFiscalBill.summary.paymentsTotalLabel')}</span>

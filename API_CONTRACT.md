@@ -132,22 +132,45 @@ Subscription behavior:
   - Template includes fiscal header, line items (`fiscalbillline`), tax area (`fiscalbilltax`) and payments area (`fiscalbillpay`).
   - Available templates in current implementation:
     - `a4` -> `pdf-templates/default-a4.html`
-    - `roll80` -> `pdf-templates/default-roll80.html` (57mm–80mm paper roll style)
+    - `roll80` -> `pdf-templates/default-roll80.html` (57mm–80mm paper roll style; page height fits content and ends after the advertisement)
   - Textual layout follows the fiscal receipt textual-display requirements (start/end fiscal section lines and grouped receipt metadata).
+
+### GET /fiscalbill/{id}/image
+- Description: Download a raster image of the fiscal bill PDF (same template as `/pdf`).
+- Action: `FISCAL_VIEW_BILLS`
+- Query:
+  - `format` (optional): `a4` (default) or `roll80`
+  - `media` (optional): `png` (default) or `jpeg` (`jpg` accepted)
+- 200 Response:
+  - Content-Type: `image/png` or `image/jpeg`
+  - Content-Disposition: `attachment; filename=fiscal-bill-{id}-{format}.{png|jpeg}`
+- Notes:
+  - Image is rendered from the generated PDF at 200 DPI. All pages are stacked vertically (a short gap between pages).
+  - JPEG uses compression quality `0.9`.
+- Errors: `400` (unsupported `format` or `media`), `401`, `403`, `404`, `500`
 
 ### POST /fiscalbill/from-order
 - Description: Create fiscal bill from an existing shop order.
 - Request: same as POST /fiscalbill but specifically for order-linked flows.
 - Additional request fields used by the UI:
   - `sendEmail` - default `true` on the order issuance screen
-  - `customerEmail` - taken from the sales order payload and passed through when emailing is enabled
+  - `customerName` / `customerEmail` - taken from the sales order payload; persisted on `fiscalbill.customer_name` / `fiscalbill.customer_email`
+  - `billingType` / `billingCompanyVat` - from MerchantPro `billing_type` / `billing_company_vat`. When `billingType` is `company` and VAT is present, Tax Authority request includes `buyerId` as `10:{billingCompanyVat}` (also persisted on `fiscalbill.customer_id`)
+  - `buyerCostCenterId` - optional Tax Authority optional-customer-field value (e.g. `30:099999999`). Composed in UI from optional field type + value when “Opciono polje kupca” is enabled on the Orders issue-fiscal modal. Included in CREATE_INVOICE JSON **only when** `buyerId` is also present for that order; persisted on `fiscalbill.customer_costcenterid`.
+  - `dateAndTimeOfIssue` - optional advance payment moment (`YYYY-MM-DDTHH:mm`, Belgrade wall clock, or a full ISO offset date-time). Accepted **only** with `invoiceType` 4 + `transactionType` 0, must be in the past and at most 3 days back.
+- 201 Response (create): same `FiscalBillView` fields as other create endpoints, plus:
+  - `emailStatus` - `NOT_REQUESTED` | `SENT` | `SKIPPED` | `FAILED` (null on non-create responses such as GET/retry)
+  - `emailError` - optional detail when status is `SKIPPED` or `FAILED`
 
 ### POST /fiscalbill/manual
 - Description: Create fiscal bill from manual input.
 - Request: [manual entry payload]
 - Additional request fields used by the UI:
   - `sendEmail` - optional boolean flag
-  - `customerEmail` - optional recipient email for future manual-email flows
+  - `customerName` / `customerEmail` - optional; persisted on `fiscalbill.customer_name` / `fiscalbill.customer_email`
+  - `buyerCostCenterId` - optional Tax Authority optional-customer-field value (e.g. `30:099999999`). Composed in UI from optional field type + value when “Opciono polje kupca” is enabled; included in CREATE_INVOICE JSON only when `buyerId` is also present; persisted on `fiscalbill.customer_costcenterid`.
+  - `dateAndTimeOfIssue` - optional advance payment moment; same rules as `/fiscalbill/from-order` (Advance Sale only, past, max 3 days back).
+- 201 Response (create): includes `emailStatus` / `emailError` as for `/fiscalbill/from-order` when email was attempted after a successful fiscalization.
 
 ### GET /fiscalbill/status
 - Description: Get overall fiscal status summary for an organization.
@@ -180,6 +203,7 @@ Subscription behavior:
   - `createdAfter` and `shippingStatus` are the primary MVP filter fields.
   - Backend resolves and validates allowed filter keys, then maps to provider URL query parameters.
   - Order line items expose the provider `product_ean` value as `ean` when MerchantPro returns it; fiscalization uses that value as the `gtin` source.
+  - Each order includes `billingType` (`billing_type`) and `billingCompanyVat` (`billing_company_vat`) when MerchantPro returns them. Used by `POST /fiscalbill/from-order` to set Tax Authority `buyerId` (`10:` + VAT) for company customers.
 - 202 Response:
 ```json
 {
@@ -774,6 +798,7 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   "buyerId": "10:101234567",
   "buyerType": "10",
   "buyerVat": "101234567",
+  "buyerCostCenterId": "30:099999999",
   "referentDocumentNumber": null,
   "items": [
     {
@@ -793,23 +818,29 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   ]
 }
 ```
-- `invoiceType` values: `0` = Normal, `2` = Copy, `4` = Advance.
+- `invoiceType` values: `0` = Normal, `1` = Proforma, `2` = Copy, `3` = Training, `4` = Advance.
 - `transactionType` values: `0` = Sale, `1` = Refund.
 - `buyerId` (optional, nullable): Full buyer identifier sent to the Tax Authority (for example `10:123456789`).
+- `buyerCostCenterId` (optional, nullable): Optional customer field for Tax Authority (`buyerCostCenterId`), for example `30:099999999`. Included in the CREATE_INVOICE JSON only when `buyerId` is also present.
 - Backward compatibility: clients may still send `buyerType` + `buyerVat`; backend derives `buyerId` as `<buyerType>:<buyerVat>` when `buyerId` is not explicitly provided.
 - `referentDocumentNumber` (optional, nullable): Reference document number for Copy, Refund, chained Advance, or close-advance flows. When provided, the backend looks up the referenced fiscal bill in the same organization by Tax Authority invoice number (`efiscal_sdc_invoiceno`) and populates both `referentDocumentNumber` and `referentDocumentDT` in the Tax Authority request. Returns `400` if the referenced bill is not found or is missing datetime.
 - `orderId` (optional, nullable): When provided, the backend applies **order-linked fiscal-chain checks** scoped to `orgId`: duplicate protection for the same `orderId` + `invoiceType` + `transactionType`, advance-close chain (Normal Sale after prior Advance Sale bills), and automatic referent-field resolution when `referentDocumentNumber` is omitted. Does **not** fetch or validate MerchantPro order data; use `POST /fiscalbill/from-order` for full order-based fiscalization.
 - Payment total validation: sum of `payments[].amount` must equal sum of `items[].totalAmount` (tolerance `0.01`). Each payment amount must be positive. Returns `400` with message `Payment total does not match fiscal bill total` on mismatch.
-- `cashier` is not sent by the client; it is resolved server-side from the authenticated user's `cashier` field.
+- `cashier` is not sent by the client; it is resolved server-side from the authenticated user's `cashier` field (`users.cashier`). When non-blank, it is included in the Tax Authority CREATE_INVOICE JSON for from-order, manual, copy, refund, and auto Advance Refund.
+- `invoiceNumber` is not sent by the client either; it is the ESIR number resolved server-side from `app.esir-number`/`app.software-version` (same value shown as **ESIR broj** on PDFs) and included in the Tax Authority CREATE_INVOICE JSON for the same flows.
+- `dateAndTimeOfIssue` (optional, nullable): advance payment moment for Advance Sale bills (`invoiceType` 4 + `transactionType` 0). Accepts `YYYY-MM-DDTHH:mm[:ss]` interpreted as Belgrade wall clock, or a full ISO offset date-time; it is normalized to Belgrade ISO offset before being sent to the Tax Authority. Returns `400` when it is in the future, more than 3 days in the past, unparseable, or supplied for any other invoice/transaction type combination. When omitted or blank, the Tax Authority request omits the field as well — it is never defaulted to the current time. Copy, refund, and auto Advance Refund requests never include this field.
 - 201 Response:
 ```json
 {
   "fiscalbillId": 5001,
   "status": "SUCCESS",
   "sdcInvoiceNumber": "ABCD1234-ABCD1234-12345",
-  "lastError": null
+  "lastError": null,
+  "emailStatus": "SENT",
+  "emailError": null
 }
 ```
+- `emailStatus` values after create: `NOT_REQUESTED` (sendEmail false), `SENT`, `SKIPPED` (e.g. missing customer email), `FAILED`.
 - Errors: `400` (validation: payment total mismatch, missing line items, invalid referent document, missing tax labels), `401`, `403`, `409` (duplicate bill for order or Idempotency-Key conflict), `502` (Tax Authority failure; response body may include fiscal bill with `status: FAILED`), `500`
 
 ## 6. Error Model

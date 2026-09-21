@@ -603,7 +603,7 @@ export default function Taxes() {
 
               {importSummary && (
                 <div className="success-banner" style={{ marginTop: 12 }}>
-                  {t('taxes.importSummary', importSummary)}
+                  {t('taxes.importSummary')}
                 </div>
               )}
 
@@ -611,10 +611,18 @@ export default function Taxes() {
             </div>
 
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={closeImportTaxes}>{t('common.cancel')}</button>
-              <button type="button" className="primary-button" disabled={importing} onClick={submitImportTaxes}>
-                {importing ? t('common.processing') : t('taxes.importTaxes')}
-              </button>
+              {importSummary ? (
+                <button type="button" className="primary-button" onClick={closeImportTaxes}>
+                  {t('common.ok')}
+                </button>
+              ) : (
+                <>
+                  <button type="button" className="secondary-button" onClick={closeImportTaxes}>{t('common.cancel')}</button>
+                  <button type="button" className="primary-button" disabled={importing} onClick={submitImportTaxes}>
+                    {importing ? t('common.processing') : t('taxes.importTaxes')}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

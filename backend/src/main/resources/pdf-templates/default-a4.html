@@ -6,7 +6,7 @@
   <style>
     @page {
       size: A4;
-      margin: 12mm;
+      margin: 12mm 12mm 16mm 12mm;
     }
 
     body {
@@ -77,6 +77,48 @@
     .rule-line.single .rule-label {
       font-size: 11px;
       color: #555;
+    }
+
+    .tx-band {
+      display: table;
+      width: 100%;
+      table-layout: fixed;
+      margin: 8px 0;
+      page-break-inside: avoid;
+    }
+
+    .tx-band-side,
+    .tx-band-label {
+      display: table-cell;
+      vertical-align: middle;
+    }
+
+    .tx-band-side {
+      width: 32%;
+    }
+
+    .tx-band-label {
+      width: 35%;
+      white-space: nowrap;
+      text-align: center;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      font-size: 12px;
+      padding: 0 8px;
+      box-sizing: border-box;
+    }
+
+    .tx-band-stroke {
+      display: block;
+      width: 100%;
+      height: 0;
+      border-top: 1px dashed #333;
+    }
+
+    .section-label {
+      text-align: left;
+      font-weight: 700;
+      margin: 6px 0;
     }
 
     .header {
@@ -211,14 +253,52 @@
       padding-top: 4px;
     }
 
+    .advance-close td {
+      border-top: none;
+      font-weight: 400;
+      padding-top: 2px;
+    }
+
+    .advertisement {
+      margin-top: 3mm;
+      font-size: 10px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .advertisement-advance {
+      margin-bottom: 1.5mm;
+    }
+
+    .advertisement-advance .ad-label {
+      font-weight: 700;
+      margin-right: 2mm;
+    }
+
     .muted {
       color: #777;
       text-align: center;
       font-style: italic;
     }
 
-    .items-table{
+    .items-table {
       margin-top: 1rem;
+      -fs-table-paginate: paginate;
+    }
+
+    .items-table thead {
+      display: table-header-group;
+    }
+
+    .items-table tr {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .totals-block,
+    .closing-block {
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
 
     .tax-payment-grid {
@@ -226,6 +306,8 @@
       width: 100%;
       table-layout: fixed;
       margin-top: 3rem;
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
 
     .tax-payment-col {
@@ -265,15 +347,17 @@
     }
 
     .bottom-area {
-      display: table;
       width: 100%;
       table-layout: fixed;
       margin-top: 10px;
+      border-collapse: collapse;
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
 
-    .bottom-left,
-    .bottom-right {
-      display: table-cell;
+    .bottom-area td {
+      border: none;
+      padding: 0;
       width: 50%;
       vertical-align: bottom;
     }
@@ -288,6 +372,8 @@
       width: auto;
       height: auto;
       display: block;
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
 
     .qr-code[src=""] {
@@ -318,48 +404,48 @@
       <div class="logo-box">{{ORG_LOGO_BLOCK}}</div>
       <!-- Title-line should go full width, with double line on each side of the title -->
       <div class="rule-line double" aria-label="fiskalni-racun-title-line">
-        <span class="rule-side"><span class="rule-stroke"></span></span>
-        <span class="rule-label">FISKALNI RAČUN</span>
-        <span class="rule-side"><span class="rule-stroke"></span></span>
+        <p class="title">{{TITLE_LINE}}</p>
       </div>
 
       <div class="header">
         <div class="header-top-left">
+            <div>{{BUSINESS_TIN}}</div> <!--{{LABEL_TIN}} -->
             <div><strong>{{BUSINESS_NAME}}</strong></div>
+            <div>{{BUSINESS_LOCATION}}</div>
             <div>{{BUSINESS_ADDRESS}}</div>
-            <div>PIB: {{BUSINESS_TIN}}</div>
-            <div><span class="meta-label">ESIR broj:</span> {{PFR_REQUESTED_BY}}</div>
-            <div>Kasir: {{CASHIER_NAME}}</div>
+            <div>{{BUSINESS_DISTRICT}}</div>
+            <div><span class="meta-label">{{LABEL_ESIR_NUMBER}}</span> {{ESIR_NUMBER}}</div>
+            {{ADVANCE_PAYMENT_DATE_BLOCK}}
+            <div><span class="meta-label">{{LABEL_CASHIER}}</span> {{CASHIER_NAME}}</div>
+            {{REFERENT_BLOCK}}
         </div>
         <div class="header-top-right">
-            <div><strong>Kupac:</strong> {{CUSTOMER_NAME}}</div>
-            <div><span class="meta-label">PFR broj:</span> {{SDC_INVOICE_NO}}</div>
-            <div><span class="meta-label">PFR vreme:</span> {{SDC_DATE_TIME}}</div>
+            <div><span class="meta-label">{{LABEL_CUSTOMER}}</span> {{CUSTOMER_NAME}}</div>
+            {{CUSTOMER_ID_BLOCK}}
+            {{CUSTOMER_COST_CENTER_BLOCK}}
         </div>
       </div>
-   <!-- bill-line should go full width, with single line on each side of the text -->
-      <div class="rule-line single" aria-label="fiskalni-racun-bill-line">
-        <span class="rule-side"><span class="rule-stroke"></span></span>
-        <span class="rule-label">{{INVOICE_TYPE}} {{TRANSACTION_TYPE}}</span>
-        <span class="rule-side"><span class="rule-stroke"></span></span>
+      <div class="tx-band">
+        <span class="tx-band-side"><span class="tx-band-stroke"></span></span>
+        <span class="tx-band-label">{{INVOICE_TYPE}} {{TRANSACTION_TYPE}}</span>
+        <span class="tx-band-side"><span class="tx-band-stroke"></span></span>
       </div>
-    
-    <!-- <div class="section-title">Artikli</div> -->
+
+    <div class="section-label">{{LABEL_ITEMS}}</div>
+    <div class="section-label">===================================================================================================</div>
     <table class="items-table">
       <colgroup>
         <col style="width: auto;" />
-        <col style="width: 7%;" />
-        <col style="width: 14%;" />
-        <col style="width: 8%;" />
-        <col style="width: 14%;" />
+        <col style="width: 16%;" />
+        <col style="width: 10%;" />
+        <col style="width: 16%;" />
       </colgroup>
       <thead>
         <tr>
-          <th>Naziv</th>
-          <th>Ozn.</th>
-          <th class="num">Jed. cena</th>
-          <th class="num">Kol.</th>
-          <th class="num">Ukupno</th>
+          <th>{{LABEL_ITEM_NAME}}</th>
+          <th class="num">{{LABEL_UNIT_PRICE}}</th>
+          <th class="num">{{LABEL_QUANTITY}}</th>
+          <th class="num">{{LABEL_LINE_TOTAL}}</th>
         </tr>
       </thead>
       <tbody>
@@ -367,16 +453,17 @@
       </tbody>
     </table>
 
+    <div class="totals-block">
+    <div class="section-label">===================================================================================================</div>
     <div class="tax-payment-grid">
       <div class="tax-payment-col left">
-        <!-- <div class="section-title">Poreske stavke</div> -->
         <table>
           <thead>
             <tr>
-              <th>Oznaka</th>
-              <th>Naziv</th>
-              <th class="num">Stopa</th>
-              <th class="num">Porez</th>
+              <th>{{LABEL_TAX_MARK}}</th>
+              <th>{{LABEL_TAX_NAME}}</th>
+              <th class="num">{{LABEL_TAX_RATE}}</th>
+              <th class="num">{{LABEL_TAX_AMOUNT}}</th>
             </tr>
           </thead>
           <tbody>
@@ -385,19 +472,18 @@
         </table>
         <table class="compact-total">
           <tr>
-            <td class="label">Ukupan iznos poreza:</td>
+            <td class="label">{{LABEL_TOTAL_TAX}}</td>
             <td class="value">{{TOTAL_TAX}}</td>
           </tr>
         </table>
       </div>
 
       <div class="tax-payment-col right">
-        <!-- <div class="section-title">Placanje</div> -->
         <table>
           <thead>
             <tr>
-              <th>Način plaćanja</th>
-              <th class="num">Iznos</th>
+              <th>{{LABEL_PAYMENT_METHOD}}</th>
+              <th class="num">{{LABEL_PAYMENT_AMOUNT}}</th>
             </tr>
           </thead>
           <tbody>
@@ -406,28 +492,36 @@
         </table>
         <table class="compact-total">
           <tr>
-            <td class="label">Za uplatu:</td>
+            <td class="label">{{LABEL_TOTAL_AMOUNT}}</td>
             <td class="value">{{TOTAL_AMOUNT}}</td>
           </tr>
+          {{REMAINING_TO_PAY_ROW}}
         </table>
       </div>
     </div>
-
-    <div class="bottom-area">
-      <div class="bottom-left">
-        <img class="qr-code" src="{{EFISCAL_QR}}" alt="QR kod" />
-      </div>
-      <div class="bottom-right">
-        <div class="qr-link">
-          <a href="{{EFISCAL_LINK}}">Link za proveru racuna</a>
-        </div>
-      </div>
     </div>
+
+    <div class="closing-block">
+    <div class="section-label">===================================================================================================</div>
+    <table class="bottom-area">
+      <tr>
+        <td class="bottom-left">
+          <img class="qr-code" src="{{EFISCAL_QR}}" alt="{{LABEL_QR_ALT}}" />
+        </td>
+        <td class="bottom-right">
+          <div><span class="meta-label">{{LABEL_PFR_TIME}}</span> {{SDC_DATE_TIME}}</div>
+          <div><span class="meta-label">{{LABEL_PFR_INVOICE_NUMBER}}</span> {{SDC_INVOICE_NO}}</div>
+          <div><span class="meta-label">{{LABEL_INVOICE_COUNTER}}</span> {{INVOICE_COUNTER}}</div>
+          <div class="qr-link">
+            <a href="{{EFISCAL_LINK}}">{{LABEL_VERIFY_LINK}}</a>
+          </div>
+        </td>
+      </tr>
+    </table>
     <!-- footer-line should go full width, with double line on each side of the title -->
     <div class="rule-line double footer-line" aria-label="fiskalni-racun-footer-line">
-      <span class="rule-side"><span class="rule-stroke"></span></span>
-      <span class="rule-label">KRAJ FISKALNOG RACUNA</span>
-      <span class="rule-side"><span class="rule-stroke"></span></span>
+      <p class="title">======================================== {{LABEL_FISCAL_BILL_END}} ========================================</p>
+    </div>
     </div>
   </div>
   {{ADVERTISEMENT_BLOCK}}

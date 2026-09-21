@@ -21,4 +21,5 @@ spring:
 app:
   manufacturer: ${APP_MANUFACTURER:eFiscal}
   serial-number: ${APP_SERIAL_NUMBER:EFISCAL-VPS-001}
-  software-version: ${APP_SOFTWARE_VERSION:0.0.1-SNAPSHOT}
+  software-version: ${APP_SOFTWARE_VERSION:1.0.0}
+  esir-number: ${APP_ESIR_NUMBER:1658}

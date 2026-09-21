@@ -543,17 +543,23 @@ select {
 
 .field input,
 .field select,
-select.form-input {
+select.form-input,
+input.form-input {
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--color-border);
   background: white;
   color: var(--color-text);
+  font: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.4;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .field input:focus,
-.field select:focus {
+.field select:focus,
+select.form-input:focus,
+input.form-input:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-focus-ring);
@@ -671,7 +677,12 @@ select.form-input {
   font-size: 0.95rem;
 }
 
-.fiscal-item-grid,
+.fiscal-item-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .fiscal-payment-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
