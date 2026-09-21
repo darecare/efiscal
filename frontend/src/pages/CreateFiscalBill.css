@@ -134,7 +134,21 @@
 }
 
 .fiscal-item-row--amounts {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns:
+    minmax(0, 1.35fr)
+    minmax(56px, 0.62fr)
+    minmax(68px, 0.78fr)
+    minmax(68px, 0.72fr)
+    minmax(72px, 0.85fr);
+}
+
+.fiscal-field--qty,
+.fiscal-field--tax-type {
+  max-width: 7.5rem;
+}
+
+.fiscal-field--tax-value {
+  max-width: 6.5rem;
 }
 
 .fiscal-item-row .fiscal-field,

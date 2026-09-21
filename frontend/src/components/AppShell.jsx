@@ -244,7 +244,7 @@ const getNavItems = (user) => {
       labelKey: 'nav.fiscalBills',
       show: can('FISCAL_VIEW_BILLS') || can('FISCAL_CREATE_BILL'),
       children: [
-        { path: '/fiscal-bills', labelKey: 'nav.fiscalBills', show: can('FISCAL_VIEW_BILLS') },
+        { path: '/fiscal-bills', labelKey: 'nav.fiscalBillsList', show: can('FISCAL_VIEW_BILLS') },
         { path: '/fiscal-bills/create', labelKey: 'nav.createFiscalBill', show: can('FISCAL_CREATE_BILL') },
         { path: '/fiscal-bills/get-status', labelKey: 'nav.getStatus', show: can('FISCAL_VIEW_BILLS') },
         { path: '/fiscal-bills/products', labelKey: 'nav.products', show: can('FISCAL_MANAGE_PRODUCTS') },

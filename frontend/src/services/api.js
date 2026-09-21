@@ -215,6 +215,13 @@ export const fiscalBillApi = {
     })
     return response.data
   },
+  async downloadImage(fiscalbillId, format = 'a4', media = 'png') {
+    const response = await api.get(`/fiscalbill/${fiscalbillId}/image`, {
+      params: { format, media },
+      responseType: 'blob',
+    })
+    return response.data
+  },
   async previewHtml(fiscalbillId, format = 'a4') {
     const response = await api.get(`/fiscalbill/${fiscalbillId}/html`, {
       params: { format },

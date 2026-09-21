@@ -61,8 +61,9 @@ Reference-only implementation sources:
 1. When user starts action for creating new fiscal bill, on modal page user will need to select data from 2 dropdown fields:
 invoiceType // 0-Normal, 4-Advance
 transactionType = 0; // 0-Sale, 1-Refund
-field in request "invoiceNumber" to be populated from table fiscalbillconfig.esirno
+field in request "invoiceNumber" to be populated with the ESIR number of this installation — `app.esir-number`/`app.software-version` from `application.yml`, the same value printed as **ESIR broj** on PDFs (not `fiscalbill.efiscal_requestedby`, which stores the Tax Authority response field). Applies to from-order, manual, copy, refund, and auto Advance Refund requests.
 2. Date and time are taken from system datetime Belgrade timezone
+3. field `dateAndTimeOfIssue` is sent **only** for invoiceType Advance (4) + transactionType Sale (0) **and only when the user explicitly picks the advance payment moment** by ticking **Datum avansne uplate** on the order modal / manual header and filling the date-time field. The chosen moment must be in the past and at most 3 days back (otherwise `400`). Every other case — all other invoice/transaction type combinations (Normal, Proforma, Copy, Training, any Refund, the auto Advance Refund) and an Advance Sale with no chosen moment — omits the field entirely and takes the Tax Authority timestamp; it is never defaulted to the current time. The value actually sent is persisted on `fiscalbill.dateandtimeofissue` and printed below **ESIR broj** on both A4 and roll80 receipts; nothing is printed when the column is empty.
 
 ### 4.1.3 rules to prepare fiscalbill line items
 1. Reuse code from /legacy FiscalbillService.java from function setLineItems() for invoicetype = 0
@@ -72,10 +73,13 @@ It can be read here (on serbian language) in spec:
 https://tap.sandbox.suf.purs.gov.rs/Help/view/638196160/%D0%98%D0%B7%D0%B4%D0%B0%D0%B2%D0%B0%D1%9A%D0%B5-%D1%84%D0%B8%D1%81%D0%BA%D0%B0%D0%BB%D0%BD%D0%B8%D1%85-%D1%80%D0%B0%D1%87%D1%83%D0%BD%D0%B0-%D1%83-%D1%81%D0%BB%D1%83%D1%87%D0%B0%D1%98%D1%83-%D0%BD%D0%B0%D0%BF%D0%BB%D0%B0%D1%82%D0%B5-%D0%B0%D0%B2%D0%B0%D0%BD%D1%81%D0%B0-%D1%83-%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BC%D1%83-%D0%B5%D0%A4%D0%B8%D1%81%D0%BA%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%98%D0%B5/sr-Cyrl-RS
 
 Name of advance item is read from tax table configuration, not hardcoded:
-- tax.efiscal_advanceprefix + tax.efiscal_advancename
+- Format: `tax.efiscal_advanceprefix` + space + `tax.efiscal_advancename` + space + `(tax label / tax mark)`
+- Example: `20 Avans (Ђ)` when prefix=`20`, advance name=`Avans`, label=`Ђ`
 - mapping key is tax label used on the grouped advance line
 - each label used for advance invoice must have one active tax row with both fields populated
 - if any order line is missing product_tax_percent or product_tax_name, request must fail with validation error
+- Persisted `fiscalbillline` rows for Advance invoices store these summarized advance lines (not original product names)
+- PDF A4/roll80 for Advance invoices render the same advance name format (grouped by tax label)
 
 ### 4.1.4 Reference to already issued fiscal bills
 In fiscalbill api request body, 2 fields for reference document must be set, if any of these conditions is met:
@@ -90,12 +94,16 @@ In fiscalbill api request body, 2 fields for reference document must be set, if 
 Reference fields in api request body:
 1. referentDocumentNumber - field eFiscal_sdc_invoiceno from ficalbill table
 2. referentDocumentDT - field eFiscal_sdcdatetime from ficalbill table
+3. When a referent is applied, persist `fiscalbill.referent_fiscalbill_id` to the local `fiscalbill_id` of that referenced bill (manual, order-based, copy, refund, and advance-close flows).
+4. When `buyerId` is included in the Tax Authority request, persist the same value on `fiscalbill.customer_id` (e.g. `10:123456789`). Shown on PDF as **ID kupca** when present.
+5. On the manual creation form the reference field is **mandatory** for Copy (invoiceType=2), for every Refund (transactionType=1, any invoice type), and when **Close Advance Payment** is ticked. For Advance Sale it is **optional** — a new advance chain needs no reference.
 
 Check reference function on /legacy setReferentFields function
 
 ### 4.1.5 Advance fiscalbill closing chain
 If api request is to create Normal Sale invoice and if in database exists previously issued Advance Sale fiscalbills for same sales order, system must first create Advance Refund document.
 - Advance Refund document must summarize all previous Advance Normal line items and close so that total on Advance Refund must be equal to sum of all previous Advance Normal fiscalbills.
+- After a successful Tax Authority response, persist Advance Refund `fiscalbillline` rows (summarized advance names) and `fiscalbillpay` rows for that refund bill — same data sent in the Tax Authority request.
 - After Advance Refund is created, then Normal Sale document will be created and it reference fields will be populated with data from Advance Refund document
 
 ### 4.1.6 Payment items array in API request body
@@ -123,7 +131,7 @@ https://tap.sandbox.suf.purs.gov.rs/Help/view/984275480/%D0%A0%D0%B0%D1%87%D1%83
 Fiscal bill can have buyerId field which identifies customer.
 - when creating fiscal bill from Sales order from MerchantPro system, if customer is legal entity field billing_type = company
 then buyerid field will be populated with fixed part "10:" + order.billing_company_vat
-
+- Optional `buyerCostCenterId` (“Opciono polje kupca”) may be supplied from the Orders issue-fiscal modal (same checkbox + type + value as manual creation). It is included in the Tax Authority CREATE_INVOICE JSON **only when** `buyerId` is populated for that order **and** the optional field type/value were provided. Persisted on `fiscalbill.customer_costcenterid`.
 
 ### 4.1.8 Tax items array in API request body
 
@@ -138,6 +146,12 @@ Users will use page to create manually fiscal bill and send it to Tax Authority 
 - Input fields for creating fiscal bill:
 1. Optional - buyerid:
 - For manual creation of fiscal bill on Fiscal Bill page there will be a dropdown field to select type of buyer. And a separate field to enter company VAT ID.
+
+1b. Optional - buyerCostCenterId (“Opciono polje kupca”):
+- Checkbox enables type dropdown (codes 20/21/30/31/32/33/50/60 + Opis) and a value field.
+- When both are filled **and** `buyerId` is populated, Tax Authority request includes `buyerCostCenterId` as `{code}:{value}` (e.g. `30:099999999`). Code `60` value format is `ddmmyyyy_ddmmyyyy`.
+- If `buyerId` is absent, `buyerCostCenterId` is omitted from the CREATE_INVOICE JSON even when the optional fields were filled.
+- Persisted on `fiscalbill.customer_costcenterid`. When non-empty, PDFs show label `pdf.optionalBuyerField` + value below customer ID.
 
 2. Optional - Sales Order ID - when provided on manual creation, the backend applies **order-linked fiscal-chain checks** scoped to the selected organization:
    - Duplicate protection for the same `orderId` + `invoiceType` + `transactionType`.
@@ -199,25 +213,40 @@ Payment Type enumeration value: 0 - Other, 1 - Cash, 2 - Card, 3 - Check, 4 - Wi
 3. Default template format is A4.
 4. Template must include the following content groups:
   - Header/meta section (issuer data, invoice metadata, order/customer context)
-  - Line items area sourced from `fiscalbillline`
+  - PDF **ESIR broj** is `app.esir-number`/`app.software-version` from `application.yml` (not `fiscalbill.efiscal_requestedby`)
+  - Start title line: `pdf.fiscalBill` for invoice types 0 and 4; `pdf.notFiscalBill` (`Ovo nije fiskalni račun` / `Ово није фискални рачун`) for invoice types 1, 2, 3, with fewer `=` so the longer text stays on one line.
+  - When `customer_costcenterid` is set: show optional customer field below customer ID (`Opciono polje kupca` / `Опционо поље купца`)
+  - When `referent_fiscalbill_id` is set: show referent invoice number and datetime below cashier (`Ref. broj` / `Ref. vreme`, Serbian Latin)
+  - Line items area sourced from `fiscalbillline` (for Advance invoice type: display name is `advancePrefix advanceName (taxMark)` from tax settings, grouped by tax label). When `transactionType = 1` (Refund), prefix each line Total with `-` (not the A4 line-items Ukupno row).
+  - When Normal Sale references an Advance Refund: below line-items Ukupno show `pdf.paidInAdvance` (refund total) and `pdf.vatOnAdvance` (refund tax). Advertisement block starts with `pdf.lastAdvanceBill` + last Advance Sale PFR number and PFR date (`dd.MM.yyyy`). PDF labels come from `pdf.latin` (A4) and `pdf.cyrillic` (roll80) in `frontend/src/locales/sr.json` (runtime copy: `backend/src/main/resources/locales/sr.json`). Colon is appended in rendering.
   - Tax items area sourced from `fiscalbilltax`
   - Payments area sourced from `fiscalbillpay`
 5. Textual formatting should follow "Текстуални приказ фискалног рачуна" guidance:
   - clear start line marking beginning of fiscal section
   - clear end line marking end of fiscal section
   - grouped receipt metadata and totals shown in printable form
+6. Image export (`GET /fiscalbill/{id}/image`) is a 200 DPI raster of the generated PDF (PNG default, JPEG optional). It is not a separate layout. Multi-page PDFs are stacked into one image (all pages).
+7. A4 pagination: line-item table continues onto the next page with a repeated header. Tax/payment block and the QR + PFR + end-line block each stay together (`page-break-inside: avoid`) and move wholly to the next page if they do not fit. When the PDF has more than one page, a page number (`1 / N`) is drawn in the bottom-right margin.
 
 ### 4.6 Fiscal Bill PDF Rendering (57mm–80mm roll template)
 1. System must support an additional roll-format template for paper roll style printouts.
 2. Roll template file: `backend/src/main/resources/pdf-templates/default-roll80.html`.
-3. PDF endpoint supports format selection with query parameter:
+3. PDF and image endpoints support format selection with query parameter:
   - `format=a4` (default)
   - `format=roll80`
-4. Roll template includes same required content groups as A4 template:
-  - Header/meta
-  - Line items from `fiscalbillline`
-  - Tax items from `fiscalbilltax`
-  - Payment items from `fiscalbillpay`
+  - Image export (`GET /fiscalbill/{id}/image`) rasters the same roll PDF at 200 DPI (all pages, stacked if more than one).
+4. Roll page height is dynamic (one continuous 80mm page): it grows to fit all line items and ends after the advertisement block, with no leftover empty space below it.
+5. Roll layout follows thermal-receipt style (no outer border; dashed section separators):
+  - Start title line: `pdf.fiscalBill` for invoice types 0 and 4; `pdf.notFiscalBill` for invoice types 1, 2, 3 (fewer `=` so the longer Cyrillic text stays on one line)
+  - Centered header (TIN, business name/location/address/district)
+  - Cashier + ESIR number (`app.esir-number`/`app.software-version` from `application.yml`)
+  - When `customer_id` / `customer_costcenterid` are set: customer ID and optional customer field rows
+  - When `referent_fiscalbill_id` is set: referent invoice number + datetime (Реф. број / Реф. време)
+  - Invoice/transaction band
+  - Line items, payments (incl. change), tax breakdown (Advance: line names use `advancePrefix advanceName (taxMark)`; Refund: line Total is prefixed with `-`). When Normal Sale references an Advance Refund: after line items show `Плаћено авансом` / `ПДВ на аванс`; advertisement starts with `Last advance bill` + last Advance Sale PFR number and date (`dd.MM.yyyy`).
+  - PFR time / invoice number / counter
+  - Centered verification **QR image** (from `efiscal_qr` or generated from `efiscal_link`; not a raw URL text)
+  - End-of-receipt line + MRC
 
 ## 5. Supported Invoice and Transaction Types
 
@@ -240,8 +269,8 @@ Notes:
 
 ### 6.1 Request Core Fields
 Minimum expected request structure includes:
-- dateAndTimeOfIssue
-- cashier
+- dateAndTimeOfIssue (Advance Sale only — omitted for all other invoice/transaction type combinations)
+- cashier (from authenticated `users.cashier` when non-blank; omitted otherwise)
 - buyerId (when applicable)
 - invoiceType
 - transactionType
@@ -275,6 +304,11 @@ Expected response capture includes:
 - totalAmount
 - taxGroupRevision
 - mrc
+- locationName
+- district
+- businessName
+- tin
+- address
 
 ## 7. API Contract Alignment
 

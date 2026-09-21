@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import {
+  advancePaymentDateTimeBounds,
+  calcLineTaxValue,
   calcPaymentMatchAmount,
   calcTotalAmount,
+  composeBuyerCostCenterId,
+  isAdvanceSale,
+  toDateTimeLocalValue,
+  validateAdvancePaymentDateTime,
   FALLBACK_TAX_LABELS,
   FALLBACK_TAX_LABEL_OPTIONS,
   inferBuyerTypeFromNumericId,
   isFiscalResultFailed,
   isFiscalResultSuccess,
   normalizeTaxLabelOptions,
+  sanitizeQuantityInput,
 } from './createFiscalBillUtils'
 
 describe('createFiscalBillUtils', () => {
@@ -18,6 +25,28 @@ describe('createFiscalBillUtils', () => {
 
     it('keeps previous total when unit price is negative', () => {
       expect(calcTotalAmount('2', '-1', '12.34')).toBe('12.34')
+    })
+  })
+
+  describe('calcLineTaxValue', () => {
+    it('extracts VAT from gross line total', () => {
+      expect(calcLineTaxValue('1500.00', '20')).toBe('250.00')
+    })
+
+    it('returns zero when rate or total is missing', () => {
+      expect(calcLineTaxValue('', '20')).toBe('0.00')
+      expect(calcLineTaxValue('100.00', null)).toBe('0.00')
+    })
+  })
+
+  describe('sanitizeQuantityInput', () => {
+    it('limits manual entry to two decimal places', () => {
+      expect(sanitizeQuantityInput('1.234')).toBe('1.23')
+      expect(sanitizeQuantityInput('2.5')).toBe('2.5')
+    })
+
+    it('strips non-numeric characters', () => {
+      expect(sanitizeQuantityInput('a3.1b2')).toBe('3.12')
     })
   })
 
@@ -73,6 +102,55 @@ describe('createFiscalBillUtils', () => {
       expect(isFiscalResultSuccess({ status: 'SUCCESS' })).toBe(true)
       expect(isFiscalResultFailed({ status: 'FAILED' })).toBe(true)
       expect(isFiscalResultFailed({ status: 'SUCCESS', lastError: 'x' })).toBe(true)
+    })
+  })
+
+  describe('composeBuyerCostCenterId', () => {
+    it('composes type and value', () => {
+      expect(composeBuyerCostCenterId('30', '099999999')).toBe('30:099999999')
+    })
+
+    it('strips duplicate type prefix from value', () => {
+      expect(composeBuyerCostCenterId('30', '30:099999999')).toBe('30:099999999')
+    })
+
+    it('returns null when type or value is missing', () => {
+      expect(composeBuyerCostCenterId('', '099999999')).toBeNull()
+      expect(composeBuyerCostCenterId('30', '  ')).toBeNull()
+      expect(composeBuyerCostCenterId(null, '099999999')).toBeNull()
+    })
+  })
+
+  describe('advance payment date and time', () => {
+    const now = new Date('2026-09-18T12:00:00')
+
+    it('recognizes only Advance Sale', () => {
+      expect(isAdvanceSale(4, 0)).toBe(true)
+      expect(isAdvanceSale('4', '0')).toBe(true)
+      expect(isAdvanceSale(4, 1)).toBe(false)
+      expect(isAdvanceSale(0, 0)).toBe(false)
+    })
+
+    it('bounds the picker to the last three days', () => {
+      expect(advancePaymentDateTimeBounds(now)).toEqual({
+        min: '2026-09-15T12:00',
+        max: '2026-09-18T12:00',
+      })
+    })
+
+    it('formats dates for datetime-local inputs', () => {
+      expect(toDateTimeLocalValue(new Date('2026-01-05T08:07:00'))).toBe('2026-01-05T08:07')
+    })
+
+    it('accepts a moment within the allowed window', () => {
+      expect(validateAdvancePaymentDateTime('2026-09-17T10:30', now)).toBeNull()
+    })
+
+    it('rejects missing, future, and too old values', () => {
+      expect(validateAdvancePaymentDateTime('', now)).toBe('required')
+      expect(validateAdvancePaymentDateTime('not-a-date', now)).toBe('invalid')
+      expect(validateAdvancePaymentDateTime('2026-09-18T12:01', now)).toBe('future')
+      expect(validateAdvancePaymentDateTime('2026-09-15T11:59', now)).toBe('tooOld')
     })
   })
 })

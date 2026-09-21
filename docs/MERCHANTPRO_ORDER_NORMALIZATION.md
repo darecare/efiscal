@@ -59,7 +59,7 @@ These fields appear in legacy import logic and are relevant for normalization. N
 | `shipping_method_name` | string | Label for synthetic shipping line |
 | `wallet_amount` | decimal | Store-credit applied to order (typically negative or positive; legacy uses `.abs()`) |
 | `total_amount` / `total` | decimal | Order total — use for **reconciliation check** after normalization |
-| `billing_name`, `billing_type`, `billing_company_vat` | string | Buyer / fiscal customer (handled separately in `FiscalBillService`) |
+| `billing_name`, `billing_type`, `billing_company_vat` | string | Mapped onto order view as `customerName` / `billingType` / `billingCompanyVat`. When `billing_type` is `company`, from-order fiscalization sets Tax Authority `buyerId` to `10:` + `billing_company_vat`. |
 | `line_items` | array | See §3.2 |
 
 ### 3.2 Line item (`line_items[]`)

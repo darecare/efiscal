@@ -2,15 +2,66 @@ import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppShell from '../components/AppShell'
 import { fiscalBillApi, ordersApi } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import { useOrg } from '../contexts/OrgContext'
+import {
+  ADVANCE_PAYMENT_MAX_DAYS_IN_PAST,
+  advancePaymentDateTimeBounds,
+  BUYER_COST_CENTER_TYPE_VALUES,
+  composeBuyerCostCenterId,
+  isAdvanceSale,
+  validateAdvancePaymentDateTime,
+} from './createFiscalBillUtils'
 
-const INVOICE_TYPE_VALUES = [0, 4]
+const INVOICE_TYPE_VALUES = [0, 1, 3, 4]
 const TRANSACTION_TYPE_VALUES = [0, 1]
 const PAGE_SIZE_OPTIONS = [20, 50, 100]
 const SHIPPING_STATUS_VALUES = ['awaiting', 'in_process', 'shipped', 'delivered', 'cancelled']
 
+function emailStatusLabel(status, t) {
+  switch (status) {
+    case 'SENT':
+      return t('orders.emailSent')
+    case 'FAILED':
+      return t('orders.emailFailed')
+    case 'SKIPPED':
+      return t('orders.emailSkipped')
+    case 'NOT_REQUESTED':
+      return t('orders.emailNotRequested')
+    default:
+      return null
+  }
+}
+
+function buildFiscalCreatedNotification(successes, t) {
+  if (successes.length === 1) {
+    const emailPart = emailStatusLabel(successes[0].emailStatus, t)
+    return emailPart
+      ? `${t('orders.fiscalCreatedSuccess')} ${emailPart}`
+      : t('orders.fiscalCreatedSuccess')
+  }
+
+  const emailCounts = { SENT: 0, FAILED: 0, SKIPPED: 0, NOT_REQUESTED: 0 }
+  successes.forEach((s) => {
+    if (s.emailStatus && emailCounts[s.emailStatus] !== undefined) {
+      emailCounts[s.emailStatus] += 1
+    }
+  })
+  const emailParts = []
+  if (emailCounts.SENT > 0) emailParts.push(t('orders.emailSentCount', { count: emailCounts.SENT }))
+  if (emailCounts.FAILED > 0) emailParts.push(t('orders.emailFailedCount', { count: emailCounts.FAILED }))
+  if (emailCounts.SKIPPED > 0) emailParts.push(t('orders.emailSkippedCount', { count: emailCounts.SKIPPED }))
+  if (emailCounts.NOT_REQUESTED > 0) {
+    emailParts.push(t('orders.emailNotRequestedCount', { count: emailCounts.NOT_REQUESTED }))
+  }
+
+  const base = t('orders.fiscalCreatedSuccessCount', { count: successes.length })
+  return emailParts.length > 0 ? `${base} ${emailParts.join(' ')}` : base
+}
+
 export default function Orders() {
   const { t } = useTranslation()
+  const { showNotification } = useAuth()
   const { activeOrgId, activeOrg } = useOrg()
 
   const [createdAfter, setCreatedAfter] = useState('')
@@ -32,15 +83,22 @@ export default function Orders() {
   const totalPages = Math.ceil(totalRecords / limit) || 1
 
   const [fiscalByOrderId, setFiscalByOrderId] = useState({})
-  const [busyOrderIds, setBusyOrderIds] = useState({})
 
   // Fiscalize modal state
   const [fiscalModal, setFiscalModal] = useState(null) // { orders } or null
   const [fiscalInvoiceType, setFiscalInvoiceType] = useState(0)
   const [fiscalTransactionType, setFiscalTransactionType] = useState(0)
   const [sendEmail, setSendEmail] = useState(true)
+  const [optionalBuyerFieldEnabled, setOptionalBuyerFieldEnabled] = useState(false)
+  const [buyerCostCenterType, setBuyerCostCenterType] = useState('')
+  const [buyerCostCenterValue, setBuyerCostCenterValue] = useState('')
+  const [advancePaymentDateEnabled, setAdvancePaymentDateEnabled] = useState(false)
+  const [advancePaymentDateValue, setAdvancePaymentDateValue] = useState('')
   const [fiscalError, setFiscalError] = useState(null)
   const [fiscalSubmitting, setFiscalSubmitting] = useState(false)
+
+  const showAdvancePaymentDate = isAdvanceSale(fiscalInvoiceType, fiscalTransactionType)
+  const advancePaymentBounds = advancePaymentDateTimeBounds()
 
   useEffect(() => {
     setOrders([])
@@ -137,6 +195,10 @@ export default function Orders() {
     setFiscalInvoiceType(0)
     setFiscalTransactionType(0)
     setSendEmail(true)
+    setOptionalBuyerFieldEnabled(false)
+    setBuyerCostCenterType('')
+    setBuyerCostCenterValue('')
+    resetAdvancePaymentDate()
     setFiscalError(null)
   }
 
@@ -147,6 +209,29 @@ export default function Orders() {
   function closeFiscalModal() {
     setFiscalModal(null)
     setFiscalError(null)
+    setOptionalBuyerFieldEnabled(false)
+    setBuyerCostCenterType('')
+    setBuyerCostCenterValue('')
+    resetAdvancePaymentDate()
+  }
+
+  function resetAdvancePaymentDate() {
+    setAdvancePaymentDateEnabled(false)
+    setAdvancePaymentDateValue('')
+  }
+
+  function changeFiscalInvoiceType(value) {
+    setFiscalInvoiceType(value)
+    if (!isAdvanceSale(value, fiscalTransactionType)) {
+      resetAdvancePaymentDate()
+    }
+  }
+
+  function changeFiscalTransactionType(value) {
+    setFiscalTransactionType(value)
+    if (!isAdvanceSale(fiscalInvoiceType, value)) {
+      resetAdvancePaymentDate()
+    }
   }
 
   async function submitFiscalBill() {
@@ -156,6 +241,36 @@ export default function Orders() {
       setFiscalError(t('orders.noOrgClient'))
       return
     }
+
+    let composedBuyerCostCenterId = null
+    if (optionalBuyerFieldEnabled) {
+      const trimmedCostCenterValue = buyerCostCenterValue.trim()
+      if (!buyerCostCenterType) {
+        setFiscalError(t('createFiscalBill.buyerCostCenterTypeRequired'))
+        return
+      }
+      if (!trimmedCostCenterValue) {
+        setFiscalError(t('createFiscalBill.buyerCostCenterValueRequired'))
+        return
+      }
+      composedBuyerCostCenterId = composeBuyerCostCenterId(buyerCostCenterType, buyerCostCenterValue)
+      if (!composedBuyerCostCenterId) {
+        setFiscalError(t('createFiscalBill.buyerCostCenterValueRequired'))
+        return
+      }
+    }
+
+    const sendAdvancePaymentDate = showAdvancePaymentDate && advancePaymentDateEnabled
+    if (sendAdvancePaymentDate) {
+      const errorCode = validateAdvancePaymentDateTime(advancePaymentDateValue)
+      if (errorCode) {
+        setFiscalError(t(`createFiscalBill.advancePaymentDateErrors.${errorCode}`, {
+          days: ADVANCE_PAYMENT_MAX_DAYS_IN_PAST,
+        }))
+        return
+      }
+    }
+
     const clientId = selectedOrg.clientId
 
     setFiscalSubmitting(true)
@@ -163,6 +278,7 @@ export default function Orders() {
 
     const nextFiscalState = { ...fiscalByOrderId }
     const failures = []
+    const successes = []
 
     for (const order of ordersToSubmit) {
       const lines = order.orderLines || []
@@ -216,6 +332,12 @@ export default function Orders() {
         paymentMethodCode: order.paymentMethodCode || null,
         items,
       }
+      if (composedBuyerCostCenterId) {
+        payload.buyerCostCenterId = composedBuyerCostCenterId
+      }
+      if (sendAdvancePaymentDate) {
+        payload.dateAndTimeOfIssue = advancePaymentDateValue
+      }
 
       try {
         const created = await fiscalBillApi.createFromOrder(
@@ -228,6 +350,7 @@ export default function Orders() {
           sdcInvoiceNumber: created.sdcInvoiceNumber,
           lastError: created.lastError,
         }
+        successes.push({ emailStatus: created.emailStatus })
       } catch (err) {
         const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('orders.fiscalFailed')
         nextFiscalState[order.id] = {
@@ -246,28 +369,12 @@ export default function Orders() {
       return
     }
 
+    if (successes.length > 0) {
+      showNotification(buildFiscalCreatedNotification(successes, t), 'success')
+    }
+
     setSelectedOrderIds(new Set())
     closeFiscalModal()
-  }
-
-  async function retryFiscalBill(order) {
-    const fiscal = fiscalByOrderId[order.id]
-    if (!fiscal?.fiscalbillId) return
-    setBusyOrderIds((current) => ({ ...current, [order.id]: true }))
-    try {
-      const retry = await fiscalBillApi.retry(fiscal.fiscalbillId, createIdempotencyKey())
-      setFiscalByOrderId((current) => ({
-        ...current,
-        [order.id]: { ...current[order.id], status: retryResponse.status, lastError: null },
-      }))
-    } catch (err) {
-      setFiscalByOrderId((current) => ({
-        ...current,
-        [order.id]: { ...current[order.id], status: 'ERROR', lastError: err.response?.data?.message || t('orders.retryFailed') },
-      }))
-    } finally {
-      setBusyOrderIds((current) => ({ ...current, [order.id]: false }))
-    }
   }
 
   return (
@@ -416,17 +523,8 @@ export default function Orders() {
                             type="button"
                             className="primary-button"
                             onClick={() => openFiscalModal(order)}
-                            disabled={busyOrderIds[order.id]}
                           >
-                            {busyOrderIds[order.id] ? t('common.processing') : t('orders.issueFiscalBill')}
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary-button"
-                            onClick={() => retryFiscalBill(order)}
-                            disabled={busyOrderIds[order.id] || fiscalByOrderId[order.id]?.status !== 'FAILED'}
-                          >
-                            {t('common.retry')}
+                            {t('orders.issueFiscalBill')}
                           </button>
                         </div>
                       </td>
@@ -518,16 +616,93 @@ export default function Orders() {
               </label>
               <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px 20px' }}>
                 <label className="form-label" style={{ marginBottom: 0, minWidth: 140 }}>{t('orders.invoiceType')}</label>
-                <select className="form-input" style={{ marginBottom: 0, flex: 1 }} value={fiscalInvoiceType} onChange={(e) => setFiscalInvoiceType(e.target.value)}>
+                <select className="form-input" style={{ marginBottom: 0, flex: 1 }} value={fiscalInvoiceType} onChange={(e) => changeFiscalInvoiceType(e.target.value)}>
                   {INVOICE_TYPE_VALUES.map((v) => <option key={v} value={v}>{t(`orders.invoiceTypes.${v}`)}</option>)}
                 </select>
               </div>
               <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px 20px' }}>
                 <label className="form-label" style={{ marginBottom: 0, minWidth: 140 }}>{t('orders.transactionType')}</label>
-                <select className="form-input" style={{ marginBottom: 0, flex: 1 }} value={fiscalTransactionType} onChange={(e) => setFiscalTransactionType(e.target.value)}>
+                <select className="form-input" style={{ marginBottom: 0, flex: 1 }} value={fiscalTransactionType} onChange={(e) => changeFiscalTransactionType(e.target.value)}>
                   {TRANSACTION_TYPE_VALUES.map((v) => <option key={v} value={v}>{t(`orders.transactionTypes.${v}`)}</option>)}
                 </select>
               </div>
+              {showAdvancePaymentDate && (
+                <>
+                  <label className="form-group" style={{ display: 'flex', flexDirection: 'row', gap: '0.75rem', alignItems: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={advancePaymentDateEnabled}
+                      onChange={(e) => {
+                        const enabled = e.target.checked
+                        setAdvancePaymentDateEnabled(enabled)
+                        if (!enabled) setAdvancePaymentDateValue('')
+                      }}
+                    />
+                    <span className="form-label" style={{ marginBottom: 0 }}>{t('createFiscalBill.advancePaymentDate')}</span>
+                  </label>
+                  {advancePaymentDateEnabled && (
+                    <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px 20px' }}>
+                      <label className="form-label" style={{ marginBottom: 0, minWidth: 140 }}>{t('createFiscalBill.advancePaymentDateTime')}</label>
+                      <input
+                        className="form-input"
+                        style={{ marginBottom: 0, flex: 1 }}
+                        type="datetime-local"
+                        value={advancePaymentDateValue}
+                        min={advancePaymentBounds.min}
+                        max={advancePaymentBounds.max}
+                        onChange={(e) => setAdvancePaymentDateValue(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+              <label className="form-group" style={{ display: 'flex', flexDirection: 'row', gap: '0.75rem', alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={optionalBuyerFieldEnabled}
+                  onChange={(e) => {
+                    const enabled = e.target.checked
+                    setOptionalBuyerFieldEnabled(enabled)
+                    if (!enabled) {
+                      setBuyerCostCenterType('')
+                      setBuyerCostCenterValue('')
+                    }
+                  }}
+                />
+                <span className="form-label" style={{ marginBottom: 0 }}>{t('createFiscalBill.optionalBuyerField')}</span>
+              </label>
+              {optionalBuyerFieldEnabled && (
+                <>
+                  <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px 20px' }}>
+                    <label className="form-label" style={{ marginBottom: 0, minWidth: 140 }}>{t('createFiscalBill.buyerCostCenterType')}</label>
+                    <select
+                      className="form-input"
+                      style={{ marginBottom: 0, flex: 1 }}
+                      value={buyerCostCenterType}
+                      onChange={(e) => setBuyerCostCenterType(e.target.value)}
+                    >
+                      <option value="">{t('createFiscalBill.selectBuyerCostCenterType')}</option>
+                      {BUYER_COST_CENTER_TYPE_VALUES.map((v) => (
+                        <option key={v} value={v}>{t(`createFiscalBill.buyerCostCenterTypes.${v}`)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px 20px' }}>
+                    <label className="form-label" style={{ marginBottom: 0, minWidth: 140 }}>{t('createFiscalBill.buyerCostCenterValue')}</label>
+                    <input
+                      className="form-input"
+                      style={{ marginBottom: 0, flex: 1 }}
+                      value={buyerCostCenterValue}
+                      onChange={(e) => setBuyerCostCenterValue(e.target.value)}
+                      placeholder={
+                        buyerCostCenterType === '60'
+                          ? t('createFiscalBill.buyerCostCenterValuePlaceholder60')
+                          : t('createFiscalBill.buyerCostCenterValuePlaceholder')
+                      }
+                    />
+                  </div>
+                </>
+              )}
             </div>
             {fiscalError && <p style={{ color: 'red', marginTop: '0.75rem' }}>{fiscalError}</p>}
             <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem' }}>

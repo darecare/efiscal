@@ -83,11 +83,14 @@ public class DemoDataService {
 
         orders = List.of(
             new OrderView("1", "MP-100045", "Milica Jovanovic", "milica.jovanovic@example.com", "ready_to_ship", new BigDecimal("14990.00"), "2026-04-24T10:30:00", "cash_delivery",
+                null, null,
                 List.of(new OrderLineView("P1", "Laptop Stand Aluminium", "SKU-LS-01", "8600000000001", "1", "14990.00", "20", "VAT"))),
             new OrderView("2", "MP-100046", "Petar Markovic", "petar.markovic@example.com", "processing", new BigDecimal("8990.00"), "2026-04-24T11:10:00", "card",
+                "company", "101234567",
                 List.of(new OrderLineView("P2", "Wireless Mouse", "SKU-WM-02", "8600000000002", "1", "4990.00", "20", "VAT"),
                         new OrderLineView("P3", "USB-C Hub 7-in-1", "SKU-HUB-03", null, "1", "4000.00", "20", "VAT"))),
             new OrderView("3", "MP-100047", "Ana Ilic", "ana.ilic@example.com", "completed", new BigDecimal("23990.00"), "2026-04-23T15:45:00", "wire",
+                null, null,
                 List.of(new OrderLineView("P4", "Mechanical Keyboard TKL", "SKU-KB-04", null, "1", "15990.00", "20", "VAT"),
                         new OrderLineView("P5", "Mouse Pad XL", "SKU-MP-05", "8600000000005", "2", "4000.00", "20", "VAT"))));
     }
@@ -426,6 +429,8 @@ public class DemoDataService {
         BigDecimal totalAmount,
         String createdAt,
         String paymentMethodCode,
+        String billingType,
+        String billingCompanyVat,
         List<OrderLineView> orderLines) {
     }
 
