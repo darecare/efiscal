@@ -220,6 +220,7 @@
     "advertisement": "Reklama",
     "advertisementHtml": "HTML reklame",
     "advertisementEnabled": "Prikažite reklamu na PDF-u",
+    "includeShipment": "Uključite trošak isporuke u izdavanje fiskalnog računa",
     "advertisementHtmlPlaceholder": "<p>Vaš promotivni sadržaj ovde…</p>"
   },
   "users": {
@@ -453,7 +454,7 @@
     "invoiceTypes": {
       "0": "0 – Normalan",
       "1": "1 – Predračun",
-      "3": "3 – Trening",
+      "3": "3 – Obuka",
       "4": "4 – Avans"
     },
     "transactionTypes": {
@@ -544,7 +545,7 @@
       "0": "Normalan",
       "1": "Predračun",
       "2": "Kopija",
-      "3": "Trening",
+      "3": "Obuka",
       "4": "Avans"
     },
     "transactionTypes": {
@@ -698,6 +699,7 @@
     "quantity": "Količina",
     "unitPrice": "Jedinična cena",
     "total": "Ukupno",
+    "totalPaid": "Ukupno plaćeno",
     "taxLabel": "Poreska oznaka",
     "taxOption": "{{label}} - {{rate}}%",
     "taxValue": "Iznos poreza",
@@ -740,6 +742,9 @@
       "quantityPositive": "Količina mora biti veća od nule.",
       "unitPriceRequired": "Jedinična cena je obavezna.",
       "unitPriceInvalid": "Jedinična cena ne može biti negativna.",
+      "totalPaidRequired": "Ukupno plaćeno je obavezno za Avans Prodaja.",
+      "totalPaidInvalid": "Ukupno plaćeno ne može biti negativno.",
+      "totalPaidExceedsTotal": "Ukupno plaćeno ne može biti veće od ukupnog iznosa stavke.",
       "paymentAmountRequired": "Iznos plaćanja je obavezan.",
       "paymentAmountPositive": "Iznos plaćanja mora biti veći od nule.",
       "referentDocumentRequired": "Broj referentnog dokumenta je obavezan za ovaj tip računa.",
@@ -749,7 +754,7 @@
       "0": "0 – Normalan",
       "1": "1 – Predračun",
       "2": "2 – Kopija",
-      "3": "3 – Trening",
+      "3": "3 – Obuka",
       "4": "4 – Avans"
     },
     "transactionTypes": {
@@ -818,6 +823,7 @@
     "skuOrEanRequired": "Potreban je najmanje SKU ili EAN.",
     "invalidPrice": "Unesite ispravnu cenu.",
     "skuOrEanHint": "Za proveru cene u prodavnici potreban je najmanje SKU ili EAN.",
+    "isShipment": "Usluga isporuke",
     "created": "Proizvod je kreiran.",
     "updated": "Proizvod je ažuriran.",
     "deleted": "Proizvod je obrisan.",
@@ -960,7 +966,8 @@
       "pfrInvoiceNumber": "PFR broj računa",
       "invoiceCounter": "Brojač računa",
       "lastAdvanceBill": "Poslednji avansni račun",
-      "remainingToPay": "Preostalo za plaćanje"
+      "remainingToPay": "Preostalo za plaćanje",
+      "customerSignature": "Potpis kupca"
     },
     "cyrillic": {
       "fiscalBill": "ФИСКАЛНИ РАЧУН",
@@ -1016,7 +1023,8 @@
       "pfrInvoiceNumber": "ПФР број рачуна",
       "invoiceCounter": "Бројач рачуна",
       "lastAdvanceBill": "Последњи авансни рачун",
-      "remainingToPay": "Преостало за плаћање"
+      "remainingToPay": "Преостало за плаћање",
+      "customerSignature": "Потпис купца"
     }
   }
 }

@@ -78,18 +78,36 @@ Name of advance item is read from tax table configuration, not hardcoded:
 - mapping key is tax label used on the grouped advance line
 - each label used for advance invoice must have one active tax row with both fields populated
 - if any order line is missing product_tax_percent or product_tax_name, request must fail with validation error
-- Persisted `fiscalbillline` rows for Advance invoices store these summarized advance lines (not original product names)
-- PDF A4/roll80 for Advance invoices render the same advance name format (grouped by tax label)
+- Persisted `fiscalbillline` rows for **Advance Sale** store the original product lines (name, quantity, unit price, tax label, **total_amount**, and **total_paid**). The Tax Authority CREATE_INVOICE request still sends tax-grouped advance names; amounts on those grouped lines are the sum of **total_paid** (not total_amount). The PDF main items section (A4 and roll80) renders those advance names grouped by tax label with amounts = sum of **total_paid**. The PDF advertisement area lists the original product name + **total_amount** in two columns.
+- From-order Advance Sale: when `totalPaid` is omitted on an item, the server sets `total_paid = total_amount`.
+- Manual Advance Sale: user may set Total Paid ≤ Total Amount; bill total and payments use sum of Total Paid.
+- Chained Advance Sale with a referent document: walk `referent_fiscalbill_id` until none; every bill must be Advance Sale with matching products; for each product, sum of `total_paid` on the chain + new Total Paid must be ≤ line Total Amount.
+- Close Advance (Normal Sale + referent): referent must be Advance Refund (else Serbian error `Referentni broj zatvaranja avansa nije Avans Refundacija, molimo vas proverite`); each Advance Sale in the chain must have the same products and matching `total_amount` as the Normal Sale lines.
+- Persisted `fiscalbillline` rows for **Advance Refund** remain the summarized advance lines (same as sent to the Tax Authority)
+- PDF A4/roll80 for Advance invoices render the advance name format in the items section (grouped by tax label; Advance Sale amounts = sum of total_paid)
+
+Shipping line (from-order only, all invoice types):
+- Applies when `org.include_shipment = TRUE` (Edit Organization → Main tab, "Uključite trošak isporuke u izdavanje fiskalnog računa", default on) and the order JSON has `shipping_amount > 0`.
+- The shipping cost is appended as one extra line **before** tax-label resolution, GTIN enrichment, and Advance `total_paid` defaults, so it follows the same rules as product lines (including Advance grouping).
+- Line data: name / EAN (GTIN) / SKU / productId from the org's single product with `product.is_shipment = TRUE` ("Usluga isporuke"); quantity `1`; unit price = total = `shipping_amount`; tax rate = order `shipping_tax_percent`; tax category name borrowed from the first order line that has one.
+- If no such product exists, fiscalization fails with `400` `Nije pronadjen proizvod definisan za isporuku` (nothing is persisted or sent).
+- The Orders UI only forwards shipping when the order has product lines; the no-lines fallback line already bills the full order total.
+- Manual fiscal bills are unaffected (the user adds the shipping product as a normal line).
 
 ### 4.1.4 Reference to already issued fiscal bills
 In fiscalbill api request body, 2 fields for reference document must be set, if any of these conditions is met:
 
 **Reference Logic by Invoice/Transaction Type:**
 - **Advance Sale (invoiceType=4, transactionType=0)**: Can reference to last existing Advance Sale for the same order (for chained advances; e.g., SO total=1000, first Advance=500, second Advance=500).
-- **Advance Refund (invoiceType=4, transactionType=1)**: Must reference to the last issued Advance Sale document for the advance closing chain.
-- **Normal Sale (invoiceType=0, transactionType=0)**: Must reference to the last issued Advance Refund document (if one exists for the order).
-- **Normal Refund (invoiceType=0, transactionType=1)**: Must reference to the Normal Sale document.
-- **Copy Sale (invoiceType=2, transactionType=0)**: References to Normal Sale or Advance Sale (depending which copy is for).
+- **Advance Refund (invoiceType=4, transactionType=1)**: Must reference an Advance Sale document.
+- **Normal Sale (invoiceType=0, transactionType=0)**: Close Advance — must reference an Advance Refund document (if one exists for the order / when Zatvaranje avansa is used).
+- **Normal Refund (invoiceType=0, transactionType=1)**: Must reference a Normal Sale document.
+- **Training Refund (invoiceType=3, transactionType=1)**: Must reference a Training Sale document.
+- **Proforma Refund (invoiceType=1, transactionType=1)**: Must reference a Proforma Sale document.
+- **Copy Sale (invoiceType=2, transactionType=0)**: Must reference a Normal Sale or Advance Sale.
+- **Copy Refund (invoiceType=2, transactionType=1)**: Must reference a Normal Refund or Advance Refund.
+
+When a referent document number is supplied on manual create and **Close Advance is not** in effect (i.e. not Normal Sale with referent), the backend validates the referenced bill’s `invoiceType`/`transactionType` against the pairing rules above and returns `400` with a Serbian reason if mismatched. Close Advance (Normal Sale + referent) keeps the Advance Refund + product-chain checks.
 
 Reference fields in api request body:
 1. referentDocumentNumber - field eFiscal_sdc_invoiceno from ficalbill table
@@ -161,6 +179,7 @@ Users will use page to create manually fiscal bill and send it to Tax Authority 
 
 ### 4.2.2 Items list (implemented)
 - User adds one or more line item cards on the Create Fiscal Bill page (split layout: items left, payments/summary right).
+- For Advance Sale only, each line shows **Total Paid** (prefilled from Total Amount; any qty/unit-price change resets Total Paid to the new Total Amount). User may lower Total Paid; `0 <= totalPaid <= totalAmount`. Sidebar bill total uses sum of Total Paid.
 - **Product Name** field provides inline autocomplete against the local `product` catalog (`GET /api/v1/products/search?q=…`), minimum 2 characters, organization required.
 - Search matches product name (substring), or exact SKU/EAN.
 - Selecting a suggestion fills name, SKU/EAN, and internal product id; system then calls `GET /api/v1/products/lookup` for live MerchantPro `price_gross` (SKU first, EAN fallback).
@@ -214,10 +233,14 @@ Payment Type enumeration value: 0 - Other, 1 - Cash, 2 - Card, 3 - Check, 4 - Wi
 4. Template must include the following content groups:
   - Header/meta section (issuer data, invoice metadata, order/customer context)
   - PDF **ESIR broj** is `app.esir-number`/`app.software-version` from `application.yml` (not `fiscalbill.efiscal_requestedby`)
-  - Start title line: `pdf.fiscalBill` for invoice types 0 and 4; `pdf.notFiscalBill` (`Ovo nije fiskalni račun` / `Ово није фискални рачун`) for invoice types 1, 2, 3, with fewer `=` so the longer text stays on one line.
+  - Start title line: `pdf.fiscalBill` for invoice types 0 and 4; `pdf.notFiscalBill` (`OVO NIJE FISKALNI RAČUN` / Cyrillic equivalent) for invoice types 1, 2, 3, with fewer `=` so the longer text stays on one line.
+  - End title line: `pdf.fiscalBillEnd` for invoice types 0 and 4; `pdf.notFiscalBill` (same text as start) for invoice types 1, 2, 3 — not `KRAJ FISKALNOG RAČUNA`.
+  - For invoice types 1, 2, 3 only: mid-receipt banner after the line-items table (below the items Ukupno / totals row) with `pdf.notFiscalBill` at **2×** body font size, framed by full-width `=` rules above and below. Empty for Normal and Advance.
+  - For **Copy Refund** (`invoiceType=2`, `transactionType=1`) only: below the QR code show `pdf.customerSignature` (`Potpis kupca:`) followed by a signature underline.
   - When `customer_costcenterid` is set: show optional customer field below customer ID (`Opciono polje kupca` / `Опционо поље купца`)
   - When `referent_fiscalbill_id` is set: show referent invoice number and datetime below cashier (`Ref. broj` / `Ref. vreme`, Serbian Latin)
-  - Line items area sourced from `fiscalbillline` (for Advance invoice type: display name is `advancePrefix advanceName (taxMark)` from tax settings, grouped by tax label). When `transactionType = 1` (Refund), prefix each line Total with `-` (not the A4 line-items Ukupno row).
+  - Line items area sourced from `fiscalbillline` (for Advance invoice type: display name is `advancePrefix advanceName (taxMark)` from tax settings, grouped by tax label; for **Advance Sale**, grouped amounts are sum of **total_paid**, not total_amount). When `transactionType = 1` (Refund), prefix each line Total with `-` (not the A4 line-items Ukupno row).
+  - For Advance Sale (`invoiceType=4`, `transactionType=0`): advertisement area includes a two-column list of the original product lines (name + **total_amount**) from `fiscalbillline`, before any org advertisement HTML.
   - When Normal Sale references an Advance Refund: below line-items Ukupno show `pdf.paidInAdvance` (refund total) and `pdf.vatOnAdvance` (refund tax). Advertisement block starts with `pdf.lastAdvanceBill` + last Advance Sale PFR number and PFR date (`dd.MM.yyyy`). PDF labels come from `pdf.latin` (A4) and `pdf.cyrillic` (roll80) in `frontend/src/locales/sr.json` (runtime copy: `backend/src/main/resources/locales/sr.json`). Colon is appended in rendering.
   - Tax items area sourced from `fiscalbilltax`
   - Payments area sourced from `fiscalbillpay`
@@ -238,12 +261,15 @@ Payment Type enumeration value: 0 - Other, 1 - Cash, 2 - Card, 3 - Check, 4 - Wi
 4. Roll page height is dynamic (one continuous 80mm page): it grows to fit all line items and ends after the advertisement block, with no leftover empty space below it.
 5. Roll layout follows thermal-receipt style (no outer border; dashed section separators):
   - Start title line: `pdf.fiscalBill` for invoice types 0 and 4; `pdf.notFiscalBill` for invoice types 1, 2, 3 (fewer `=` so the longer Cyrillic text stays on one line)
+  - End title line: `pdf.fiscalBillEnd` for 0 and 4; `pdf.notFiscalBill` for 1, 2, 3
+  - For invoice types 1, 2, 3 only: mid-receipt banner **below the payment area** (before tax table) with `pdf.notFiscalBill` at **2×** body font size, framed by full-width `=` rules
+  - For **Copy Refund** only: below the QR code show `pdf.customerSignature` (`Потпис купца:` / `Potpis kupca:`) followed by a signature underline
   - Centered header (TIN, business name/location/address/district)
   - Cashier + ESIR number (`app.esir-number`/`app.software-version` from `application.yml`)
   - When `customer_id` / `customer_costcenterid` are set: customer ID and optional customer field rows
   - When `referent_fiscalbill_id` is set: referent invoice number + datetime (Реф. број / Реф. време)
   - Invoice/transaction band
-  - Line items, payments (incl. change), tax breakdown (Advance: line names use `advancePrefix advanceName (taxMark)`; Refund: line Total is prefixed with `-`). When Normal Sale references an Advance Refund: after line items show `Плаћено авансом` / `ПДВ на аванс`; advertisement starts with `Last advance bill` + last Advance Sale PFR number and date (`dd.MM.yyyy`).
+  - Line items, payments (incl. change), tax breakdown (Advance: line names use `advancePrefix advanceName (taxMark)`; Advance Sale grouped amounts use sum of **total_paid**; Refund: line Total is prefixed with `-`). When Normal Sale references an Advance Refund: after line items show `Плаћено авансом` / `ПДВ на аванс`; advertisement starts with `Last advance bill` + last Advance Sale PFR number and date (`dd.MM.yyyy`).
   - PFR time / invoice number / counter
   - Centered verification **QR image** (from `efiscal_qr` or generated from `efiscal_link`; not a raw URL text)
   - End-of-receipt line + MRC

@@ -37,6 +37,7 @@ function emptyItem() {
     quantity: '',
     unitPrice: '',
     totalAmount: '0.00',
+    totalPaid: '0.00',
     taxLabel: 'A',
     taxPrefix: '20',
     gtin: '',
@@ -49,6 +50,7 @@ function emptyItem() {
     suggestLoading: false,
     showSuggestions: false,
     suggestError: null,
+    suggestHighlightIndex: -1,
   }
 }
 
@@ -96,9 +98,7 @@ export default function CreateFiscalBill() {
   const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   const suggestDebounceRef = useRef({})
-  const headerSectionRef = useRef(null)
-  const itemsSectionRef = useRef(null)
-  const sidebarSectionRef = useRef(null)
+  const feedbackRef = useRef(null)
 
   const prevOrgIdRef = useRef(activeOrgId)
 
@@ -139,6 +139,9 @@ export default function CreateFiscalBill() {
   const selectedClientId = activeOrg?.clientId != null ? String(activeOrg.clientId) : ''
 
   function itemsTotal() {
+    if (isAdvanceSale(invoiceType, transactionType)) {
+      return items.reduce((sum, i) => sum + (parseFloat(i.totalPaid) || 0), 0).toFixed(2)
+    }
     return items.reduce((sum, i) => sum + (parseFloat(i.totalAmount) || 0), 0).toFixed(2)
   }
 
@@ -165,6 +168,13 @@ export default function CreateFiscalBill() {
         const next = { ...item, [field]: nextValue }
         if (field === 'quantity' || field === 'unitPrice') {
           next.totalAmount = calcTotalAmount(next.quantity, next.unitPrice, next.totalAmount)
+          // Always reset Total Paid to Total Amount when qty/price changes (rule B).
+          next.totalPaid = next.totalAmount
+        }
+        // Manual price entry dismisses the shop-verify hint ("enter manually").
+        if (field === 'unitPrice') {
+          next.priceStatus = ''
+          next.priceVerifying = false
         }
         return next
       }
@@ -178,6 +188,7 @@ export default function CreateFiscalBill() {
         const next = { ...item, ...patch }
         if ('quantity' in patch || 'unitPrice' in patch) {
           next.totalAmount = calcTotalAmount(next.quantity, next.unitPrice, next.totalAmount)
+          next.totalPaid = next.totalAmount
         }
         return next
       }
@@ -245,6 +256,13 @@ export default function CreateFiscalBill() {
       name: value,
       showSuggestions: true,
       suggestError: null,
+      suggestHighlightIndex: -1,
+      // Typing a new name leaves any prior shop verify result behind.
+      priceStatus: '',
+      priceVerifying: false,
+      productId: '',
+      sku: '',
+      ean: '',
     })
 
     if (suggestDebounceRef.current[itemId]) {
@@ -253,7 +271,7 @@ export default function CreateFiscalBill() {
 
     const q = value.trim()
     if (!activeOrgId || q.length < 2) {
-      patchItem(itemId, { suggestions: [], suggestLoading: false })
+      patchItem(itemId, { suggestions: [], suggestLoading: false, suggestHighlightIndex: -1 })
       return
     }
 
@@ -269,6 +287,7 @@ export default function CreateFiscalBill() {
             suggestLoading: false,
             showSuggestions: true,
             suggestError: null,
+            suggestHighlightIndex: -1,
           }
         }))
       } catch (err) {
@@ -280,6 +299,7 @@ export default function CreateFiscalBill() {
             suggestions: [],
             suggestLoading: false,
             suggestError: typeof msg === 'string' ? msg : JSON.stringify(msg),
+            suggestHighlightIndex: -1,
           }
         }))
       }
@@ -287,15 +307,66 @@ export default function CreateFiscalBill() {
   }
 
   function hideSuggestions(itemId) {
-    patchItem(itemId, { showSuggestions: false })
+    patchItem(itemId, { showSuggestions: false, suggestHighlightIndex: -1 })
+  }
+
+  function scrollSuggestOptionIntoView(itemId, index) {
+    if (index < 0) return
+    requestAnimationFrame(() => {
+      document.getElementById(`product-suggest-${itemId}-${index}`)?.scrollIntoView({ block: 'nearest' })
+    })
+  }
+
+  function handleNameKeyDown(item, e) {
+    const listOpen = item.showSuggestions && activeOrgId && item.name.trim().length >= 2
+      && !item.suggestLoading && !item.suggestError && item.suggestions.length > 0
+    if (!listOpen && e.key !== 'Escape') return
+
+    const count = item.suggestions.length
+    const current = typeof item.suggestHighlightIndex === 'number' ? item.suggestHighlightIndex : -1
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (!listOpen) return
+      const next = current < 0 ? 0 : (current + 1) % count
+      patchItem(item.id, { suggestHighlightIndex: next })
+      scrollSuggestOptionIntoView(item.id, next)
+      return
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (!listOpen) return
+      const next = current < 0 ? count - 1 : (current - 1 + count) % count
+      patchItem(item.id, { suggestHighlightIndex: next })
+      scrollSuggestOptionIntoView(item.id, next)
+      return
+    }
+
+    if (e.key === 'Enter') {
+      if (!listOpen || current < 0 || current >= count) return
+      e.preventDefault()
+      selectProduct(item.id, item.suggestions[current])
+      return
+    }
+
+    if (e.key === 'Escape') {
+      if (item.showSuggestions) {
+        e.preventDefault()
+        hideSuggestions(item.id)
+      }
+    }
   }
 
   async function selectProduct(itemId, product) {
+    const selectedProductId = product.productId ? String(product.productId) : ''
+    const selectedSku = product.sku || ''
+    const selectedEan = product.ean || ''
     patchItem(itemId, {
       name: product.name || '',
-      productId: product.productId ? String(product.productId) : '',
-      sku: product.sku || '',
-      ean: product.ean || '',
+      productId: selectedProductId,
+      sku: selectedSku,
+      ean: selectedEan,
       gtin: product.ean || '',
       priceStatus: '',
       priceVerifying: true,
@@ -303,6 +374,7 @@ export default function CreateFiscalBill() {
       showSuggestions: false,
       suggestLoading: false,
       suggestError: null,
+      suggestHighlightIndex: -1,
       quantity: '1', // Default quantity when selecting product
     })
 
@@ -312,22 +384,40 @@ export default function CreateFiscalBill() {
         ean: product.ean || undefined,
       })
       const price = live.priceGross != null ? String(live.priceGross) : ''
-      patchItem(itemId, {
-        name: live.name || product.name || '',
-        unitPrice: price,
-        priceVerifying: false,
-        priceStatus: 'verified',
-      })
+      // Ignore stale lookups if the user already edited the row or picked another product.
+      setItems((prev) => prev.map((item) => {
+        if (item.id !== itemId || !item.priceVerifying) return item
+        if (item.productId !== selectedProductId || item.sku !== selectedSku || item.ean !== selectedEan) {
+          return item
+        }
+        return {
+          ...item,
+          name: live.name || product.name || item.name,
+          unitPrice: price,
+          totalAmount: calcTotalAmount(item.quantity, price, item.totalAmount),
+          totalPaid: calcTotalAmount(item.quantity, price, item.totalAmount),
+          priceVerifying: false,
+          priceStatus: 'verified',
+        }
+      }))
     } catch {
-      patchItem(itemId, {
-        priceVerifying: false,
-        priceStatus: 'unverified',
-      })
+      setItems((prev) => prev.map((item) => {
+        if (item.id !== itemId || !item.priceVerifying) return item
+        if (item.productId !== selectedProductId || item.sku !== selectedSku || item.ean !== selectedEan) {
+          return item
+        }
+        return {
+          ...item,
+          priceVerifying: false,
+          priceStatus: 'unverified',
+        }
+      }))
     }
   }
 
   const showCloseAdvanceCheckbox = Number(invoiceType) === 0 && Number(transactionType) === 0
   const showAdvancePaymentDate = isAdvanceSale(invoiceType, transactionType)
+  const showTotalPaid = showAdvancePaymentDate
   const advancePaymentBounds = advancePaymentDateTimeBounds()
   const showReferenceField =
     Number(invoiceType) === 2 ||
@@ -365,31 +455,16 @@ export default function CreateFiscalBill() {
     setPaymentErrors({})
   }
 
-  function scrollToFirstError(nextFieldErrors, nextItemErrors, nextPaymentErrors) {
-    const target = (() => {
-      if (
-        nextFieldErrors.orgId ||
-        nextFieldErrors.clientId ||
-        nextFieldErrors.buyerType ||
-        nextFieldErrors.buyerIdValue ||
-        nextFieldErrors.buyerCostCenterType ||
-        nextFieldErrors.buyerCostCenterValue ||
-        nextFieldErrors.referentDocumentNumber ||
-        nextFieldErrors.advancePaymentDate
-      ) {
-        return headerSectionRef.current
+  function scrollToFeedback() {
+    // Defer until React has painted the error/result banner above the form.
+    requestAnimationFrame(() => {
+      const target = feedbackRef.current
+      if (target?.scrollIntoView) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
       }
-      if (Object.keys(nextItemErrors).length > 0) {
-        return itemsSectionRef.current
-      }
-      if (Object.keys(nextPaymentErrors).length > 0 || nextFieldErrors.paymentTotal) {
-        return sidebarSectionRef.current
-      }
-      return null
-    })()
-    if (target?.scrollIntoView) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    })
   }
 
   function validateForm() {
@@ -471,6 +546,17 @@ export default function CreateFiscalBill() {
       } else if (p < 0) {
         errs.unitPrice = t('createFiscalBill.validation.unitPriceInvalid')
       }
+      if (showTotalPaid) {
+        const paid = parseFloat(item.totalPaid)
+        const lineTotal = parseFloat(item.totalAmount)
+        if (item.totalPaid === '' || isNaN(paid)) {
+          errs.totalPaid = t('createFiscalBill.validation.totalPaidRequired')
+        } else if (paid < 0) {
+          errs.totalPaid = t('createFiscalBill.validation.totalPaidInvalid')
+        } else if (!isNaN(lineTotal) && paid - lineTotal > 0.001) {
+          errs.totalPaid = t('createFiscalBill.validation.totalPaidExceedsTotal')
+        }
+      }
       if (Object.keys(errs).length > 0) {
         nextItemErrors[item.id] = errs
         if (!globalError) {
@@ -515,7 +601,8 @@ export default function CreateFiscalBill() {
       setItemErrors(validation.nextItemErrors)
       setPaymentErrors(validation.nextPaymentErrors)
       setError(validation.globalError)
-      scrollToFirstError(validation.nextFieldErrors, validation.nextItemErrors, validation.nextPaymentErrors)
+      // Prefer the top banner so long item lists do not leave the user stuck at the submit button.
+      scrollToFeedback()
       return
     }
 
@@ -524,6 +611,7 @@ export default function CreateFiscalBill() {
       quantity: parseFloat(i.quantity),
       unitPrice: parseFloat(i.unitPrice),
       totalAmount: parseFloat(i.totalAmount),
+      ...(showTotalPaid ? { totalPaid: parseFloat(i.totalPaid) } : {}),
       taxLabel: i.taxLabel,
       labels: [i.taxLabel],
       taxPrefix: i.taxPrefix,
@@ -577,6 +665,7 @@ export default function CreateFiscalBill() {
         Number(activeOrgId), Number(selectedClientId)
       )
       setResult(data)
+      scrollToFeedback()
     } catch (err) {
       const data = err?.response?.data
       if (err?.response?.status === 502 && data?.status) {
@@ -586,6 +675,7 @@ export default function CreateFiscalBill() {
         const msg = data?.message || data?.lastError || data || err?.message || t('createFiscalBill.requestFailed')
         setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
       }
+      scrollToFeedback()
     } finally {
       setSubmitting(false)
     }
@@ -647,6 +737,7 @@ export default function CreateFiscalBill() {
   return (
     <AppShell title={t('createFiscalBill.title')} subtitle={t('createFiscalBill.subtitle')}>
       
+      <div ref={feedbackRef}>
       {error && (
         <div className="fiscal-result-card fiscal-result-card--failed" style={{ marginBottom: '1rem' }}>
           <strong>{t('createFiscalBill.errorLabel')}:</strong> {error}
@@ -692,11 +783,12 @@ export default function CreateFiscalBill() {
           )}
         </div>
       )}
+      </div>
 
       <div className="fiscal-layout-split">
         <div className="fiscal-main-column">
           {/* HEADER SECTION */}
-          <section className="fiscal-section-card" ref={headerSectionRef}>
+          <section className="fiscal-section-card">
             <h3 className="fiscal-section-title">{t('createFiscalBill.header')}</h3>
             <div className="fiscal-header-grid">
               {!activeOrgId && (
@@ -928,7 +1020,7 @@ export default function CreateFiscalBill() {
           </section>
 
           {/* ITEMS SECTION */}
-          <section className="fiscal-section-card" ref={itemsSectionRef}>
+          <section className="fiscal-section-card">
             <h3 className="fiscal-section-title">{t('createFiscalBill.itemsSection')}</h3>
             <div className="fiscal-row-list">
               {items.map((item, idx) => (
@@ -953,6 +1045,7 @@ export default function CreateFiscalBill() {
                             className={`fiscal-input fiscal-input--text${itemErrors[item.id]?.name ? ' fiscal-input--invalid' : ''}`}
                             value={item.name}
                             onChange={e => handleNameChange(item.id, e.target.value)}
+                            onKeyDown={e => handleNameKeyDown(item, e)}
                             onFocus={() => {
                               if (item.name.trim().length >= 2) {
                                 patchItem(item.id, { showSuggestions: true })
@@ -964,12 +1057,23 @@ export default function CreateFiscalBill() {
                             placeholder={t('createFiscalBill.searchPlaceholder')}
                             disabled={!activeOrgId}
                             autoComplete="off"
+                            role="combobox"
                             aria-autocomplete="list"
                             aria-expanded={item.showSuggestions && item.suggestions.length > 0}
+                            aria-controls={`product-suggest-list-${item.id}`}
+                            aria-activedescendant={
+                              item.suggestHighlightIndex >= 0
+                                ? `product-suggest-${item.id}-${item.suggestHighlightIndex}`
+                                : undefined
+                            }
                             aria-invalid={itemErrors[item.id]?.name ? 'true' : undefined}
                           />
                           {item.showSuggestions && activeOrgId && item.name.trim().length >= 2 && (
-                            <ul className="product-suggest-list" role="listbox">
+                            <ul
+                              id={`product-suggest-list-${item.id}`}
+                              className="product-suggest-list"
+                              role="listbox"
+                            >
                               {item.suggestLoading && (
                                 <li className="product-suggest-item product-suggest-item--muted">{t('common.loadingDots')}</li>
                               )}
@@ -979,12 +1083,18 @@ export default function CreateFiscalBill() {
                               {!item.suggestLoading && !item.suggestError && item.suggestions.length === 0 && (
                                 <li className="product-suggest-item product-suggest-item--muted">{t('createFiscalBill.searchNoResults')}</li>
                               )}
-                              {!item.suggestLoading && item.suggestions.map((p) => (
-                                <li key={p.productId} role="option">
+                              {!item.suggestLoading && item.suggestions.map((p, idx) => (
+                                <li
+                                  key={p.productId}
+                                  id={`product-suggest-${item.id}-${idx}`}
+                                  role="option"
+                                  aria-selected={item.suggestHighlightIndex === idx}
+                                >
                                   <button
                                     type="button"
-                                    className="product-suggest-option"
+                                    className={`product-suggest-option${item.suggestHighlightIndex === idx ? ' product-suggest-option--active' : ''}`}
                                     onMouseDown={(e) => e.preventDefault()}
+                                    onMouseEnter={() => patchItem(item.id, { suggestHighlightIndex: idx })}
                                     onClick={() => selectProduct(item.id, p)}
                                   >
                                     <span className="product-suggest-name">{p.name}</span>
@@ -1021,8 +1131,8 @@ export default function CreateFiscalBill() {
                       </div>
                     </div>
 
-                    <div className="fiscal-item-row fiscal-item-row--amounts">
-                      <div className="fiscal-field">
+                    <div className={`fiscal-item-row fiscal-item-row--amounts${showTotalPaid ? ' fiscal-item-row--amounts-with-total-paid' : ''}`}>
+                      <div className="fiscal-field fiscal-field--unit-price">
                         <label className="fiscal-field-label">{t('createFiscalBill.unitPrice')}</label>
                         <input
                           className={`fiscal-input fiscal-input--number${itemErrors[item.id]?.unitPrice ? ' fiscal-input--invalid' : ''}`}
@@ -1077,7 +1187,7 @@ export default function CreateFiscalBill() {
                           aria-readonly="true"
                         />
                       </div>
-                      <div className="fiscal-field">
+                      <div className="fiscal-field fiscal-field--line-total">
                         <label className="fiscal-field-label">{t('createFiscalBill.total')}</label>
                         <input
                           className="fiscal-input fiscal-input--number fiscal-input--readonly"
@@ -1088,6 +1198,24 @@ export default function CreateFiscalBill() {
                           aria-readonly="true"
                         />
                       </div>
+                      {showTotalPaid && (
+                        <div className="fiscal-field fiscal-field--total-paid">
+                          <label className="fiscal-field-label">{t('createFiscalBill.totalPaid')}</label>
+                          <input
+                            className={`fiscal-input fiscal-input--number${itemErrors[item.id]?.totalPaid ? ' fiscal-input--invalid' : ''}`}
+                            type="number"
+                            value={item.totalPaid}
+                            onChange={e => setItemField(item.id, 'totalPaid', e.target.value)}
+                            placeholder="0.00"
+                            min="0"
+                            step="0.01"
+                            aria-invalid={itemErrors[item.id]?.totalPaid ? 'true' : undefined}
+                          />
+                          {itemErrors[item.id]?.totalPaid && (
+                            <span className="error-text fiscal-error">{itemErrors[item.id].totalPaid}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1100,7 +1228,7 @@ export default function CreateFiscalBill() {
           </section>
         </div>
 
-        <div className="fiscal-sidebar" ref={sidebarSectionRef}>
+        <div className="fiscal-sidebar">
           {/* SUMMARY AND PAYMENTS SECTION */}
           <section className="fiscal-section-card">
             <h3 className="fiscal-section-title">{t('createFiscalBill.paymentsSection')}</h3>

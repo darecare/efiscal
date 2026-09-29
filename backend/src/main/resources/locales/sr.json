@@ -55,7 +55,8 @@
       "pfrInvoiceNumber": "PFR broj računa",
       "invoiceCounter": "Brojač računa",
       "lastAdvanceBill": "Poslednji avansni račun",
-      "remainingToPay": "Preostalo za plaćanje"
+      "remainingToPay": "Preostalo za plaćanje",
+      "customerSignature": "Potpis kupca"
     },
     "cyrillic": {
       "fiscalBill": "ФИСКАЛНИ РАЧУН",
@@ -112,7 +113,8 @@
       "pfrInvoiceNumber": "ПФР број рачуна",
       "invoiceCounter": "Бројач рачуна",
       "lastAdvanceBill": "Последњи авансни рачун",
-      "remainingToPay": "Преостало за плаћање"
+      "remainingToPay": "Преостало за плаћање",
+      "customerSignature": "Потпис купца"
     }
   }
 }

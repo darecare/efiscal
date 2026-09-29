@@ -730,7 +730,8 @@ input.form-input:focus {
 }
 
 .product-suggest-option:hover,
-.product-suggest-option:focus {
+.product-suggest-option:focus,
+.product-suggest-option--active {
   background: rgba(59, 130, 246, 0.08);
   outline: none;
 }

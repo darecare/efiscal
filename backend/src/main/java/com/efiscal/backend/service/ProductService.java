@@ -154,6 +154,11 @@ public class ProductService {
         entity.setActive(req.isActive() == null || req.isActive());
         entity.setSourceType(SOURCE_TYPE_MANUAL);
         entity.setSyncStatus(SYNC_STATUS_ACTIVE);
+        boolean shipment = Boolean.TRUE.equals(req.isShipment());
+        if (shipment) {
+            requireNoOtherShipmentProduct(orgId, null);
+        }
+        entity.setShipment(shipment);
         return toDto(productRepository.save(entity));
     }
 
@@ -175,7 +180,26 @@ public class ProductService {
         if (req.isActive() != null) {
             entity.setActive(req.isActive());
         }
+        if (req.isShipment() != null) {
+            if (req.isShipment()) {
+                requireNoOtherShipmentProduct(entity.getOrgId(), entity.getProductId());
+            }
+            entity.setShipment(req.isShipment());
+        }
         return toDto(productRepository.save(entity));
+    }
+
+    /** Only one non-deleted product per organization may be the shipping product. */
+    private void requireNoOtherShipmentProduct(Long orgId, Long excludeProductId) {
+        productRepository.findShipmentProductsByOrgId(orgId).stream()
+            .filter(p -> excludeProductId == null || !excludeProductId.equals(p.getProductId()))
+            .findFirst()
+            .ifPresent(other -> {
+                throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Proizvod \"" + other.getName() + "\" je već označen kao usluga isporuke"
+                );
+            });
     }
 
     @Transactional
@@ -529,7 +553,8 @@ public class ProductService {
             entity.isActive(),
             entity.getSourceType(),
             entity.getSyncStatus(),
-            entity.getHiddenAt()
+            entity.getHiddenAt(),
+            entity.isShipment()
         );
     }
 
@@ -581,7 +606,8 @@ public class ProductService {
         boolean isActive,
         String sourceType,
         String syncStatus,
-        OffsetDateTime hiddenAt
+        OffsetDateTime hiddenAt,
+        boolean isShipment
     ) {}
 
     public record ProductPage(
@@ -596,7 +622,8 @@ public class ProductService {
         String sku,
         String ean,
         BigDecimal lastKnownPrice,
-        Boolean isActive
+        Boolean isActive,
+        Boolean isShipment
     ) {}
 
     public record SyncProgress(int synced, int total, boolean done, String syncType, String error) {

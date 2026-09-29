@@ -80,6 +80,7 @@ On Organization level is defined connection to mail server. From this mail addre
 | logo_image     | TEXT         | NULL                     | Optional organization logo (typically Data URL image) |
 | advertisement_html     | TEXT         | NULL                     | HTML content rendered on fiscal bill PDFs when advertisement is enabled |
 | advertisement_enabled  | BOOLEAN      | NOT NULL, DEFAULT FALSE  | Toggle for rendering the advertisement block on PDFs |
+| include_shipment       | BOOLEAN      | NOT NULL, DEFAULT TRUE   | When true, from-order fiscalization appends a shipping line (org's `product.is_shipment` product) if the order has `shipping_amount > 0` (V51) |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | deleted_at     | TIMESTAMPTZ  | NULL                     | Soft delete                   |
@@ -433,6 +434,7 @@ When fiscal bill is created based on sales order, then this table will be store 
 | quantity            | NUMERIC(14,3)| NOT NULL                 |                                          |
 | unit_price          | NUMERIC(14,2)| NOT NULL                 |                                          |
 | total_amount        | NUMERIC(14,2)| NOT NULL                 |                                          |
+| total_paid          | NUMERIC(14,2)| NULL                     | Advance Sale amount paid on this line (may be less than total_amount); null otherwise |
 | tax_label           | VARCHAR(10)  |                          |                                          |
 | is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                                          |
 | created_at          | TIMESTAMPTZ  | NOT NULL                 |                                          |
@@ -477,8 +479,10 @@ Organization-scoped product catalog for fiscal bill line item lookup. Populated 
 | source_type         | VARCHAR(16)  | NOT NULL, DEFAULT `MANUAL` | `MANUAL` or `MERCHANTPRO` |
 | sync_status         | VARCHAR(20)  | NOT NULL, DEFAULT `ACTIVE` | `ACTIVE` or `MISSING_IN_SOURCE` (synced rows only) |
 | hidden_at           | TIMESTAMPTZ  | NULL                     | Local hide/archive for `MERCHANTPRO` products |
+| is_shipment         | BOOLEAN      | NOT NULL, DEFAULT FALSE  | Marks the org's shipping-service product used for the from-order shipping line (V51) |
 
 Rules:
+- At most one non-deleted product per organization may have `is_shipment = TRUE` (partial unique index `uq_product_org_shipment` on `org_id WHERE is_shipment AND deleted_at IS NULL`). Only `MANUAL` products can be marked (shop products are read-only).
 - At least one of `sku` or `ean` is required for manual create and for live shop price lookup.
 - `last_known_price` is not authoritative for fiscal bills; use live lookup at line-item selection.
 - Visible catalog rows: `deleted_at IS NULL AND hidden_at IS NULL`.
@@ -495,6 +499,7 @@ Migrations:
 - `V35__widen_mp_product_id_to_bigint.sql` — `mp_product_id` BIGINT
 - `V36__create_product_sync_job.sql` — sync job tracking table
 - `V37__add_product_source_ownership.sql` — `source_type`, `sync_status`, `hidden_at`; backfill synced rows; visibility indexes
+- `V51__org_include_shipment_and_product_is_shipment.sql` — `org.include_shipment`, `product.is_shipment`, one-shipping-product-per-org partial unique index
 
 ### 2.19 product_sync_job
 Table name: product_sync_job
