@@ -12,6 +12,8 @@ ENV_FILE=".env"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/elef}"
 KEEP="${KEEP:-14}"
 
+source deploy/compose-cmd.sh
+
 env_value() {
   local line
   line="$(grep -E "^$1=" "$ENV_FILE" | tail -n 1 || true)"
@@ -29,7 +31,7 @@ mkdir -p "$BACKUP_DIR"
 target="$BACKUP_DIR/efiscal-$(date +%F-%H%M).sql.gz"
 tmp="$target.partial"
 
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T postgres \
+"${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T postgres \
   pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner | gzip > "$tmp"
 mv "$tmp" "$target"
 chmod 600 "$target"

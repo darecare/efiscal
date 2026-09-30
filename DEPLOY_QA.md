@@ -54,8 +54,21 @@ The server already has Docker and Apache and is shared with other apps:
 | 8080 | a host Java process (not Docker) |
 | 127.0.0.1:8090 / 8091 | eFiscal backend / frontend (`EFISCAL_BACKEND_PORT` / `EFISCAL_FRONTEND_PORT` in `.env`) |
 
+The stack needs Docker Compose **v2**: either the `docker compose` plugin, or a standalone `docker-compose` binary whose version is 2.x. The scripts detect which one is present (`deploy/compose-cmd.sh`). Legacy `docker-compose` 1.x cannot parse `docker-compose.qa.yml`. Installing the v2 plugin does not affect apps already started with v1; their containers keep running and `docker-compose` keeps working. If you only have standalone v2, replace `docker compose` with `docker-compose` in the manual commands below.
+
 ```bash
-docker compose version                  # must be Compose v2
+docker compose version                  # plugin: "Docker Compose version v2.x"
+docker-compose version --short          # standalone: must start with 2 (1.x is not enough)
+# If "docker: 'compose' is not a docker command" / "unknown shorthand flag: 'f'":
+dpkg -l | grep -E 'docker-ce|docker.io'
+sudo apt update && sudo apt install -y docker-compose-plugin   # Docker from download.docker.com (docker-ce)
+# sudo apt install -y docker-compose-v2                        # Ubuntu's docker.io package
+# Neither package available? Install the plugin binary manually:
+# sudo mkdir -p /usr/local/lib/docker/cli-plugins
+# sudo curl -fSL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+#      -o /usr/local/lib/docker/cli-plugins/docker-compose
+# sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
 sudo ss -tlnp | grep -E ':(8090|8091)\b' # must print nothing; if busy, pick other ports in .env AND the Apache vhost
 
 sudo a2enmod proxy proxy_http headers ssl rewrite
