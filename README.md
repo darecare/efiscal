@@ -29,6 +29,9 @@ It connects webshop/order systems (currently MerchantPro) with Serbian Tax Autho
 ├── frontend/                     # React app (Vite)
 ├── backend/                      # Spring Boot API
 ├── docker-compose.yml            # Local full stack (db + backend + frontend)
+├── docker-compose.qa.yml         # QA stack (localhost-bound, behind host Apache)
+├── deploy/                       # QA Apache vhost, deploy and backup scripts
+├── DEPLOY_QA.md                  # QA VPS deployment runbook
 ├── ARCHITECTURE.md               # System and flow overview
 ├── PRODUCT_REQUIREMENTS.md       # Functional/non-functional requirements
 ├── API_CONTRACT.md               # REST contract and error model
@@ -80,6 +83,8 @@ Stop and remove DB volume:
 ```bash
 docker compose down -v
 ```
+
+The root `docker-compose.yml` is for local development only (Vite dev server, default DB credentials, public ports). For the QA server use `docker-compose.qa.yml` behind host Apache - see `DEPLOY_QA.md`.
 
 ## Local Development (Without Docker)
 

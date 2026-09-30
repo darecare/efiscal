@@ -17,8 +17,10 @@ frontend/node_modules/
 # Docker volumes
 .docker/
 
-# Local environment overrides
-.env.local
+# Local environment overrides / server secrets
+.env
+.env.*
+!.env.*.example
 *.env.local
 
 # Maven local cache
