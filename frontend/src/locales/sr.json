@@ -125,7 +125,7 @@
   },
   "auth": {
     "signIn": "Prijava",
-    "signInHint": "Koristite bootstrap superadmin nalog za podešavanje klijenata, korisnika i integracija.",
+    "signInHint": "",
     "login": "Prijava",
     "signingIn": "Prijava u toku…",
     "loginFailedFallback": "Prijava nije uspela"
