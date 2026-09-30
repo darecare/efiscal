@@ -541,6 +541,11 @@ public class FiscalBillPdfService {
         html = replace(html, "{{TOTAL_AMOUNT}}", formatAmount(bill.getEfiscalTotalamount()));
         html = replace(html, "{{TOTAL_TAX}}", formatAmount(totalTax));
         html = replace(html, "{{TITLE_LINE}}", renderTitleLine(bill.getEfiscalInvoicetype(), roll));
+        html = replace(html, "{{END_LINE}}", renderEndLine(bill.getEfiscalInvoicetype(), roll));
+        html = html.replace("{{NOT_FISCAL_MID_BANNER}}",
+                renderNotFiscalMidBanner(bill.getEfiscalInvoicetype(), roll));
+        html = html.replace("{{CUSTOMER_SIGNATURE_BLOCK}}",
+                renderCustomerSignatureBlock(bill, roll));
         html = replace(html, "{{LABEL_FISCAL_BILL_END}}", pdfLabelService.label("fiscalBillEnd", roll));
         html = replace(html, "{{LABEL_TIN}}", pdfLabelService.labelWithColon("tin", roll));
         html = replace(html, "{{LABEL_ESIR_NUMBER}}", pdfLabelService.labelWithColon("esirNumber", roll));
@@ -584,7 +589,7 @@ public class FiscalBillPdfService {
         html = html.replace("{{REMAINING_TO_PAY_ROW}}",
                 renderRemainingToPayRow(pdfLines, payments, advanceClose, roll));
 
-        html = html.replace("{{ADVERTISEMENT_BLOCK}}", renderAdvertisementBlock(org, advanceClose, roll));
+        html = html.replace("{{ADVERTISEMENT_BLOCK}}", renderAdvertisementBlock(org, bill, lines, advanceClose, roll));
 
         return html;
     }
@@ -699,6 +704,25 @@ public class FiscalBillPdfService {
                 && bill.getEfiscalTransactiontype() != null && bill.getEfiscalTransactiontype() == 0;
     }
 
+    private boolean isCopyRefund(FiscalBillEntity bill) {
+        return bill.getEfiscalInvoicetype() != null && bill.getEfiscalInvoicetype() == 2
+                && bill.getEfiscalTransactiontype() != null && bill.getEfiscalTransactiontype() == 1;
+    }
+
+    /**
+     * Copy Refund only: signature line below the QR code ("Potpis kupca: ________").
+     */
+    private String renderCustomerSignatureBlock(FiscalBillEntity bill, boolean roll) {
+        if (bill == null || !isCopyRefund(bill)) {
+            return "";
+        }
+        String label = escapeHtml(pdfLabelService.labelWithColon("customerSignature", roll));
+        return "<div class=\"signature-line\">"
+                + "<span class=\"signature-label\">" + label + "</span>"
+                + "<span class=\"signature-blank\">_________________</span>"
+                + "</div>";
+    }
+
     private record AdvanceClosePdfContext(
             BigDecimal refundTotal,
             BigDecimal refundTax,
@@ -769,12 +793,22 @@ public class FiscalBillPdfService {
         }
 
         Map<String, BigDecimal> totalsByLabel = new LinkedHashMap<>();
+        boolean advanceSale = isAdvanceSale(bill);
         for (FiscalBillLineEntity line : lines) {
             String label = safe(line.getTaxLabel()).trim();
             if (label.isEmpty()) {
                 label = "?";
             }
-            BigDecimal amount = line.getTotalAmount() != null ? line.getTotalAmount() : BigDecimal.ZERO;
+            // Advance Sale grouped rows must match Tax Authority amounts (sum of total_paid).
+            // Advance Refund lines are already summarized; keep total_amount.
+            BigDecimal amount;
+            if (advanceSale) {
+                amount = line.getTotalPaid() != null
+                        ? line.getTotalPaid()
+                        : (line.getTotalAmount() != null ? line.getTotalAmount() : BigDecimal.ZERO);
+            } else {
+                amount = line.getTotalAmount() != null ? line.getTotalAmount() : BigDecimal.ZERO;
+            }
             totalsByLabel.merge(label, amount, BigDecimal::add);
         }
 
@@ -964,7 +998,12 @@ public class FiscalBillPdfService {
                 + "</tr>";
     }
 
-    private String renderAdvertisementBlock(OrgEntity org, AdvanceClosePdfContext advanceClose, boolean roll) {
+    private String renderAdvertisementBlock(
+            OrgEntity org,
+            FiscalBillEntity bill,
+            List<FiscalBillLineEntity> lines,
+            AdvanceClosePdfContext advanceClose,
+            boolean roll) {
         StringBuilder sb = new StringBuilder();
         if (advanceClose != null && advanceClose.hasLastAdvanceBill()) {
             String number = safe(advanceClose.lastAdvanceInvoiceNo()).trim();
@@ -977,6 +1016,9 @@ public class FiscalBillPdfService {
                     .append("<span class=\"ad-value\">").append(escapeHtml(value)).append("</span>")
                     .append("</div>");
         }
+        if (isAdvanceSale(bill)) {
+            sb.append(renderAdvanceSaleProductList(lines, roll));
+        }
         if (org != null && org.isAdvertisementEnabled()
                 && org.getAdvertisementHtml() != null && !org.getAdvertisementHtml().isBlank()) {
             sb.append(org.getAdvertisementHtml());
@@ -985,6 +1027,35 @@ public class FiscalBillPdfService {
             return "";
         }
         return "<div class=\"advertisement\">" + sb + "</div>";
+    }
+
+    /**
+     * Advance Sale only: two-column list of the original product lines (name + line total)
+     * in the advertisement area. Empty when there are no lines.
+     */
+    private String renderAdvanceSaleProductList(List<FiscalBillLineEntity> lines, boolean roll) {
+        if (lines == null || lines.isEmpty()) {
+            return "";
+        }
+        StringBuilder rows = new StringBuilder();
+        for (FiscalBillLineEntity line : lines) {
+            String name = safe(line.getName()).trim();
+            if (name.isEmpty()) {
+                continue;
+            }
+            rows.append("<tr>")
+                    .append("<td class=\"ad-item-name\">").append(escapeHtml(name)).append("</td>")
+                    .append("<td class=\"ad-item-price\">")
+                    .append(escapeHtml(formatAmount(line.getTotalAmount())))
+                    .append("</td>")
+                    .append("</tr>");
+        }
+        if (rows.isEmpty()) {
+            return "";
+        }
+        return "<table class=\"ad-items" + (roll ? " ad-items--roll" : "") + "\">"
+                + "<tbody>" + rows + "</tbody>"
+                + "</table>";
     }
 
     private String renderLogoBlock(OrgEntity org, boolean roll) {
@@ -1089,7 +1160,7 @@ public class FiscalBillPdfService {
     }
 
     private String renderTitleLine(Integer invoiceType, boolean roll) {
-        boolean notFiscalBill = invoiceType != null && invoiceType >= 1 && invoiceType <= 3;
+        boolean notFiscalBill = isNotFiscalInvoiceType(invoiceType);
         String label = pdfLabelService.label(notFiscalBill ? "notFiscalBill" : "fiscalBill", roll);
         int equalsCount;
         if (roll) {
@@ -1099,6 +1170,43 @@ public class FiscalBillPdfService {
         }
         String pad = "=".repeat(equalsCount);
         return pad + " " + label + " " + pad;
+    }
+
+    /** End marker: fiscal end for Normal/Advance; same not-fiscal text as the title for Proforma/Copy/Training. */
+    private String renderEndLine(Integer invoiceType, boolean roll) {
+        boolean notFiscalBill = isNotFiscalInvoiceType(invoiceType);
+        String label = pdfLabelService.label(notFiscalBill ? "notFiscalBill" : "fiscalBillEnd", roll);
+        int equalsCount;
+        if (roll) {
+            equalsCount = notFiscalBill ? 8 : 9;
+        } else {
+            equalsCount = notFiscalBill ? 39 : 40;
+        }
+        String pad = "=".repeat(equalsCount);
+        return pad + " " + label + " " + pad;
+    }
+
+    /**
+     * Mid-receipt banner for Proforma / Copy / Training only (empty for Normal and Advance).
+     * Full-width equals rules around {@code notFiscalBill} at 2× body font size.
+     */
+    private String renderNotFiscalMidBanner(Integer invoiceType, boolean roll) {
+        if (!isNotFiscalInvoiceType(invoiceType)) {
+            return "";
+        }
+        String label = escapeHtml(pdfLabelService.label("notFiscalBill", roll));
+        String rule = roll
+                ? "=============================================="
+                : "===================================================================================================";
+        return "<div class=\"not-fiscal-mid\">"
+                + "<div class=\"not-fiscal-mid-rule\">" + rule + "</div>"
+                + "<div class=\"not-fiscal-mid-text\">" + label + "</div>"
+                + "<div class=\"not-fiscal-mid-rule\">" + rule + "</div>"
+                + "</div>";
+    }
+
+    private static boolean isNotFiscalInvoiceType(Integer invoiceType) {
+        return invoiceType != null && invoiceType >= 1 && invoiceType <= 3;
     }
 
     private String invoiceTypeLabel(Integer invoiceType) {

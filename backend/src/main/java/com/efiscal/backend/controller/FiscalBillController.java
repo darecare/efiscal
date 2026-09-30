@@ -211,7 +211,8 @@ public class FiscalBillController {
         List<FiscalBillItemRequest> items = request.items() == null ? List.of() :
                 request.items().stream().map(i -> new FiscalBillItemRequest(
                         i.name(), i.quantity(), i.unitPrice(), i.totalAmount(),
-                i.taxLabel(), i.taxPrefix(), i.gtin(), i.productId(), i.sku(), i.taxValue(), i.taxCategoryName(), i.labels()
+                i.taxLabel(), i.taxPrefix(), i.gtin(), i.productId(), i.sku(), i.taxValue(), i.taxCategoryName(), i.labels(),
+                i.totalPaid()
                 )).toList();
 
         OrderFiscalizeRequest orderData = new OrderFiscalizeRequest(
@@ -221,7 +222,9 @@ public class FiscalBillController {
                 request.paymentMethodCode(), items,
                 resolveCurrentUserCashier(),
                 request.buyerCostCenterId(),
-                request.dateAndTimeOfIssue());
+                request.dateAndTimeOfIssue(),
+                request.shippingAmount(),
+                request.shippingTaxPercent());
 
         FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createFiscalBillFromOrder(
                 orgId, clientId, idempotencyKey,
@@ -261,7 +264,8 @@ public class FiscalBillController {
         List<FiscalBillItemRequest> items = request.items() == null ? List.of() :
                 request.items().stream().map(i -> new FiscalBillItemRequest(
                         i.name(), i.quantity(), i.unitPrice(), i.totalAmount(),
-                i.taxLabel(), i.taxPrefix(), i.gtin(), i.productId(), i.sku(), i.taxValue(), i.taxCategoryName(), i.labels()
+                i.taxLabel(), i.taxPrefix(), i.gtin(), i.productId(), i.sku(), i.taxValue(), i.taxCategoryName(), i.labels(),
+                i.totalPaid()
                 )).toList();
 
         List<PaymentRequest> payments = request.payments() == null ? List.of() :
@@ -372,7 +376,8 @@ public class FiscalBillController {
             String sku,
             BigDecimal taxValue,
             String taxCategoryName,
-            List<String> labels) {}
+            List<String> labels,
+            BigDecimal totalPaid) {} // Advance Sale amount paid; optional
 
     public record PaymentRowRequest(int paymentType, BigDecimal amount) {}
 
@@ -388,7 +393,9 @@ public class FiscalBillController {
             String paymentMethodCode,
             List<ItemRequest> items,
             String buyerCostCenterId,
-            String dateAndTimeOfIssue) {} // optional advance payment moment; Advance Sale only
+            String dateAndTimeOfIssue,     // optional advance payment moment; Advance Sale only
+            BigDecimal shippingAmount,     // optional order shipping_amount
+            BigDecimal shippingTaxPercent) {} // optional order shipping_tax_percent
 
     public record CreateManualRequest(
             String orderId,        // optional — links to existing order

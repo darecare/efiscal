@@ -20,6 +20,7 @@ const emptyForm = {
   logoImage: '',
   advertisementHtml: '',
   advertisementEnabled: false,
+  includeShipment: true,
 }
 const STATUS_OPTIONS = ['ACTIVE', 'SETUP', 'SUSPENDED', 'INACTIVE']
 const CURRENCY_OPTIONS = ['RSD', 'EUR', 'USD']
@@ -106,6 +107,7 @@ export default function Organizations() {
       logoImage: (typeof o.logoImage === 'string' && o.logoImage.toLowerCase().startsWith('data:image/')) ? o.logoImage : '',
       advertisementHtml: o.advertisementHtml || '',
       advertisementEnabled: o.advertisementEnabled || false,
+      includeShipment: o.includeShipment ?? true,
     })
     setFormError(null)
     setModalMode('edit')
@@ -225,6 +227,7 @@ export default function Organizations() {
         logoImage: form.logoImage || null,
         advertisementHtml: form.advertisementHtml?.trim() || null,
         advertisementEnabled: form.advertisementEnabled,
+        includeShipment: form.includeShipment,
       }
       if (modalMode === 'add') {
         await orgsApi.create(payload)
@@ -430,6 +433,16 @@ export default function Organizations() {
                         />
                       </div>
                     ) : null}
+                  </div>
+                  <div className="field" style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={form.includeShipment}
+                        onChange={(e) => handleChange('includeShipment', e.target.checked)}
+                      />
+                      {t('organizations.includeShipment')}
+                    </label>
                   </div>
                 </div>
               )}

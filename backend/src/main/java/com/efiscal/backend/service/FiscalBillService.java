@@ -13,6 +13,7 @@ import com.efiscal.backend.repository.FiscalBillLineRepository;
 import com.efiscal.backend.repository.FiscalBillPayRepository;
 import com.efiscal.backend.repository.FiscalBillRepository;
 import com.efiscal.backend.repository.FiscalBillTaxRepository;
+import com.efiscal.backend.repository.OrgRepository;
 import com.efiscal.backend.repository.PayTypeMapRepository;
 import com.efiscal.backend.repository.ProductRepository;
 import com.efiscal.backend.repository.TaxRepository;
@@ -27,6 +28,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -61,7 +63,9 @@ public class FiscalBillService {
 
     /** Invoice type constants */
     public static final int INVOICE_TYPE_NORMAL = 0;
+    public static final int INVOICE_TYPE_PROFORMA = 1;
     public static final int INVOICE_TYPE_COPY = 2;
+    public static final int INVOICE_TYPE_TRAINING = 3;
     public static final int INVOICE_TYPE_ADVANCE = 4;
 
     /** Transaction type constants */
@@ -91,6 +95,7 @@ public class FiscalBillService {
     private final FiscalBillEmailService fiscalBillEmailService;
     private final EsirNumberService esirNumberService;
     private final ObjectMapper objectMapper;
+    private final OrgRepository orgRepository;
 
     public FiscalBillService(
             FiscalBillRepository fiscalBillRepository,
@@ -104,7 +109,8 @@ public class FiscalBillService {
             TaxAuthorityService taxAuthorityService,
             FiscalBillEmailService fiscalBillEmailService,
             EsirNumberService esirNumberService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            OrgRepository orgRepository) {
         this.fiscalBillRepository = fiscalBillRepository;
         this.fiscalBillTaxRepository = fiscalBillTaxRepository;
         this.fiscalBillPayRepository = fiscalBillPayRepository;
@@ -117,6 +123,7 @@ public class FiscalBillService {
         this.fiscalBillEmailService = fiscalBillEmailService;
         this.esirNumberService = esirNumberService;
         this.objectMapper = objectMapper;
+        this.orgRepository = orgRepository;
     }
 
     // -----------------------------------------------------------------------
@@ -157,7 +164,10 @@ public class FiscalBillService {
         }
 
         // Resolve order item tax labels before any dependent flow (including advance-refund chain).
-        List<FiscalBillItemRequest> resolvedItems = enrichItemsWithGtin(orgId, resolveVatLabelsForOrderItems(orderData.items()));
+        List<FiscalBillItemRequest> orderItems = appendShipmentLineIfApplicable(orgId, orderData);
+        List<FiscalBillItemRequest> resolvedItems = applyAdvanceSaleTotalPaidDefaults(
+                invoiceType, transactionType,
+                enrichItemsWithGtin(orgId, resolveVatLabelsForOrderItems(orderItems)));
 
         // --- 4.1.5  Advance closing chain ---
         // If creating Normal Sale and Advance Sale exists → first create Advance Refund
@@ -193,7 +203,7 @@ public class FiscalBillService {
             savePaymentRecords(entity.getFiscalbillId(), clientId, orgId, orderData.paymentMethodCode(),
                     entity.getEfiscalTotalamount());
             // Save line items after successful fiscalization (Advance: summarized tax lines)
-            saveLineItems(entity.getFiscalbillId(), clientId, orgId, linesToPersist(invoiceType, resolvedItems));
+            saveLineItems(entity.getFiscalbillId(), clientId, orgId, linesToPersist(resolvedItems));
             FiscalBillEmailService.EmailSendResult emailResult = fiscalBillEmailService.sendIfRequested(
                     orgId, entity, orderData.sendEmail(), orderData.customerEmail(), orderData.customerName(), orderId);
             return FiscalBillCreateResult.ofCreated(toView(entity, emailResult));
@@ -236,7 +246,9 @@ public class FiscalBillService {
             return FiscalBillCreateResult.ofAlreadyExists(toView(existingKey.get().getFiscalBill()));
         }
 
-        validateManualRequestAmounts(request.items(), request.payments());
+        validateManualRequestAmounts(
+                request.items(), request.payments(), request.invoiceType(), request.transactionType());
+        validateManualReferentChainRules(orgId, request);
 
         // If an orderId is provided, apply order-linked fiscal-chain checks (spec 4.2.1)
         String orderId = request.orderId();
@@ -260,7 +272,9 @@ public class FiscalBillService {
             }
         }
 
-        List<FiscalBillItemRequest> enrichedItems = enrichItemsWithGtin(orgId, request.items());
+        List<FiscalBillItemRequest> enrichedItems = applyAdvanceSaleTotalPaidDefaults(
+                request.invoiceType(), request.transactionType(),
+                enrichItemsWithGtin(orgId, request.items()));
 
         // Build request body — manual items, manual payments
         BuiltTaxAuthorityRequest builtRequest = buildManualRequestBody(orgId, clientId, orderId,
@@ -287,8 +301,7 @@ public class FiscalBillService {
             // Save payment records from manual payment rows
             saveManualPaymentRecords(entity.getFiscalbillId(), clientId, orgId, request.payments());
             // Save line items (Advance: summarized tax lines with configured advance names)
-            saveLineItems(entity.getFiscalbillId(), clientId, orgId,
-                    linesToPersist(request.invoiceType(), enrichedItems));
+            saveLineItems(entity.getFiscalbillId(), clientId, orgId, linesToPersist(enrichedItems));
             FiscalBillEmailService.EmailSendResult emailResult = fiscalBillEmailService.sendIfRequested(
                     orgId, entity, request.sendEmail(), request.customerEmail(), request.customerName(), orderId);
             return FiscalBillCreateResult.ofCreated(toView(entity, emailResult));
@@ -865,7 +878,7 @@ public class FiscalBillService {
         Map<String, BigDecimal> groupedByLabel = new HashMap<>();
         for (FiscalBillItemRequest item : items) {
             String label = resolvePrimaryLabel(item);
-            groupedByLabel.merge(label, item.totalAmount(), BigDecimal::add);
+            groupedByLabel.merge(label, effectiveLineAmount(item), BigDecimal::add);
         }
         if (groupedByLabel.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No line items for advance invoice");
@@ -889,7 +902,8 @@ public class FiscalBillService {
                     null,
                     null,
                     null,
-                    List.of(label)
+                    List.of(label),
+                    null
             ));
         }
         return result;
@@ -909,10 +923,13 @@ public class FiscalBillService {
         return result;
     }
 
-    private List<FiscalBillItemRequest> linesToPersist(int invoiceType, List<FiscalBillItemRequest> items) {
-        if (invoiceType == INVOICE_TYPE_ADVANCE) {
-            return buildAdvanceItemRequests(items);
-        }
+    /**
+     * Lines stored on {@code fiscalbillline} after a successful Tax Authority call.
+     * Advance Sale keeps the original product lines so the PDF advertisement can list
+     * name + price; the main items section still renders tax-grouped advance names via
+     * {@code FiscalBillPdfService}. Advance Refund call sites pass summarized lines directly.
+     */
+    private List<FiscalBillItemRequest> linesToPersist(List<FiscalBillItemRequest> items) {
         return items;
     }
 
@@ -1009,6 +1026,255 @@ public class FiscalBillService {
         return ref.getFiscalbillId();
     }
 
+    private static final String CLOSE_ADVANCE_REFUND_REQUIRED_MESSAGE =
+            "Referentni broj zatvaranja avansa nije Avans Refundacija, molimo vas proverite";
+
+    /**
+     * Manual referent-chain rules for Advance Sale partial pays, Close Advance (Normal Sale),
+     * and invoice/transaction type pairing when a referent is supplied outside Close Advance.
+     */
+    private void validateManualReferentChainRules(Long orgId, ManualFiscalBillRequest request) {
+        String referentDocumentNumber = request.referentDocumentNumber();
+        if (referentDocumentNumber == null || referentDocumentNumber.isBlank()) {
+            return;
+        }
+        String refNo = referentDocumentNumber.trim();
+        // Close Advance (Zatvaranje avansa): Normal Sale with referent → Advance Refund + product chain
+        if (request.invoiceType() == INVOICE_TYPE_NORMAL && request.transactionType() == TRANSACTION_TYPE_SALE) {
+            validateCloseAdvanceReferentChain(orgId, refNo, request.items());
+            return;
+        }
+        // Chained Advance Sale: referent must be Advance Sale (+ totalPaid / product rules)
+        if (request.invoiceType() == INVOICE_TYPE_ADVANCE && request.transactionType() == TRANSACTION_TYPE_SALE) {
+            validateAdvanceSaleReferentChain(orgId, refNo, request.items());
+            return;
+        }
+        // All other manual bills with a referent: enforce allowed source invoice/transaction types
+        validateReferentTypePairing(orgId, refNo, request.invoiceType(), request.transactionType());
+    }
+
+    /**
+     * When Close Advance is not used, a supplied referent must match the creating bill's type pair:
+     * Normal/Training/Advance/Proforma Refund → matching Sale;
+     * Copy Refund → Normal or Advance Refund; Copy Sale → Normal or Advance Sale.
+     */
+    private void validateReferentTypePairing(
+            Long orgId, String referentDocumentNumber, int invoiceType, int transactionType) {
+        FiscalBillEntity ref = requireReferentBill(orgId, referentDocumentNumber);
+        String message = null;
+        if (invoiceType == INVOICE_TYPE_NORMAL && transactionType == TRANSACTION_TYPE_REFUND) {
+            if (!isBillOfType(ref, INVOICE_TYPE_NORMAL, TRANSACTION_TYPE_SALE)) {
+                message = "Referentni dokument za Normalnu Refundaciju mora biti Normalna Prodaja";
+            }
+        } else if (invoiceType == INVOICE_TYPE_TRAINING && transactionType == TRANSACTION_TYPE_REFUND) {
+            if (!isBillOfType(ref, INVOICE_TYPE_TRAINING, TRANSACTION_TYPE_SALE)) {
+                message = "Referentni dokument za Trening Refundaciju mora biti Trening Prodaja";
+            }
+        } else if (invoiceType == INVOICE_TYPE_ADVANCE && transactionType == TRANSACTION_TYPE_REFUND) {
+            if (!isBillOfType(ref, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE)) {
+                message = "Referentni dokument za Avans Refundaciju mora biti Avans Prodaja";
+            }
+        } else if (invoiceType == INVOICE_TYPE_PROFORMA && transactionType == TRANSACTION_TYPE_REFUND) {
+            if (!isBillOfType(ref, INVOICE_TYPE_PROFORMA, TRANSACTION_TYPE_SALE)) {
+                message = "Referentni dokument za Predračun Refundaciju mora biti Predračun Prodaja";
+            }
+        } else if (invoiceType == INVOICE_TYPE_COPY && transactionType == TRANSACTION_TYPE_REFUND) {
+            if (!isBillOfType(ref, INVOICE_TYPE_NORMAL, TRANSACTION_TYPE_REFUND)
+                    && !isBillOfType(ref, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_REFUND)) {
+                message = "Referentni dokument za Kopiju Refundacije mora biti Normalna ili Avans Refundacija";
+            }
+        } else if (invoiceType == INVOICE_TYPE_COPY && transactionType == TRANSACTION_TYPE_SALE) {
+            if (!isBillOfType(ref, INVOICE_TYPE_NORMAL, TRANSACTION_TYPE_SALE)
+                    && !isBillOfType(ref, INVOICE_TYPE_ADVANCE, TRANSACTION_TYPE_SALE)) {
+                message = "Referentni dokument za Kopiju Prodaje mora biti Normalna ili Avans Prodaja";
+            }
+        }
+        if (message != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+    }
+
+    private static boolean isBillOfType(FiscalBillEntity bill, int invoiceType, int transactionType) {
+        return bill.getEfiscalInvoicetype() != null && bill.getEfiscalInvoicetype() == invoiceType
+                && bill.getEfiscalTransactiontype() != null && bill.getEfiscalTransactiontype() == transactionType;
+    }
+
+    private void validateAdvanceSaleReferentChain(
+            Long orgId, String referentDocumentNumber, List<FiscalBillItemRequest> submittingItems) {
+        FiscalBillEntity firstRef = requireReferentBill(orgId, referentDocumentNumber);
+        if (!isAdvanceSaleBill(firstRef)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Referenced fiscal bill must be an Advance Sale for chained advances");
+        }
+        List<FiscalBillEntity> chain = collectReferentChain(firstRef);
+        for (FiscalBillEntity bill : chain) {
+            if (!isAdvanceSaleBill(bill)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Referent chain must contain only Advance Sale bills");
+            }
+            List<FiscalBillLineEntity> lines = fiscalBillLineRepository.findByFiscalbillId(bill.getFiscalbillId());
+            assertMatchingProducts(submittingItems, lines, bill.getEfiscalSdcInvoiceno());
+        }
+        for (FiscalBillItemRequest item : submittingItems) {
+            String key = productMatchKey(item);
+            BigDecimal lineCap = item.totalAmount() != null ? item.totalAmount() : BigDecimal.ZERO;
+            BigDecimal paidSum = item.totalPaid() != null ? item.totalPaid() : BigDecimal.ZERO;
+            for (FiscalBillEntity bill : chain) {
+                FiscalBillLineEntity matched = findMatchingLine(
+                        fiscalBillLineRepository.findByFiscalbillId(bill.getFiscalbillId()), key);
+                if (matched == null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Missing matching product in referent chain for: " + key);
+                }
+                if (matched.getTotalAmount() != null
+                        && matched.getTotalAmount().subtract(lineCap).abs().compareTo(PAYMENT_TOTAL_TOLERANCE) > 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Line totalAmount does not match referent chain for product: " + key);
+                }
+                paidSum = paidSum.add(matched.getTotalPaid() != null ? matched.getTotalPaid() : BigDecimal.ZERO);
+            }
+            if (paidSum.compareTo(lineCap) > 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Sum of totalPaid across advance chain exceeds totalAmount for product: " + key);
+            }
+        }
+    }
+
+    private void validateCloseAdvanceReferentChain(
+            Long orgId, String referentDocumentNumber, List<FiscalBillItemRequest> submittingItems) {
+        FiscalBillEntity firstRef = requireReferentBill(orgId, referentDocumentNumber);
+        if (!isAdvanceRefundBill(firstRef)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, CLOSE_ADVANCE_REFUND_REQUIRED_MESSAGE);
+        }
+        List<FiscalBillEntity> chain = collectReferentChain(firstRef);
+        List<FiscalBillEntity> advanceSales = chain.stream()
+                .filter(this::isAdvanceSaleBill)
+                .toList();
+        if (advanceSales.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Close Advance referent chain has no Advance Sale bills");
+        }
+        for (FiscalBillEntity advance : advanceSales) {
+            List<FiscalBillLineEntity> lines = fiscalBillLineRepository.findByFiscalbillId(advance.getFiscalbillId());
+            assertMatchingProducts(submittingItems, lines, advance.getEfiscalSdcInvoiceno());
+            for (FiscalBillItemRequest item : submittingItems) {
+                String key = productMatchKey(item);
+                FiscalBillLineEntity matched = findMatchingLine(lines, key);
+                if (matched == null || matched.getTotalAmount() == null || item.totalAmount() == null
+                        || matched.getTotalAmount().subtract(item.totalAmount()).abs()
+                                .compareTo(PAYMENT_TOTAL_TOLERANCE) > 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Advance Sale line totalAmount does not match Normal Sale for product: " + key);
+                }
+            }
+        }
+    }
+
+    private FiscalBillEntity requireReferentBill(Long orgId, String referentDocumentNumber) {
+        return fiscalBillRepository
+                .findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(orgId, referentDocumentNumber)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Referenced fiscal bill not found for number: " + referentDocumentNumber));
+    }
+
+    /** First bill + all ancestors via referent_fiscalbill_id (cycle-safe). */
+    private List<FiscalBillEntity> collectReferentChain(FiscalBillEntity first) {
+        List<FiscalBillEntity> chain = new ArrayList<>();
+        Set<Long> seen = new HashSet<>();
+        FiscalBillEntity current = first;
+        while (current != null) {
+            Long id = current.getFiscalbillId();
+            if (id == null || !seen.add(id)) {
+                break;
+            }
+            chain.add(current);
+            Long parentId = current.getReferentFiscalbillId();
+            if (parentId == null) {
+                break;
+            }
+            current = fiscalBillRepository.findById(parentId).orElse(null);
+        }
+        return chain;
+    }
+
+    private boolean isAdvanceSaleBill(FiscalBillEntity bill) {
+        return bill.getEfiscalInvoicetype() != null && bill.getEfiscalInvoicetype() == INVOICE_TYPE_ADVANCE
+                && bill.getEfiscalTransactiontype() != null && bill.getEfiscalTransactiontype() == TRANSACTION_TYPE_SALE;
+    }
+
+    private boolean isAdvanceRefundBill(FiscalBillEntity bill) {
+        return bill.getEfiscalInvoicetype() != null && bill.getEfiscalInvoicetype() == INVOICE_TYPE_ADVANCE
+                && bill.getEfiscalTransactiontype() != null && bill.getEfiscalTransactiontype() == TRANSACTION_TYPE_REFUND;
+    }
+
+    private void assertMatchingProducts(
+            List<FiscalBillItemRequest> submittingItems,
+            List<FiscalBillLineEntity> referentLines,
+            String referentInvoiceNo) {
+        if (submittingItems == null || referentLines == null
+                || submittingItems.size() != referentLines.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Referent bill line count does not match (" + referentInvoiceNo + ")");
+        }
+        Set<String> submittingKeys = new HashSet<>();
+        for (FiscalBillItemRequest item : submittingItems) {
+            String key = productMatchKey(item);
+            if (!submittingKeys.add(key)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Duplicate product key in submitting items: " + key);
+            }
+            if (findMatchingLine(referentLines, key) == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Product not found on referent bill " + referentInvoiceNo + ": " + key);
+            }
+        }
+    }
+
+    private FiscalBillLineEntity findMatchingLine(List<FiscalBillLineEntity> lines, String key) {
+        if (lines == null || key == null) {
+            return null;
+        }
+        for (FiscalBillLineEntity line : lines) {
+            if (key.equals(productMatchKey(line))) {
+                return line;
+            }
+        }
+        return null;
+    }
+
+    private static String productMatchKey(FiscalBillItemRequest item) {
+        return productMatchKey(item.productId(), item.sku(), item.gtin(), item.name());
+    }
+
+    private static String productMatchKey(FiscalBillLineEntity line) {
+        return productMatchKey(line.getProductId(), line.getSku(), line.getGtin(), line.getName());
+    }
+
+    private static String productMatchKey(String productId, String sku, String gtinOrEan, String name) {
+        String product = trimToNullStatic(productId);
+        if (product != null) {
+            return "id:" + product;
+        }
+        String skuKey = trimToNullStatic(sku);
+        if (skuKey != null) {
+            return "sku:" + skuKey;
+        }
+        String gtin = trimToNullStatic(gtinOrEan);
+        if (gtin != null) {
+            return "gtin:" + gtin;
+        }
+        String n = trimToNullStatic(name);
+        return "name:" + (n == null ? "" : n.toLowerCase());
+    }
+
+    private static String trimToNullStatic(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     /**
      * Order-linked prechecks for manual creation when orderId is provided (spec 4.2.1).
      * Enforces duplicate protection scoped to organization; does not fetch MerchantPro order data.
@@ -1028,8 +1294,13 @@ public class FiscalBillService {
 
     /**
      * Validate manual payment rows against line item totals (spec 4.2.3).
+     * Advance Sale uses totalPaid (effective amount) for the bill total.
      */
-    private void validateManualRequestAmounts(List<FiscalBillItemRequest> items, List<PaymentRequest> payments) {
+    private void validateManualRequestAmounts(
+            List<FiscalBillItemRequest> items,
+            List<PaymentRequest> payments,
+            int invoiceType,
+            int transactionType) {
         if (items == null || items.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No line items provided");
         }
@@ -1037,6 +1308,7 @@ public class FiscalBillService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one payment is required");
         }
 
+        boolean advanceSale = invoiceType == INVOICE_TYPE_ADVANCE && transactionType == TRANSACTION_TYPE_SALE;
         BigDecimal itemsTotal = BigDecimal.ZERO;
         for (FiscalBillItemRequest item : items) {
             if (item.quantity() == null || item.quantity().compareTo(BigDecimal.ZERO) <= 0) {
@@ -1051,7 +1323,21 @@ public class FiscalBillService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Each line item must have a non-negative total amount");
             }
-            itemsTotal = itemsTotal.add(item.totalAmount());
+            if (advanceSale) {
+                if (item.totalPaid() == null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Each Advance Sale line item must have totalPaid");
+                }
+                if (item.totalPaid().compareTo(BigDecimal.ZERO) < 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Each line item totalPaid must be non-negative");
+                }
+                if (item.totalPaid().compareTo(item.totalAmount()) > 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "totalPaid must not exceed totalAmount for line item: " + safeItemName(item, -1));
+                }
+            }
+            itemsTotal = itemsTotal.add(advanceSale ? item.totalPaid() : item.totalAmount());
         }
 
         BigDecimal paymentsTotal = BigDecimal.ZERO;
@@ -1067,6 +1353,47 @@ public class FiscalBillService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Payment total does not match fiscal bill total");
         }
+    }
+
+    /** Amount used for Advance Sale TA grouping / bill total: totalPaid when set, else totalAmount. */
+    private static BigDecimal effectiveLineAmount(FiscalBillItemRequest item) {
+        if (item.totalPaid() != null) {
+            return item.totalPaid();
+        }
+        return item.totalAmount() != null ? item.totalAmount() : BigDecimal.ZERO;
+    }
+
+    /**
+     * For Advance Sale, ensure every line has totalPaid (defaulting null to totalAmount).
+     */
+    private List<FiscalBillItemRequest> applyAdvanceSaleTotalPaidDefaults(
+            int invoiceType, int transactionType, List<FiscalBillItemRequest> items) {
+        if (invoiceType != INVOICE_TYPE_ADVANCE || transactionType != TRANSACTION_TYPE_SALE
+                || items == null || items.isEmpty()) {
+            return items;
+        }
+        List<FiscalBillItemRequest> result = new ArrayList<>();
+        for (FiscalBillItemRequest item : items) {
+            if (item.totalPaid() != null) {
+                result.add(item);
+            } else {
+                result.add(new FiscalBillItemRequest(
+                        item.name(),
+                        item.quantity(),
+                        item.unitPrice(),
+                        item.totalAmount(),
+                        item.taxLabel(),
+                        item.taxPrefix(),
+                        item.gtin(),
+                        item.productId(),
+                        item.sku(),
+                        item.taxValue(),
+                        item.taxCategoryName(),
+                        item.labels(),
+                        item.totalAmount()));
+            }
+        }
+        return result;
     }
 
     /**
@@ -1295,7 +1622,8 @@ public class FiscalBillService {
                     item.sku(),
                     item.taxValue(),
                     item.taxCategoryName(),
-                    item.labels()));
+                    item.labels(),
+                    item.totalPaid()));
         }
         return enriched;
     }
@@ -1357,7 +1685,8 @@ public class FiscalBillService {
                 line.getSku(),
                 null,
                 null,
-                labels);
+                labels,
+                line.getTotalPaid());
     }
 
     // -----------------------------------------------------------------------
@@ -1475,6 +1804,7 @@ public class FiscalBillService {
             line.setQuantity(item.quantity());
             line.setUnitPrice(item.unitPrice());
             line.setTotalAmount(item.totalAmount());
+            line.setTotalPaid(item.totalPaid());
             line.setTaxLabel(resolvePrimaryLabel(item));
             line.setGtin(item.gtin());
             line.setProductId(item.productId());
@@ -1565,6 +1895,61 @@ public class FiscalBillService {
                 "Missing tax label for line item: " + safeItemName(item, -1));
     }
 
+    static final String SHIPMENT_PRODUCT_NOT_FOUND_MESSAGE = "Nije pronadjen proizvod definisan za isporuku";
+
+    /**
+     * When the org has {@code include_shipment} enabled and the order has {@code shipping_amount > 0},
+     * append a line built from the org's shipping product ({@code product.is_shipment}). The tax rate
+     * comes from the order's {@code shipping_tax_percent}; the tax category name is borrowed from the
+     * order's product lines so the line resolves through the same tax mapping.
+     */
+    private List<FiscalBillItemRequest> appendShipmentLineIfApplicable(Long orgId, OrderFiscalizeRequest orderData) {
+        List<FiscalBillItemRequest> items = orderData.items() == null ? List.of() : orderData.items();
+        BigDecimal shippingAmount = orderData.shippingAmount();
+        if (shippingAmount == null || shippingAmount.compareTo(BigDecimal.ZERO) <= 0 || items.isEmpty()) {
+            return items;
+        }
+        boolean includeShipment = orgRepository.findById(orgId)
+                .map(org -> org.isIncludeShipment())
+                .orElse(false);
+        if (!includeShipment) {
+            return items;
+        }
+
+        List<ProductEntity> shipmentProducts = productRepository.findShipmentProductsByOrgId(orgId);
+        if (shipmentProducts.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, SHIPMENT_PRODUCT_NOT_FOUND_MESSAGE);
+        }
+        ProductEntity product = shipmentProducts.get(0);
+
+        String taxCategoryName = items.stream()
+                .map(FiscalBillItemRequest::taxCategoryName)
+                .filter(name -> name != null && !name.isBlank())
+                .findFirst()
+                .orElse(null);
+        BigDecimal taxPercent = orderData.shippingTaxPercent();
+        String taxPrefix = taxPercent != null ? String.format("%02d", taxPercent.intValue()) : null;
+
+        FiscalBillItemRequest shipmentLine = new FiscalBillItemRequest(
+                product.getName(),
+                BigDecimal.ONE,
+                shippingAmount,
+                shippingAmount,
+                null,
+                taxPrefix,
+                product.getEan(),
+                product.getProductId() != null ? String.valueOf(product.getProductId()) : null,
+                product.getSku(),
+                taxPercent,
+                taxCategoryName,
+                null,
+                null
+        );
+        List<FiscalBillItemRequest> withShipment = new ArrayList<>(items);
+        withShipment.add(shipmentLine);
+        return withShipment;
+    }
+
     private List<FiscalBillItemRequest> resolveVatLabelsForOrderItems(List<FiscalBillItemRequest> items) {
         if (items == null || items.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -1619,7 +2004,8 @@ public class FiscalBillService {
                     item.sku(),
                     item.taxValue(),
                     item.taxCategoryName(),
-                    List.of(taxLabel)
+                    List.of(taxLabel),
+                    item.totalPaid()
             ));
         }
         return resolved;
@@ -1655,7 +2041,9 @@ public class FiscalBillService {
                 request.items(),
                 request.cashier(),
                 request.buyerCostCenterId(),
-                null // Advance Refund never carries dateAndTimeOfIssue
+                null, // Advance Refund never carries dateAndTimeOfIssue
+                null, // manual items already include any shipping line
+                null
         );
     }
 
@@ -1715,7 +2103,8 @@ public class FiscalBillService {
             String sku,
             BigDecimal taxValue,
             String taxCategoryName,
-            List<String> labels
+            List<String> labels,
+            BigDecimal totalPaid  // Advance Sale amount paid; optional / null for other types
     ) {}
 
     /** Payment row for manual fiscal bill creation. */
@@ -1736,7 +2125,9 @@ public class FiscalBillService {
             List<FiscalBillItemRequest> items,
             String cashier,              // Optional — resolved from the issuing user's cashier field
             String buyerCostCenterId,    // Optional customer field (e.g. "30:099999999"); applied only with buyerId
-            String dateAndTimeOfIssue    // Optional advance payment moment; Advance Sale only
+            String dateAndTimeOfIssue,   // Optional advance payment moment; Advance Sale only
+            BigDecimal shippingAmount,   // Optional order shipping_amount (gross)
+            BigDecimal shippingTaxPercent // Optional order shipping_tax_percent
     ) {}
 
     /** Request object for manual fiscal bill creation. */

@@ -320,6 +320,12 @@ export default function Orders() {
         sku: null,
       }]
 
+      if (isAdvanceSale(fiscalInvoiceType, fiscalTransactionType)) {
+        for (const item of items) {
+          item.totalPaid = item.totalAmount
+        }
+      }
+
       const payload = {
         orderId: String(order.id),
         customerName: order.customerName || null,
@@ -331,6 +337,15 @@ export default function Orders() {
         billingCompanyVat: order.billingCompanyVat || null,
         paymentMethodCode: order.paymentMethodCode || null,
         items,
+      }
+      // Without order lines the single fallback line already carries the full order total (shipping included).
+      if (lines.length > 0) {
+        const shippingAmount = parseFloat(order.shippingAmount)
+        if (Number.isFinite(shippingAmount) && shippingAmount > 0) {
+          const shippingTaxPercent = parseFloat(order.shippingTaxPercent)
+          payload.shippingAmount = shippingAmount
+          payload.shippingTaxPercent = Number.isFinite(shippingTaxPercent) ? shippingTaxPercent : null
+        }
       }
       if (composedBuyerCostCenterId) {
         payload.buyerCostCenterId = composedBuyerCostCenterId

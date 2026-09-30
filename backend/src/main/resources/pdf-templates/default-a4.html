@@ -210,6 +210,27 @@
       text-align: center;
     }
 
+    .not-fiscal-mid {
+      text-align: center;
+      margin: 10px 0 8px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .not-fiscal-mid-rule {
+      font-size: 12px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .not-fiscal-mid-text {
+      font-weight: 700;
+      font-size: 20px;
+      line-height: 1.15;
+      margin: 6px 0;
+      letter-spacing: 0.4px;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -264,6 +285,8 @@
       font-size: 10px;
       page-break-inside: avoid;
       break-inside: avoid;
+      width: 100%;
+      box-sizing: border-box;
     }
 
     .advertisement-advance {
@@ -273,6 +296,30 @@
     .advertisement-advance .ad-label {
       font-weight: 700;
       margin-right: 2mm;
+    }
+
+    .ad-items {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5mm 0 2mm;
+      font-size: 10px;
+    }
+
+    .ad-items td {
+      padding: 1px 0;
+      vertical-align: top;
+    }
+
+    .ad-items .ad-item-name {
+      text-align: left;
+      padding-right: 3mm;
+      word-break: break-word;
+    }
+
+    .ad-items .ad-item-price {
+      text-align: right;
+      white-space: nowrap;
+      width: 1%;
     }
 
     .muted {
@@ -376,6 +423,22 @@
       break-inside: avoid;
     }
 
+    .signature-line {
+      margin: 10px 0 6px;
+      font-size: 12px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .signature-label {
+      font-weight: 700;
+      margin-right: 6px;
+    }
+
+    .signature-blank {
+      letter-spacing: 1px;
+    }
+
     .qr-code[src=""] {
       display: none;
     }
@@ -453,6 +516,8 @@
       </tbody>
     </table>
 
+    {{NOT_FISCAL_MID_BANNER}}
+
     <div class="totals-block">
     <div class="section-label">===================================================================================================</div>
     <div class="tax-payment-grid">
@@ -507,6 +572,7 @@
       <tr>
         <td class="bottom-left">
           <img class="qr-code" src="{{EFISCAL_QR}}" alt="{{LABEL_QR_ALT}}" />
+          {{CUSTOMER_SIGNATURE_BLOCK}}
         </td>
         <td class="bottom-right">
           <div><span class="meta-label">{{LABEL_PFR_TIME}}</span> {{SDC_DATE_TIME}}</div>
@@ -520,10 +586,10 @@
     </table>
     <!-- footer-line should go full width, with double line on each side of the title -->
     <div class="rule-line double footer-line" aria-label="fiskalni-racun-footer-line">
-      <p class="title">======================================== {{LABEL_FISCAL_BILL_END}} ========================================</p>
+      <p class="title">{{END_LINE}}</p>
     </div>
     </div>
+    {{ADVERTISEMENT_BLOCK}}
   </div>
-  {{ADVERTISEMENT_BLOCK}}
 </body>
 </html>

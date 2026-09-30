@@ -69,6 +69,9 @@ public class ProductEntity {
     @Column(name = "hidden_at")
     private OffsetDateTime hiddenAt;
 
+    @Column(name = "is_shipment", nullable = false)
+    private boolean isShipment = false;
+
     public Long getProductId() { return productId; }
     public void setProductId(Long productId) { this.productId = productId; }
     public Long getClientId() { return clientId; }
@@ -97,4 +100,6 @@ public class ProductEntity {
     public void setSyncStatus(String syncStatus) { this.syncStatus = syncStatus; }
     public OffsetDateTime getHiddenAt() { return hiddenAt; }
     public void setHiddenAt(OffsetDateTime hiddenAt) { this.hiddenAt = hiddenAt; }
+    public boolean isShipment() { return isShipment; }
+    public void setShipment(boolean shipment) { isShipment = shipment; }
 }

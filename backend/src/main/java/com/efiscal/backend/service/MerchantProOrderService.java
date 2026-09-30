@@ -167,9 +167,33 @@ public class MerchantProOrderService {
             }
         }
 
+        BigDecimal shippingAmount = parseDecimal(raw.get("shipping_amount"));
+        BigDecimal shippingTaxPercent = parseDecimal(raw.get("shipping_tax_percent"));
+
         return new DemoDataService.OrderView(
                 id, orderNo, customer, customerEmail, shippingStatus, total, createdAt, paymentMethodCode,
-                billingType, billingCompanyVat, orderLines);
+                billingType, billingCompanyVat, orderLines, shippingAmount, shippingTaxPercent);
+    }
+
+    private static BigDecimal parseDecimal(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal bd) {
+            return bd;
+        }
+        if (value instanceof Number n) {
+            return new BigDecimal(n.toString());
+        }
+        String s = String.valueOf(value).trim();
+        if (s.isEmpty()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(s);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private String extractCustomerEmail(Map<String, Object> raw) {

@@ -19,7 +19,7 @@ spring:
     validate-on-migrate: false
 
 app:
-  manufacturer: ${APP_MANUFACTURER:eFiscal}
-  serial-number: ${APP_SERIAL_NUMBER:EFISCAL-VPS-001}
-  software-version: ${APP_SOFTWARE_VERSION:1.0.0}
-  esir-number: ${APP_ESIR_NUMBER:1658}
+  manufacturer: ${APP_MANUFACTURER:Elef}
+  serial-number: ${APP_SERIAL_NUMBER:ELEF-VPS-001}
+  software-version: ${APP_SOFTWARE_VERSION:1.1.0}
+  esir-number: ${APP_ESIR_NUMBER:1702}

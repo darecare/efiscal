@@ -135,11 +135,29 @@
 
 .fiscal-item-row--amounts {
   grid-template-columns:
-    minmax(0, 1.35fr)
+    minmax(0, 1.1fr)
     minmax(56px, 0.62fr)
     minmax(68px, 0.78fr)
     minmax(68px, 0.72fr)
     minmax(72px, 0.85fr);
+}
+
+.fiscal-item-row--amounts-with-total-paid {
+  grid-template-columns:
+    minmax(0, 0.85fr)
+    minmax(52px, 0.55fr)
+    minmax(60px, 0.68fr)
+    minmax(60px, 0.62fr)
+    minmax(64px, 0.72fr)
+    minmax(64px, 0.78fr);
+}
+
+.fiscal-field--unit-price {
+  max-width: 7rem;
+}
+
+.fiscal-field--total-paid {
+  max-width: 7rem;
 }
 
 .fiscal-field--qty,

@@ -9,7 +9,7 @@ const PAGE_SIZE = 100
 const SYNC_LIVE_REFRESH_MS = 4000
 
 function emptyForm() {
-  return { name: '', sku: '', ean: '', lastKnownPrice: '', isActive: true }
+  return { name: '', sku: '', ean: '', lastKnownPrice: '', isActive: true, isShipment: false }
 }
 
 function mapSyncErrorMessage(raw, t) {
@@ -263,6 +263,7 @@ export default function Products() {
       ean: product.ean || '',
       lastKnownPrice: product.lastKnownPrice != null ? String(product.lastKnownPrice) : '',
       isActive: product.isActive,
+      isShipment: Boolean(product.isShipment),
     })
     setFormError(null)
     setModalOpen(true)
@@ -298,6 +299,7 @@ export default function Products() {
       ean: form.ean.trim() || null,
       lastKnownPrice: form.lastKnownPrice ? parseFloat(form.lastKnownPrice) : null,
       isActive: form.isActive,
+      isShipment: form.isShipment,
     }
 
     setSaving(true)
@@ -644,7 +646,15 @@ export default function Products() {
                         </label>
                       </td>
                       <td className="products-cell-id">{p.productId}</td>
-                      <td className="products-cell-name">{p.name}</td>
+                      <td className="products-cell-name">
+                        {p.name}
+                        {p.isShipment && (
+                          <>
+                            {' '}
+                            <span className="badge">{t('products.isShipment')}</span>
+                          </>
+                        )}
+                      </td>
                       <td>{p.sku || t('common.dash')}</td>
                       <td>{p.ean || t('common.dash')}</td>
                       <td>{formatPrice(p.lastKnownPrice)}</td>
@@ -803,6 +813,16 @@ export default function Products() {
                     </label>
                   </div>
                 )}
+                <div className="field">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={form.isShipment}
+                      onChange={(e) => setForm((f) => ({ ...f, isShipment: e.target.checked }))}
+                    />
+                    {' '}{t('products.isShipment')}
+                  </label>
+                </div>
               </div>
               <p className="muted" style={{ marginTop: '0.5rem' }}>{t('products.skuOrEanHint')}</p>
               {formError && <p className="error-text">{formError}</p>}

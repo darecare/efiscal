@@ -173,6 +173,8 @@
     .advertisement {
       margin-top: 2mm;
       font-size: 8px;
+      width: 100%;
+      box-sizing: border-box;
     }
 
     .advertisement-advance {
@@ -182,6 +184,30 @@
     .advertisement-advance .ad-label {
       font-weight: 700;
       margin-right: 1.5mm;
+    }
+
+    .ad-items {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1mm 0 1.5mm;
+      font-size: 8px;
+    }
+
+    .ad-items td {
+      padding: 0.4mm 0;
+      vertical-align: top;
+    }
+
+    .ad-items .ad-item-name {
+      text-align: left;
+      padding-right: 2mm;
+      word-break: break-word;
+    }
+
+    .ad-items .ad-item-price {
+      text-align: right;
+      white-space: nowrap;
+      width: 1%;
     }
 
     .muted {
@@ -218,12 +244,51 @@
       display: none;
     }
 
+    .signature-line {
+      width: 42mm;
+      max-width: 100%;
+      margin: 1.5mm auto 1mm;
+      text-align: left;
+      font-size: 9px;
+      page-break-inside: avoid;
+      box-sizing: border-box;
+    }
+
+    .signature-label {
+      font-weight: 700;
+      margin-right: 1mm;
+    }
+
+    .signature-blank {
+      letter-spacing: 0.5px;
+    }
+
     .end-line {
       text-align: center;
       font-weight: 700;
       font-size: 8.5px;
       margin: 1mm 0 1mm;
       letter-spacing: 0.2px;
+    }
+
+    .not-fiscal-mid {
+      text-align: center;
+      margin: 1.5mm 0;
+      page-break-inside: avoid;
+    }
+
+    .not-fiscal-mid-rule {
+      font-size: 9px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .not-fiscal-mid-text {
+      font-weight: 700;
+      font-size: 14px;
+      line-height: 1.15;
+      margin: 0.8mm 0;
+      letter-spacing: 0.3px;
     }
 
     .mrc {
@@ -305,6 +370,8 @@
       </table>
     </div>
 
+    {{NOT_FISCAL_MID_BANNER}}
+
     <div class="section-label">==============================================</div>
     <table class="taxes">
       <colgroup>
@@ -353,11 +420,12 @@
 
     <div class="qr-wrap">
       <img class="qr-code" src="{{EFISCAL_QR}}" alt="{{LABEL_QR_ALT}}" />
+      {{CUSTOMER_SIGNATURE_BLOCK}}
     </div>
 
-    <p class="end-line">========= {{LABEL_FISCAL_BILL_END}} =========</p>
+    <p class="end-line">{{END_LINE}}</p>
     <!-- <div class="mrc">{{EFISCAL_MRC}}</div> -->
+    {{ADVERTISEMENT_BLOCK}}
   </div>
-  {{ADVERTISEMENT_BLOCK}}
 </body>
 </html>

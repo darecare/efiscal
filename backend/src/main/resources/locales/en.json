@@ -55,7 +55,8 @@
       "pfrInvoiceNumber": "PFR invoice number",
       "invoiceCounter": "Invoice counter",
       "lastAdvanceBill": "Last advance bill",
-      "remainingToPay": "Remaining to pay"
+      "remainingToPay": "Remaining to pay",
+      "customerSignature": "Customer signature"
     },
     "cyrillic": {
       "fiscalBill": "FISCAL RECEIPT",
@@ -112,7 +113,8 @@
       "pfrInvoiceNumber": "PFR invoice number",
       "invoiceCounter": "Invoice counter",
       "lastAdvanceBill": "Last advance bill",
-      "remainingToPay": "Remaining to pay"
+      "remainingToPay": "Remaining to pay",
+      "customerSignature": "Customer signature"
     }
   }
 }
