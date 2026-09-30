@@ -17,6 +17,8 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+source deploy/compose-cmd.sh
+
 env_value() {
   local line
   line="$(grep -E "^$1=" "$ENV_FILE" | tail -n 1 || true)"
@@ -30,7 +32,7 @@ FRONTEND_PORT="${FRONTEND_PORT:-8091}"
 HEALTH_URL="http://127.0.0.1:${BACKEND_PORT}/api/v1/auth/login"
 
 compose() {
-  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+  "${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
 }
 
 TARGET_REF="${1:-}"
