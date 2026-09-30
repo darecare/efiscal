@@ -61,7 +61,7 @@ TECHNOLOGY STACK:
 • Backend: Java 21 LTS, Spring Boot 3.x
 • Database: PostgreSQL 15
 • Authentication: JWT (Spring Security), bcrypt
-• Deployment: Docker, Docker Compose, Apache
+• Deployment: Docker, Docker Compose, Apache (QA: `docker-compose.qa.yml` bound to localhost behind host Apache + Let's Encrypt; see DEPLOY_QA.md)
 • Security: CORS, Password Hashing, Token Auth
 
 OPERATIONAL BASELINE (MVP):
