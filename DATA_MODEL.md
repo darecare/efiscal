@@ -500,6 +500,7 @@ Migrations:
 - `V36__create_product_sync_job.sql` — sync job tracking table
 - `V37__add_product_source_ownership.sql` — `source_type`, `sync_status`, `hidden_at`; backfill synced rows; visibility indexes
 - `V51__org_include_shipment_and_product_is_shipment.sql` — `org.include_shipment`, `product.is_shipment`, one-shipping-product-per-org partial unique index
+- `V52__seed_account_access_action.sql` — seeds `SYSTEM` / `ACCOUNT_ACCESS` (Account page + own name/email/password) and grants it once to every existing role so prior access is kept; no schema change
 
 ### 2.19 product_sync_job
 Table name: product_sync_job

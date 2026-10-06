@@ -104,9 +104,6 @@ export default function Organizations() {
       logoImage: (typeof o.logoImage === 'string' && o.logoImage.toLowerCase().startsWith('data:image/')) ? o.logoImage : '',
       advertisementHtml: o.advertisementHtml || '',
       advertisementEnabled: o.advertisementEnabled || false,
-      logoImage: (typeof o.logoImage === 'string' && o.logoImage.toLowerCase().startsWith('data:image/')) ? o.logoImage : '',
-      advertisementHtml: o.advertisementHtml || '',
-      advertisementEnabled: o.advertisementEnabled || false,
       includeShipment: o.includeShipment ?? true,
     })
     setFormError(null)
@@ -223,7 +220,6 @@ export default function Organizations() {
         smtpUsername: form.smtpUsername?.trim() || null,
         smtpPassword: form.smtpPassword || null,
         smtpConnectionSecurity: form.smtpConnectionSecurity || null,
-        logoImage: form.logoImage || null,
         logoImage: form.logoImage || null,
         advertisementHtml: form.advertisementHtml?.trim() || null,
         advertisementEnabled: form.advertisementEnabled,

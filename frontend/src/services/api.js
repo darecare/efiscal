@@ -47,6 +47,13 @@ export const usersApi = {
     const response = await api.patch('/users/me/language', { preferredLanguage })
     return response.data
   },
+  async updateMyProfile(payload) {
+    const response = await api.put('/users/me', payload)
+    return response.data
+  },
+  async changeMyPassword(newPassword, confirmPassword) {
+    await api.put('/users/me/password', { newPassword, confirmPassword })
+  },
 }
 
 export const clientsOrgsApi = {

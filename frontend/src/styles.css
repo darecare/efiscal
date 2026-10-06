@@ -565,6 +565,20 @@ input.form-input:focus {
   box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
 
+/* ─── Account ─────────────────────────────────────── */
+.field input.account-input {
+  width: 60%;
+}
+
+/* Block wrapper so paragraph margins collapse like the Subscription column instead of stacking with the form's flex gap. */
+.account-readonly p:first-child {
+  margin-top: 0;
+}
+
+.account-readonly p:last-child {
+  margin-bottom: 0;
+}
+
 /* ─── Create Fiscal Bill ──────────────────────────── */
 .fiscal-bill-workspace {
   margin-bottom: 1rem;

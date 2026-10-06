@@ -192,6 +192,8 @@ public class DataInitializerService implements CommandLineRunner {
         seedAction("SYSTEM", "USERS_MANAGE", "Manage Users", "Allows creating and editing users");
         seedAction("SYSTEM", "ROLES_MANAGE", "Manage Roles", "Allows creating and editing roles");
         seedAction("SYSTEM", "ORGS_MANAGE", "Manage Organizations", "Allows managing organizations and API settings");
+        // Role grants come from V52 only; re-granting here on every startup would undo an admin revoking it.
+        seedAction("SYSTEM", "ACCOUNT_ACCESS", "Account Page", "Allows opening the Account page and editing own name, email and password");
     }
 
     private void seedAction(String moduleCode, String actionCode, String name, String description) {

@@ -402,6 +402,72 @@ class FiscalBillServiceManualTest {
     }
 
     @Test
+    void createManualFiscalBill_allowsRepeatedTrainingBillForSameOrder() throws Exception {
+        var existing = new FiscalBillEntity();
+        existing.setStatus(FiscalBillService.STATUS_SUCCESS);
+        when(fiscalBillRepository.findLatestByOrgAndOrderAndType(
+                ORG_ID, "ORD-TRAIN", FiscalBillService.INVOICE_TYPE_TRAINING, FiscalBillService.TRANSACTION_TYPE_SALE))
+                .thenReturn(Optional.of(existing));
+        when(taxAuthorityService.call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString()))
+                .thenReturn(TA_SUCCESS_RESPONSE);
+
+        FiscalBillService.ManualFiscalBillRequest request = new FiscalBillService.ManualFiscalBillRequest(
+                "ORD-TRAIN", null, null, false,
+                FiscalBillService.INVOICE_TYPE_TRAINING, FiscalBillService.TRANSACTION_TYPE_SALE,
+                null, null, null, null,
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                null, null, null);
+
+        FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createManualFiscalBill(
+                ORG_ID, CLIENT_ID, "key-train-repeat", request);
+
+        assertEquals(FiscalBillService.STATUS_SUCCESS, result.fiscalBill().status());
+    }
+
+    @Test
+    void createFiscalBillFromOrder_allowsRepeatedTrainingBillForSameOrder() {
+        var existing = new FiscalBillEntity();
+        existing.setStatus(FiscalBillService.STATUS_SUCCESS);
+        when(fiscalBillRepository.findLatestByOrgAndOrderAndType(
+                ORG_ID, "ORD-TRAIN", FiscalBillService.INVOICE_TYPE_TRAINING, FiscalBillService.TRANSACTION_TYPE_SALE))
+                .thenReturn(Optional.of(existing));
+
+        FiscalBillService.OrderFiscalizeRequest orderData = new FiscalBillService.OrderFiscalizeRequest(
+                "ORD-TRAIN", null, null, false, null, null, null,
+                List.of(),
+                "cashier", null, null, null, null);
+
+        // Past the duplicate check the empty item list is rejected; a 409 would mean training was still blocked.
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createFiscalBillFromOrder(ORG_ID, CLIENT_ID, "key-train-order", "ORD-TRAIN",
+                        FiscalBillService.INVOICE_TYPE_TRAINING, FiscalBillService.TRANSACTION_TYPE_SALE, orderData));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals("Order has no line items to fiscalize", ex.getReason());
+    }
+
+    @Test
+    void createFiscalBillFromOrder_rejectsDuplicateNormalSaleForSameOrder() {
+        var existing = new FiscalBillEntity();
+        existing.setStatus(FiscalBillService.STATUS_SUCCESS);
+        when(fiscalBillRepository.findLatestByOrgAndOrderAndType(
+                ORG_ID, "ORD-DUP", FiscalBillService.INVOICE_TYPE_NORMAL, FiscalBillService.TRANSACTION_TYPE_SALE))
+                .thenReturn(Optional.of(existing));
+
+        FiscalBillService.OrderFiscalizeRequest orderData = new FiscalBillService.OrderFiscalizeRequest(
+                "ORD-DUP", null, null, false, null, null, null,
+                List.of(item("Product", "100.00")),
+                "cashier", null, null, null, null);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createFiscalBillFromOrder(ORG_ID, CLIENT_ID, "key-dup-order", "ORD-DUP",
+                        FiscalBillService.INVOICE_TYPE_NORMAL, FiscalBillService.TRANSACTION_TYPE_SALE, orderData));
+
+        assertEquals(409, ex.getStatusCode().value());
+    }
+
+    @Test
     void createManualFiscalBill_rejectsEmptyItems() {
         FiscalBillService.ManualFiscalBillRequest request = manualRequest(
                 null,

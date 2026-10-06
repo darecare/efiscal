@@ -46,7 +46,7 @@ Reference-only implementation sources:
 ### 4.1 Order-Based Fiscalization
 1. User fetches and filters orders.
 2. User selects one or more orders for fiscalization.
-3. System validates mandatory fiscal fields.
+3. System validates mandatory fiscal fields and rejects (`409`) a second successful bill for the same order + `invoiceType` + `transactionType`. Training bills (`invoiceType` 3) are exempt and may be issued any number of times per order.
 4. System creates fiscal request with idempotency key.
 5. System calls Serbian Tax Authority Create Invoice endpoint.
 6. System persists response payload and status.
@@ -172,7 +172,7 @@ Users will use page to create manually fiscal bill and send it to Tax Authority 
 - Persisted on `fiscalbill.customer_costcenterid`. When non-empty, PDFs show label `pdf.optionalBuyerField` + value below customer ID.
 
 2. Optional - Sales Order ID - when provided on manual creation, the backend applies **order-linked fiscal-chain checks** scoped to the selected organization:
-   - Duplicate protection for the same `orderId` + `invoiceType` + `transactionType`.
+   - Duplicate protection for the same `orderId` + `invoiceType` + `transactionType` (same rule as §4.1; Training `invoiceType` 3 is exempt).
    - Advance-close chain: if creating Normal Sale and prior Advance Sale bills exist for the order, an Advance Refund is created first (using manual line item tax labels).
    - Automatic referent document resolution per §4.1.4 when `referentDocumentNumber` is not supplied.
    - Does **not** fetch MerchantPro order data or validate order line items; use order-based fiscalization (§4.1) for full MerchantPro integration.

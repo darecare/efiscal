@@ -161,6 +161,7 @@ Subscription behavior:
   - `items[].totalPaid` - optional; for Advance Sale (`invoiceType` 4 + `transactionType` 0), when omitted the server sets it to `totalAmount`. Persisted on `fiscalbillline.total_paid`. Used for Tax Authority item amounts (tax-grouped).
   - `shippingAmount` / `shippingTaxPercent` - optional; from MerchantPro `shipping_amount` / `shipping_tax_percent`. The UI sends them only when the order has product lines and `shippingAmount > 0`. When the organization has `includeShipment = true`, the server appends one line (quantity 1, unit price = total = `shippingAmount`) using the org's shipping product (`product.is_shipment`) for name/GTIN/SKU/productId; the tax rate is `shippingTaxPercent` resolved through the same tax-category mapping as the order lines. Applies to every from-order invoice type.
 - Errors (in addition to the standard set):
+  - `409` `Fiscal bill already exists for order {orderId} with invoiceType={n} transactionType={n}` - a `SUCCESS` bill already exists for the same org + order + `invoiceType` + `transactionType`. Not applied to Training (`invoiceType` 3), which may be issued repeatedly for the same order.
   - `400` `Nije pronadjen proizvod definisan za isporuku` - shipping must be included (`includeShipment = true`, `shippingAmount > 0`) but the org has no non-deleted product with `isShipment = true`.
 - 201 Response (create): same `FiscalBillView` fields as other create endpoints, plus:
   - `emailStatus` - `NOT_REQUESTED` | `SENT` | `SKIPPED` | `FAILED` (null on non-create responses such as GET/retry)
@@ -572,6 +573,34 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 - 200 Response: No content
 - Errors: `400` (unsupported language), `401`, `404`, `500`
 
+### PUT /users/me
+- Description: Update the authenticated user's own name and email from the Account page. Requires action `ACCOUNT_ACCESS` (no `USERS_MANAGE`).
+- Request:
+```json
+{
+  "fullName": "Petar Petrović",
+  "email": "petar@example.com"
+}
+```
+- Both fields are required and trimmed; max 255 characters each; `email` must look like `local@domain.tld`.
+- Changing `email` changes the login identifier. The current session stays valid (sessions are keyed by user id); the next login must use the new email.
+- 200 Response: the updated user object (same shape as `GET /users/{userId}`).
+- Errors: `400` (`Full name is required`, `Email is required`, `Invalid email format`, length), `401`, `403` (missing `ACCOUNT_ACCESS`), `404` (user inactive or deleted), `409` (`Email already in use`, including soft-deleted accounts), `500`
+
+### PUT /users/me/password
+- Description: Set a new password for the authenticated user from the Account page Edit Password modal. Requires action `ACCOUNT_ACCESS`. The current password is not requested.
+- Request:
+```json
+{
+  "newPassword": "new-secret",
+  "confirmPassword": "new-secret"
+}
+```
+- `newPassword` must be 6–100 characters and equal `confirmPassword`. Stored as a bcrypt hash; never logged or returned.
+- Existing sessions are not revoked.
+- 204 Response: No content
+- Errors: `400` (`New password is required`, `Password must be between 6 and 100 characters`, `Passwords do not match`), `401`, `403` (missing `ACCOUNT_ACCESS`), `404`, `500`
+
 ### GET /users/{userId}
 - Description: Get detailed user profile by user ID.
 - 200 Response: Single user object matching the shape above.
@@ -836,7 +865,7 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 - `buyerCostCenterId` (optional, nullable): Optional customer field for Tax Authority (`buyerCostCenterId`), for example `30:099999999`. Included in the CREATE_INVOICE JSON only when `buyerId` is also present.
 - Backward compatibility: clients may still send `buyerType` + `buyerVat`; backend derives `buyerId` as `<buyerType>:<buyerVat>` when `buyerId` is not explicitly provided.
 - `referentDocumentNumber` (optional, nullable): Reference document number for Copy, Refund, chained Advance, or close-advance flows. When provided, the backend looks up the referenced fiscal bill in the same organization by Tax Authority invoice number (`efiscal_sdc_invoiceno`) and populates both `referentDocumentNumber` and `referentDocumentDT` in the Tax Authority request. Returns `400` if the referenced bill is not found or is missing datetime.
-- `orderId` (optional, nullable): When provided, the backend applies **order-linked fiscal-chain checks** scoped to `orgId`: duplicate protection for the same `orderId` + `invoiceType` + `transactionType`, advance-close chain (Normal Sale after prior Advance Sale bills), and automatic referent-field resolution when `referentDocumentNumber` is omitted. Does **not** fetch or validate MerchantPro order data; use `POST /fiscalbill/from-order` for full order-based fiscalization.
+- `orderId` (optional, nullable): When provided, the backend applies **order-linked fiscal-chain checks** scoped to `orgId`: duplicate protection for the same `orderId` + `invoiceType` + `transactionType` (not applied to Training, `invoiceType` 3), advance-close chain (Normal Sale after prior Advance Sale bills), and automatic referent-field resolution when `referentDocumentNumber` is omitted. Does **not** fetch or validate MerchantPro order data; use `POST /fiscalbill/from-order` for full order-based fiscalization.
 - Payment total validation: sum of `payments[].amount` must equal the fiscal bill total (tolerance `0.01`). For Advance Sale the bill total is `sum(items[].totalPaid)`; otherwise `sum(items[].totalAmount)`. Each payment amount must be positive. Returns `400` with message `Payment total does not match fiscal bill total` on mismatch.
 - `items[].totalPaid` (Advance Sale): required; must be non-negative and `<= totalAmount`. Tax Authority CREATE_INVOICE advance lines are grouped by tax label summing `totalPaid`.
 - Advance Sale with `referentDocumentNumber`: referent (and its chain via `referent_fiscalbill_id`) must be Advance Sale bills with matching products/line counts; `sum(total_paid)` across the chain plus the new `totalPaid` must be `<=` each line’s `totalAmount`.
