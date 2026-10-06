@@ -154,14 +154,7 @@ public class FiscalBillService {
             return FiscalBillCreateResult.ofAlreadyExists(toView(existingKey.get().getFiscalBill()));
         }
 
-        // Check duplicate (same order + invoiceType + transactionType), scoped to org
-        Optional<FiscalBillEntity> duplicate = fiscalBillRepository
-                .findLatestByOrgAndOrderAndType(orgId, orderId, invoiceType, transactionType);
-        if (duplicate.isPresent() && STATUS_SUCCESS.equals(duplicate.get().getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Fiscal bill already exists for order " + orderId +
-                    " with invoiceType=" + invoiceType + " transactionType=" + transactionType);
-        }
+        requireNoDuplicateOrderBill(orgId, orderId, invoiceType, transactionType);
 
         // Resolve order item tax labels before any dependent flow (including advance-refund chain).
         List<FiscalBillItemRequest> orderItems = appendShipmentLineIfApplicable(orgId, orderData);
@@ -1280,13 +1273,23 @@ public class FiscalBillService {
      * Enforces duplicate protection scoped to organization; does not fetch MerchantPro order data.
      */
     private void applyManualOrderLinkedChecks(Long orgId, String orderId, ManualFiscalBillRequest request) {
+        requireNoDuplicateOrderBill(orgId, orderId, request.invoiceType(), request.transactionType());
+    }
+
+    /**
+     * Rejects a second successful bill for the same order + invoiceType + transactionType (org-scoped).
+     * Training bills (invoiceType 3) are exempt: they may be issued any number of times per order.
+     */
+    private void requireNoDuplicateOrderBill(Long orgId, String orderId, int invoiceType, int transactionType) {
+        if (invoiceType == INVOICE_TYPE_TRAINING) {
+            return;
+        }
         Optional<FiscalBillEntity> duplicate = fiscalBillRepository
-                .findLatestByOrgAndOrderAndType(orgId, orderId, request.invoiceType(), request.transactionType());
+                .findLatestByOrgAndOrderAndType(orgId, orderId, invoiceType, transactionType);
         if (duplicate.isPresent() && STATUS_SUCCESS.equals(duplicate.get().getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Fiscal bill already exists for order " + orderId +
-                    " with invoiceType=" + request.invoiceType() +
-                    " transactionType=" + request.transactionType());
+                    " with invoiceType=" + invoiceType + " transactionType=" + transactionType);
         }
     }
 

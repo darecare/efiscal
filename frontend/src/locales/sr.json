@@ -44,6 +44,7 @@
     "selectAllTypesPlaceholder": "— Svi tipovi —",
     "selectAllStatusesPlaceholder": "— Svi statusi —",
     "permissionDenied": "Nemate dozvolu za pristup ovoj stranici.",
+    "noAccessiblePages": "Vaša uloga ne daje pristup nijednoj stranici. Obratite se administratoru.",
     "operationFailed": "Operacija nije uspela",
     "paginationInfo": "Strana {{current}} od {{total}} — {{records}} zapisa",
     "prev": "‹ Prethodna",
@@ -151,7 +152,21 @@
     "clientLabel": "Klijent",
     "expiresLabel": "Ističe",
     "noExpiry": "Bez isteka",
-    "preferredLanguageLabel": "Željeni jezik"
+    "preferredLanguageLabel": "Željeni jezik",
+    "nameRequired": "Ime je obavezno",
+    "emailRequired": "Email je obavezan",
+    "emailChangeHint": "Nakon čuvanja, prijavite se novim email-om.",
+    "profileSaved": "Podaci naloga su uspešno sačuvani",
+    "profileSaveFailed": "Greška prilikom čuvanja podataka naloga",
+    "editPassword": "Izmenite lozinku",
+    "editPasswordTitle": "Izmena lozinke",
+    "newPasswordLabel": "Unesite novu lozinku",
+    "confirmPasswordLabel": "Ponovite novu lozinku",
+    "passwordBothRequired": "Unesite novu lozinku u oba polja",
+    "passwordTooShort": "Lozinka mora imati najmanje {{min}} karaktera",
+    "passwordMismatch": "Lozinke se ne podudaraju",
+    "passwordChanged": "Lozinka je uspešno promenjena",
+    "passwordChangeFailed": "Greška prilikom čuvanja nove lozinke"
   },
   "clients": {
     "title": "Klijenti",
@@ -299,7 +314,8 @@
       "USERS_MANAGE": "Upravljanje korisnicima",
       "ROLES_MANAGE": "Upravljanje ulogama",
       "ORGS_MANAGE": "Upravljanje organizacijama",
-      "FISCAL_MANAGE_PRODUCTS": "Upravljanje proizvodima"
+      "FISCAL_MANAGE_PRODUCTS": "Upravljanje proizvodima",
+      "ACCOUNT_ACCESS": "Stranica naloga"
     },
     "permissionDescriptions": {
       "FISCAL_CREATE_BILL": "Dozvoljava izdavanje novih fiskalnih računa",
@@ -309,7 +325,8 @@
       "USERS_MANAGE": "Dozvoljava kreiranje i izmenu korisnika",
       "ROLES_MANAGE": "Dozvoljava kreiranje i izmenu uloga",
       "ORGS_MANAGE": "Dozvoljava upravljanje organizacijama i API podešavanjima",
-      "FISCAL_MANAGE_PRODUCTS": "Dozvoljava upravljanje kataloga proizvoda i sinhronizaciju iz prodavnice"
+      "FISCAL_MANAGE_PRODUCTS": "Dozvoljava upravljanje kataloga proizvoda i sinhronizaciju iz prodavnice",
+      "ACCOUNT_ACCESS": "Dozvoljava otvaranje stranice naloga i izmenu sopstvenog imena, email-a i lozinke"
     }
   },
   "apiConfig": {

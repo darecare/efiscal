@@ -37,7 +37,7 @@ export default function App() {
       <SyncProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
+        <Route path="/account" element={guarded(<Account />, { action: 'ACCOUNT_ACCESS' })} />
         <Route path="/users" element={guarded(<Users />, { action: 'USERS_MANAGE' })} />
         <Route path="/roles" element={guarded(<Roles />, { actions: ['ROLES_MANAGE', 'USERS_MANAGE'] })} />
         <Route path="/clients" element={guarded(<Clients />, { requireSuperAdmin: true })} />

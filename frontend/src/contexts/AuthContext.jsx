@@ -73,8 +73,14 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  async function refreshUser() {
+    const fresh = await authApi.me()
+    setUser(fresh)
+    return fresh
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, logout, notification, showNotification, clearNotification }}>
+    <AuthContext.Provider value={{ user, loading, error, login, logout, refreshUser, notification, showNotification, clearNotification }}>
       {children}
     </AuthContext.Provider>
   )

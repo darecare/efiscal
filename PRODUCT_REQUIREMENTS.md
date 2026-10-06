@@ -118,6 +118,7 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - FR-005: System must provide transaction status visibility to users.
 - FR-006: System must allow safe retry for transient external API failures.
 - FR-007: System must reuse the current look-and-feel baseline of the Account page from Kliklak_Dashboard, with extension points for additional eFiscal fields.
+- FR-007A: Access to the Account page is a role permission (`ACCOUNT_ACCESS`). On the Account page the logged-in user can change their own name and email, and set a new password through an Edit Password modal (new password entered twice, must match; Save / Cancel). The user sees "Password is successfully changed" on success and "Error while saving new password" on failure.
 - FR-008: System must reuse the current look-and-feel baseline of the Users page from Kliklak_Dashboard for user management operations.
 - FR-009: System must reuse the Orders page structure from Kliklak_Dashboard for these sections: Fetch Filters, Actions Bar, and Orders Summary Table view.
 - FR-010: System must provide a dedicated Role Definition page for creating and maintaining roles.

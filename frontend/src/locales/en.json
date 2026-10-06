@@ -44,6 +44,7 @@
     "selectAllTypesPlaceholder": "— All types —",
     "selectAllStatusesPlaceholder": "— All statuses —",
     "permissionDenied": "You do not have permission to access this page.",
+    "noAccessiblePages": "Your role does not grant access to any page. Contact your administrator.",
     "operationFailed": "Operation failed",
     "paginationInfo": "Page {{current}} of {{total}} — {{records}} records",
     "prev": "‹ Prev",
@@ -142,7 +143,21 @@
     "clientLabel": "Client",
     "expiresLabel": "Expires",
     "noExpiry": "No expiry",
-    "preferredLanguageLabel": "Preferred Language"
+    "preferredLanguageLabel": "Preferred Language",
+    "nameRequired": "Name is required",
+    "emailRequired": "Email is required",
+    "emailChangeHint": "After saving, sign in with the new email.",
+    "profileSaved": "Account details saved successfully",
+    "profileSaveFailed": "Error while saving account details",
+    "editPassword": "Edit Password",
+    "editPasswordTitle": "Edit Password",
+    "newPasswordLabel": "Enter New Password",
+    "confirmPasswordLabel": "Re-enter New Password",
+    "passwordBothRequired": "Enter the new password in both fields",
+    "passwordTooShort": "Password must be at least {{min}} characters",
+    "passwordMismatch": "Passwords do not match",
+    "passwordChanged": "Password is successfully changed",
+    "passwordChangeFailed": "Error while saving new password"
   },
   "clients": {
     "title": "Clients",
@@ -290,7 +305,8 @@
       "USERS_MANAGE": "Manage Users",
       "ROLES_MANAGE": "Manage Roles",
       "ORGS_MANAGE": "Manage Organizations",
-      "FISCAL_MANAGE_PRODUCTS": "Manage Products"
+      "FISCAL_MANAGE_PRODUCTS": "Manage Products",
+      "ACCOUNT_ACCESS": "Account Page"
     },
     "permissionDescriptions": {
       "FISCAL_CREATE_BILL": "Allows issuing new fiscal bills",
@@ -300,7 +316,8 @@
       "USERS_MANAGE": "Allows creating and editing users",
       "ROLES_MANAGE": "Allows creating and editing roles",
       "ORGS_MANAGE": "Allows managing organizations and API settings",
-      "FISCAL_MANAGE_PRODUCTS": "Allows managing product catalog and syncing from shop"
+      "FISCAL_MANAGE_PRODUCTS": "Allows managing product catalog and syncing from shop",
+      "ACCOUNT_ACCESS": "Allows opening the Account page and editing own name, email and password"
     }
   },
   "apiConfig": {

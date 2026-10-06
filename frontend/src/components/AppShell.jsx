@@ -253,9 +253,9 @@ const getNavItems = (user) => {
     },
     {
       labelKey: 'nav.administration',
-      show: hasAnyAction(user, ['USERS_MANAGE', 'ROLES_MANAGE', 'ORGS_MANAGE']) || user?.roleName === 'SUPERADMIN',
+      show: hasAnyAction(user, ['ACCOUNT_ACCESS', 'USERS_MANAGE', 'ROLES_MANAGE', 'ORGS_MANAGE']) || user?.roleName === 'SUPERADMIN',
       children: [
-        { path: '/account', labelKey: 'nav.account', show: true },
+        { path: '/account', labelKey: 'nav.account', show: can('ACCOUNT_ACCESS') },
         { path: '/users', labelKey: 'nav.user', show: can('USERS_MANAGE') },
         { path: '/roles', labelKey: 'nav.rolesPermissions', show: hasAnyAction(user, ['ROLES_MANAGE', 'USERS_MANAGE']) },
         { path: '/organizations', labelKey: 'nav.organization', show: can('ORGS_MANAGE') },
