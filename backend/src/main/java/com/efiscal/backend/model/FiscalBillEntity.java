@@ -105,8 +105,13 @@ public class FiscalBillEntity {
     @Column(name = "efiscal_code", length = 1)
     private String efiscalCode;
 
-    @Column(name = "efiscal_name", length = 50)
-    private String efiscalName;
+    /** Tax Authority response field locationName */
+    @Column(name = "efiscal_locationname", length = 50)
+    private String efiscalLocationname;
+
+    /** Tax Authority response field district */
+    @Column(name = "efiscal_district", length = 50)
+    private String efiscalDistrict;
 
     // --- Invoice type/transaction type ---
     /** 0=Normal, 1=Proforma, 2=Copy, 3=Training, 4=Advance */
@@ -120,12 +125,31 @@ public class FiscalBillEntity {
     @Column(name = "efiscal_type", length = 2)
     private String efiscalType;
 
-    @Column(name = "efiscal_customername", length = 100)
-    private String efiscalCustomername;
+    @Column(name = "customer_name", length = 100)
+    private String customerName;
 
-    // --- Order reference (external order id from e-commerce platform) ---
+    @Column(name = "customer_email", length = 255)
+    private String customerEmail;
+
+    /** Tax Authority buyerId as prepared for the request (e.g. "10:123456789"). */
+    @Column(name = "customer_id", length = 64)
+    private String customerId;
+
+    /** Tax Authority buyerCostCenterId (optional customer field, e.g. "30:099999999"). */
+    @Column(name = "customer_costcenterid", length = 128)
+    private String customerCostCenterId;
+
+    /** Tax Authority dateAndTimeOfIssue as sent — advance payment moment; Advance Sale only. */
+    @Column(name = "dateandtimeofissue", length = 50)
+    private String dateAndTimeOfIssue;
+
+    // --- Order reference (external order id from e-commerce platform; optional for manual bills) ---
     @Column(name = "order_id", length = 64)
     private String orderId;
+
+    /** Local fiscal bill used as Tax Authority referent document (when applicable). */
+    @Column(name = "referent_fiscalbill_id")
+    private Long referentFiscalbillId;
 
     // --- Legacy audit fields ---
     @Column(name = "value", length = 40)
@@ -241,8 +265,11 @@ public class FiscalBillEntity {
     public String getEfiscalCode() { return efiscalCode; }
     public void setEfiscalCode(String v) { this.efiscalCode = v; }
 
-    public String getEfiscalName() { return efiscalName; }
-    public void setEfiscalName(String v) { this.efiscalName = v; }
+    public String getEfiscalLocationname() { return efiscalLocationname; }
+    public void setEfiscalLocationname(String v) { this.efiscalLocationname = v; }
+
+    public String getEfiscalDistrict() { return efiscalDistrict; }
+    public void setEfiscalDistrict(String v) { this.efiscalDistrict = v; }
 
     public Integer getEfiscalInvoicetype() { return efiscalInvoicetype; }
     public void setEfiscalInvoicetype(Integer v) { this.efiscalInvoicetype = v; }
@@ -253,11 +280,25 @@ public class FiscalBillEntity {
     public String getEfiscalType() { return efiscalType; }
     public void setEfiscalType(String v) { this.efiscalType = v; }
 
-    public String getEfiscalCustomername() { return efiscalCustomername; }
-    public void setEfiscalCustomername(String v) { this.efiscalCustomername = v; }
+    public String getCustomerName() { return customerName; }
+    public void setCustomerName(String customerName) { this.customerName = customerName; }
+
+    public String getCustomerEmail() { return customerEmail; }
+    public void setCustomerEmail(String customerEmail) { this.customerEmail = customerEmail; }
+
+    public String getCustomerId() { return customerId; }
+    public void setCustomerId(String customerId) { this.customerId = customerId; }
+    public String getCustomerCostCenterId() { return customerCostCenterId; }
+    public void setCustomerCostCenterId(String customerCostCenterId) { this.customerCostCenterId = customerCostCenterId; }
+
+    public String getDateAndTimeOfIssue() { return dateAndTimeOfIssue; }
+    public void setDateAndTimeOfIssue(String dateAndTimeOfIssue) { this.dateAndTimeOfIssue = dateAndTimeOfIssue; }
 
     public String getOrderId() { return orderId; }
     public void setOrderId(String orderId) { this.orderId = orderId; }
+
+    public Long getReferentFiscalbillId() { return referentFiscalbillId; }
+    public void setReferentFiscalbillId(Long referentFiscalbillId) { this.referentFiscalbillId = referentFiscalbillId; }
 
     public String getValue() { return value; }
     public void setValue(String value) { this.value = value; }

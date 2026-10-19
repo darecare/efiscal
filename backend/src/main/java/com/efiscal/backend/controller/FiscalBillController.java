@@ -55,6 +55,8 @@ public class FiscalBillController {
         try {
             return appUserRepository.findById(Long.parseLong(userIdStr))
                     .map(AppUserEntity::getCashier)
+                    .map(String::trim)
+                    .filter(v -> !v.isEmpty())
                     .orElse(null);
         } catch (NumberFormatException e) {
             return null;
@@ -143,6 +145,29 @@ public class FiscalBillController {
                 .body(pdf);
     }
 
+    /** GET /api/v1/fiscalbill/{id}/image — Download fiscal bill image rasterized from the PDF */
+    @GetMapping("/{id}/image")
+    public ResponseEntity<byte[]> downloadFiscalBillImage(
+            @PathVariable Long id,
+            @RequestParam(name = "format", required = false, defaultValue = "a4") String format,
+            @RequestParam(name = "media", required = false, defaultValue = "png") String media) {
+        authorizationService.requireAction("FISCAL_VIEW_BILLS");
+        validateFiscalBill(id);
+        FiscalBillPdfService.PdfTemplateFormat templateFormat = fiscalBillPdfService.parseTemplateFormat(format);
+        FiscalBillPdfService.ImageMedia imageMedia = fiscalBillPdfService.parseImageMedia(media);
+        byte[] image = fiscalBillPdfService.generateImage(id, templateFormat, imageMedia);
+        String suffix = fiscalBillPdfService.filenameSuffix(templateFormat);
+        String extension = fiscalBillPdfService.imageFileExtension(imageMedia);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=fiscal-bill-" + id + "-" + suffix + "." + extension)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0")
+                .header(HttpHeaders.PRAGMA, "no-cache")
+                .header(HttpHeaders.EXPIRES, "0")
+                .contentType(fiscalBillPdfService.imageContentType(imageMedia))
+                .body(image);
+    }
+
     /** GET /api/v1/fiscalbill/{id}/html — Render HTML preview of the selected template */
     @GetMapping(value = "/{id}/html", produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<String> previewFiscalBillHtml(
@@ -186,7 +211,8 @@ public class FiscalBillController {
         List<FiscalBillItemRequest> items = request.items() == null ? List.of() :
                 request.items().stream().map(i -> new FiscalBillItemRequest(
                         i.name(), i.quantity(), i.unitPrice(), i.totalAmount(),
-                i.taxLabel(), i.taxPrefix(), i.gtin(), i.productId(), i.sku(), i.taxValue(), i.taxCategoryName(), i.labels()
+                i.taxLabel(), i.taxPrefix(), i.gtin(), i.productId(), i.sku(), i.taxValue(), i.taxCategoryName(), i.labels(),
+                i.totalPaid()
                 )).toList();
 
         OrderFiscalizeRequest orderData = new OrderFiscalizeRequest(
@@ -194,7 +220,11 @@ public class FiscalBillController {
             request.customerEmail(), request.sendEmail(),
                 request.billingType(), request.billingCompanyVat(),
                 request.paymentMethodCode(), items,
-                resolveCurrentUserCashier());
+                resolveCurrentUserCashier(),
+                request.buyerCostCenterId(),
+                request.dateAndTimeOfIssue(),
+                request.shippingAmount(),
+                request.shippingTaxPercent());
 
         FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createFiscalBillFromOrder(
                 orgId, clientId, idempotencyKey,
@@ -234,7 +264,8 @@ public class FiscalBillController {
         List<FiscalBillItemRequest> items = request.items() == null ? List.of() :
                 request.items().stream().map(i -> new FiscalBillItemRequest(
                         i.name(), i.quantity(), i.unitPrice(), i.totalAmount(),
-                i.taxLabel(), i.taxPrefix(), i.gtin(), i.productId(), i.sku(), i.taxValue(), i.taxCategoryName(), i.labels()
+                i.taxLabel(), i.taxPrefix(), i.gtin(), i.productId(), i.sku(), i.taxValue(), i.taxCategoryName(), i.labels(),
+                i.totalPaid()
                 )).toList();
 
         List<PaymentRequest> payments = request.payments() == null ? List.of() :
@@ -246,9 +277,11 @@ public class FiscalBillController {
                 request.invoiceType(), request.transactionType(),
                 request.buyerId(),
                 request.buyerType(), request.buyerVat(),
+                request.buyerCostCenterId(),
                 items, payments,
                 request.referentDocumentNumber(),
-                resolveCurrentUserCashier());
+                resolveCurrentUserCashier(),
+                request.dateAndTimeOfIssue());
 
         FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createManualFiscalBill(
                 orgId, clientId, idempotencyKey, manualRequest);
@@ -295,7 +328,8 @@ public class FiscalBillController {
             return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));
         }
         validateFiscalBill(id);
-        FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createCopyFiscalBill(id, idempotencyKey);
+        FiscalBillService.FiscalBillCreateResult result =
+                fiscalBillService.createCopyFiscalBill(id, idempotencyKey, resolveCurrentUserCashier());
         if (result.alreadyExists()) {
             return ResponseEntity.ok(result.fiscalBill());
         }
@@ -315,7 +349,8 @@ public class FiscalBillController {
             return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));
         }
         validateFiscalBill(id);
-        FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createRefundFiscalBill(id, idempotencyKey);
+        FiscalBillService.FiscalBillCreateResult result =
+                fiscalBillService.createRefundFiscalBill(id, idempotencyKey, resolveCurrentUserCashier());
         if (result.alreadyExists()) {
             return ResponseEntity.ok(result.fiscalBill());
         }
@@ -341,7 +376,8 @@ public class FiscalBillController {
             String sku,
             BigDecimal taxValue,
             String taxCategoryName,
-            List<String> labels) {}
+            List<String> labels,
+            BigDecimal totalPaid) {} // Advance Sale amount paid; optional
 
     public record PaymentRowRequest(int paymentType, BigDecimal amount) {}
 
@@ -355,7 +391,11 @@ public class FiscalBillController {
             String billingType,
             String billingCompanyVat,
             String paymentMethodCode,
-            List<ItemRequest> items) {}
+            List<ItemRequest> items,
+            String buyerCostCenterId,
+            String dateAndTimeOfIssue,     // optional advance payment moment; Advance Sale only
+            BigDecimal shippingAmount,     // optional order shipping_amount
+            BigDecimal shippingTaxPercent) {} // optional order shipping_tax_percent
 
     public record CreateManualRequest(
             String orderId,        // optional — links to existing order
@@ -367,9 +407,11 @@ public class FiscalBillController {
             String buyerId,        // optional full buyer id (e.g. "10:123456789")
             String buyerType,      // optional buyer type prefix
             String buyerVat,       // optional company VAT
+            String buyerCostCenterId, // optional customer field (e.g. "30:099999999")
             List<ItemRequest> items,
             List<PaymentRowRequest> payments,
-            String referentDocumentNumber) {}
+            String referentDocumentNumber,
+            String dateAndTimeOfIssue) {} // optional advance payment moment; Advance Sale only
 
     public record ErrorResponse(String message) {}
 }

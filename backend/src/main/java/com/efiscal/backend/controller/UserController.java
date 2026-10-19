@@ -2,7 +2,9 @@ package com.efiscal.backend.controller;
 
 import com.efiscal.backend.security.AuthorizationService;
 import com.efiscal.backend.service.UserManagementService;
+import com.efiscal.backend.service.UserManagementService.ChangeMyPasswordRequest;
 import com.efiscal.backend.service.UserManagementService.CreateUserRequest;
+import com.efiscal.backend.service.UserManagementService.UpdateMyProfileRequest;
 import com.efiscal.backend.service.UserManagementService.UpdateMyLanguageRequest;
 import com.efiscal.backend.service.UserManagementService.UpdateUserRequest;
 import com.efiscal.backend.service.UserManagementService.UserDto;
@@ -38,6 +40,21 @@ public class UserController {
         Long userId = Long.parseLong(authorizationService.requireCurrentUser().id());
         userManagementService.updateMyPreferredLanguage(userId, req.preferredLanguage());
         return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/me")
+    public UserDto updateMyProfile(@RequestBody UpdateMyProfileRequest req) {
+        Long userId = Long.parseLong(authorizationService.requireCurrentUser().id());
+        authorizationService.requireAction("ACCOUNT_ACCESS");
+        return userManagementService.updateMyProfile(userId, req);
+    }
+
+    @PutMapping("/me/password")
+    public ResponseEntity<Void> changeMyPassword(@RequestBody ChangeMyPasswordRequest req) {
+        Long userId = Long.parseLong(authorizationService.requireCurrentUser().id());
+        authorizationService.requireAction("ACCOUNT_ACCESS");
+        userManagementService.changeMyPassword(userId, req);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{userId}")

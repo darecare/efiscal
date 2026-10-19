@@ -44,16 +44,22 @@ public class FiscalBillEmailService {
         this.fiscalBillPdfService = fiscalBillPdfService;
     }
 
-    public void sendIfRequested(Long orgId, FiscalBillEntity bill, boolean sendEmail, String customerEmail,
+    /**
+     * Attempt to send the fiscal bill email when requested.
+     *
+     * @return outcome: {@code NOT_REQUESTED}, {@code SENT}, {@code SKIPPED}, or {@code FAILED}
+     */
+    public EmailSendResult sendIfRequested(Long orgId, FiscalBillEntity bill, boolean sendEmail, String customerEmail,
             String customerName, String orderId) {
         if (!sendEmail) {
-            return;
+            return EmailSendResult.notRequested();
         }
 
         String recipient = customerEmail == null ? "" : customerEmail.trim();
         if (recipient.isBlank()) {
-            logEmail(orgId, bill, orderId, recipient, null, null, null, "SKIPPED", "Customer email is missing");
-            return;
+            String reason = "Customer email is missing";
+            logEmail(orgId, bill, orderId, recipient, null, null, null, "SKIPPED", reason);
+            return EmailSendResult.skipped(reason);
         }
 
         try {
@@ -80,9 +86,30 @@ public class FiscalBillEmailService {
             mailSender.send(message);
 
             logEmail(orgId, bill, orderId, recipient, template.getTemplateName(), subject, body, "SENT", null);
+            return EmailSendResult.sent();
         } catch (Exception ex) {
             log.warn("Failed to send fiscal bill email for bill {}: {}", bill.getFiscalbillId(), ex.getMessage());
             logEmail(orgId, bill, orderId, recipient, null, null, null, "FAILED", ex.getMessage());
+            return EmailSendResult.failed(ex.getMessage());
+        }
+    }
+
+    /** Outcome of an optional post-create email send. */
+    public record EmailSendResult(String status, String errorMessage) {
+        public static EmailSendResult notRequested() {
+            return new EmailSendResult("NOT_REQUESTED", null);
+        }
+
+        public static EmailSendResult sent() {
+            return new EmailSendResult("SENT", null);
+        }
+
+        public static EmailSendResult skipped(String reason) {
+            return new EmailSendResult("SKIPPED", reason);
+        }
+
+        public static EmailSendResult failed(String errorMessage) {
+            return new EmailSendResult("FAILED", errorMessage);
         }
     }
 
@@ -160,8 +187,8 @@ public class FiscalBillEmailService {
 
     private Map<String, String> buildTemplateValues(FiscalBillEntity bill, String orderId, String customerName) {
         Map<String, String> values = new HashMap<>();
-        values.put("customername", safe(customerName != null ? customerName : bill.getEfiscalCustomername()));
-        values.put("customer_name", safe(customerName != null ? customerName : bill.getEfiscalCustomername()));
+        values.put("customername", safe(customerName != null ? customerName : bill.getCustomerName()));
+        values.put("customer_name", safe(customerName != null ? customerName : bill.getCustomerName()));
         values.put("order_id", safe(orderId != null ? orderId : bill.getOrderId()));
         values.put("invoice_number", safe(bill.getEfiscalSdcInvoiceno()));
         values.put("invoicetype", bill.getEfiscalInvoicetype() == null ? "" : String.valueOf(bill.getEfiscalInvoicetype()));

@@ -1,19 +1,24 @@
 package com.efiscal.backend.service;
 
-import com.efiscal.backend.model.FiscalBillConfigEntity;
 import com.efiscal.backend.model.FiscalBillEntity;
+import com.efiscal.backend.model.FiscalBillLineEntity;
+import com.efiscal.backend.model.FiscalBillPayEntity;
+import com.efiscal.backend.model.OrgEntity;
 import com.efiscal.backend.model.TaxEntity;
-import com.efiscal.backend.repository.FiscalBillConfigRepository;
 import com.efiscal.backend.repository.FiscalBillIdempotencyKeyRepository;
 import com.efiscal.backend.repository.FiscalBillLineRepository;
 import com.efiscal.backend.repository.FiscalBillPayRepository;
 import com.efiscal.backend.repository.FiscalBillRepository;
 import com.efiscal.backend.repository.FiscalBillTaxRepository;
+import com.efiscal.backend.repository.OrgRepository;
 import com.efiscal.backend.repository.PayTypeMapRepository;
 import com.efiscal.backend.repository.ProductRepository;
 import com.efiscal.backend.repository.TaxRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
@@ -28,6 +33,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.web.server.ResponseStatusException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -46,6 +52,7 @@ class FiscalBillServiceManualTest {
 
     private static final Long ORG_ID = 1L;
     private static final Long CLIENT_ID = 10L;
+    private static final ZoneId BELGRADE_ZONE = ZoneId.of("Europe/Belgrade");
     private static final String TA_SUCCESS_RESPONSE = """
             {
               "invoiceNumber": "INV-TEST-1",
@@ -61,12 +68,12 @@ class FiscalBillServiceManualTest {
     @Mock private FiscalBillPayRepository fiscalBillPayRepository;
     @Mock private FiscalBillLineRepository fiscalBillLineRepository;
     @Mock private FiscalBillIdempotencyKeyRepository idempotencyKeyRepository;
-    @Mock private FiscalBillConfigRepository fiscalBillConfigRepository;
     @Mock private PayTypeMapRepository payTypeMapRepository;
         @Mock private ProductRepository productRepository;
     @Mock private TaxRepository taxRepository;
     @Mock private TaxAuthorityService taxAuthorityService;
     @Mock private FiscalBillEmailService fiscalBillEmailService;
+    @Mock private OrgRepository orgRepository;
 
     private FiscalBillService fiscalBillService;
     private final AtomicLong nextBillId = new AtomicLong(100L);
@@ -79,13 +86,14 @@ class FiscalBillServiceManualTest {
                 fiscalBillPayRepository,
                 fiscalBillLineRepository,
                 idempotencyKeyRepository,
-                fiscalBillConfigRepository,
                 payTypeMapRepository,
                 productRepository,
                 taxRepository,
                 taxAuthorityService,
                 fiscalBillEmailService,
-                new ObjectMapper()
+                new EsirNumberService("123456", "1.0.0"),
+                new ObjectMapper(),
+                orgRepository
         );
         when(idempotencyKeyRepository.findById(anyString())).thenReturn(Optional.empty());
         when(fiscalBillRepository.save(any(FiscalBillEntity.class))).thenAnswer(invocation -> {
@@ -95,6 +103,8 @@ class FiscalBillServiceManualTest {
             }
             return entity;
         });
+        when(fiscalBillEmailService.sendIfRequested(anyLong(), any(FiscalBillEntity.class), any(Boolean.class), any(), any(), any()))
+                .thenReturn(FiscalBillEmailService.EmailSendResult.sent());
     }
 
     @Test
@@ -136,6 +146,8 @@ class FiscalBillServiceManualTest {
     void createManualFiscalBill_rejectsReferentDocumentMissingDatetime() {
         FiscalBillEntity ref = new FiscalBillEntity();
         ref.setEfiscalSdcInvoiceno("REF-NO-DT");
+        ref.setEfiscalInvoicetype(FiscalBillService.INVOICE_TYPE_NORMAL);
+        ref.setEfiscalTransactiontype(FiscalBillService.TRANSACTION_TYPE_SALE);
         when(fiscalBillRepository.findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
                 ORG_ID, "REF-NO-DT")).thenReturn(Optional.of(ref));
 
@@ -158,9 +170,10 @@ class FiscalBillServiceManualTest {
         FiscalBillEntity ref = new FiscalBillEntity();
         ref.setEfiscalSdcInvoiceno("REF-OK");
         ref.setEfiscalSdcdatetime("2024-05-01T12:00:00+02:00");
+        ref.setEfiscalInvoicetype(FiscalBillService.INVOICE_TYPE_NORMAL);
+        ref.setEfiscalTransactiontype(FiscalBillService.TRANSACTION_TYPE_SALE);
         when(fiscalBillRepository.findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
                 ORG_ID, "REF-OK")).thenReturn(Optional.of(ref));
-        stubConfig();
         when(taxAuthorityService.call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString()))
                 .thenReturn(TA_SUCCESS_RESPONSE);
 
@@ -178,6 +191,193 @@ class FiscalBillServiceManualTest {
         verify(taxAuthorityService).call(eq(ORG_ID), eq("CREATE_INVOICE"), bodyCaptor.capture());
         assertTrue(bodyCaptor.getValue().contains("\"referentDocumentNumber\":\"REF-OK\""));
         assertTrue(bodyCaptor.getValue().contains("\"referentDocumentDT\":\"2024-05-01T12:00:00+02:00\""));
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsCopySaleWhenReferentIsNotNormalOrAdvanceSale() {
+        FiscalBillEntity ref = typedReferent("REF-TRAINING-SALE",
+                FiscalBillService.INVOICE_TYPE_TRAINING, FiscalBillService.TRANSACTION_TYPE_SALE);
+        when(fiscalBillRepository.findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
+                ORG_ID, "REF-TRAINING-SALE")).thenReturn(Optional.of(ref));
+
+        FiscalBillService.ManualFiscalBillRequest request = copyRequest(
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                "REF-TRAINING-SALE"
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-copy-sale-bad-ref", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals(
+                "Referentni dokument za Kopiju Prodaje mora biti Normalna ili Avans Prodaja",
+                ex.getReason());
+        verify(fiscalBillRepository, never()).save(any());
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsNormalRefundWhenReferentIsNotNormalSale() {
+        FiscalBillEntity ref = typedReferent("REF-ADV-SALE",
+                FiscalBillService.INVOICE_TYPE_ADVANCE, FiscalBillService.TRANSACTION_TYPE_SALE);
+        when(fiscalBillRepository.findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
+                ORG_ID, "REF-ADV-SALE")).thenReturn(Optional.of(ref));
+
+        FiscalBillService.ManualFiscalBillRequest request = typedManualRequest(
+                FiscalBillService.INVOICE_TYPE_NORMAL,
+                FiscalBillService.TRANSACTION_TYPE_REFUND,
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                "REF-ADV-SALE"
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-normal-refund-bad-ref", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals(
+                "Referentni dokument za Normalnu Refundaciju mora biti Normalna Prodaja",
+                ex.getReason());
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsTrainingRefundWhenReferentIsNotTrainingSale() {
+        FiscalBillEntity ref = typedReferent("REF-NORMAL-SALE",
+                FiscalBillService.INVOICE_TYPE_NORMAL, FiscalBillService.TRANSACTION_TYPE_SALE);
+        when(fiscalBillRepository.findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
+                ORG_ID, "REF-NORMAL-SALE")).thenReturn(Optional.of(ref));
+
+        FiscalBillService.ManualFiscalBillRequest request = typedManualRequest(
+                FiscalBillService.INVOICE_TYPE_TRAINING,
+                FiscalBillService.TRANSACTION_TYPE_REFUND,
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                "REF-NORMAL-SALE"
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-training-refund-bad-ref", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals(
+                "Referentni dokument za Trening Refundaciju mora biti Trening Prodaja",
+                ex.getReason());
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsAdvanceRefundWhenReferentIsNotAdvanceSale() {
+        FiscalBillEntity ref = typedReferent("REF-NORMAL-SALE-2",
+                FiscalBillService.INVOICE_TYPE_NORMAL, FiscalBillService.TRANSACTION_TYPE_SALE);
+        when(fiscalBillRepository.findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
+                ORG_ID, "REF-NORMAL-SALE-2")).thenReturn(Optional.of(ref));
+
+        FiscalBillService.ManualFiscalBillRequest request = typedManualRequest(
+                FiscalBillService.INVOICE_TYPE_ADVANCE,
+                FiscalBillService.TRANSACTION_TYPE_REFUND,
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                "REF-NORMAL-SALE-2"
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-adv-refund-bad-ref", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals(
+                "Referentni dokument za Avans Refundaciju mora biti Avans Prodaja",
+                ex.getReason());
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsProformaRefundWhenReferentIsNotProformaSale() {
+        FiscalBillEntity ref = typedReferent("REF-NORMAL-SALE-3",
+                FiscalBillService.INVOICE_TYPE_NORMAL, FiscalBillService.TRANSACTION_TYPE_SALE);
+        when(fiscalBillRepository.findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
+                ORG_ID, "REF-NORMAL-SALE-3")).thenReturn(Optional.of(ref));
+
+        FiscalBillService.ManualFiscalBillRequest request = typedManualRequest(
+                FiscalBillService.INVOICE_TYPE_PROFORMA,
+                FiscalBillService.TRANSACTION_TYPE_REFUND,
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                "REF-NORMAL-SALE-3"
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-proforma-refund-bad-ref", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals(
+                "Referentni dokument za Predračun Refundaciju mora biti Predračun Prodaja",
+                ex.getReason());
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsCopyRefundWhenReferentIsNotNormalOrAdvanceRefund() {
+        FiscalBillEntity ref = typedReferent("REF-NORMAL-SALE-4",
+                FiscalBillService.INVOICE_TYPE_NORMAL, FiscalBillService.TRANSACTION_TYPE_SALE);
+        when(fiscalBillRepository.findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
+                ORG_ID, "REF-NORMAL-SALE-4")).thenReturn(Optional.of(ref));
+
+        FiscalBillService.ManualFiscalBillRequest request = typedManualRequest(
+                FiscalBillService.INVOICE_TYPE_COPY,
+                FiscalBillService.TRANSACTION_TYPE_REFUND,
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                "REF-NORMAL-SALE-4"
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-copy-refund-bad-ref", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals(
+                "Referentni dokument za Kopiju Refundacije mora biti Normalna ili Avans Refundacija",
+                ex.getReason());
+    }
+
+    @Test
+    void createManualFiscalBill_acceptsCopySaleWithAdvanceSaleReferent() throws Exception {
+        FiscalBillEntity ref = typedReferent("REF-ADV-OK",
+                FiscalBillService.INVOICE_TYPE_ADVANCE, FiscalBillService.TRANSACTION_TYPE_SALE);
+        when(fiscalBillRepository.findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
+                ORG_ID, "REF-ADV-OK")).thenReturn(Optional.of(ref));
+        when(taxAuthorityService.call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString()))
+                .thenReturn(TA_SUCCESS_RESPONSE);
+
+        FiscalBillService.ManualFiscalBillRequest request = copyRequest(
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                "REF-ADV-OK"
+        );
+
+        FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createManualFiscalBill(
+                ORG_ID, CLIENT_ID, "key-copy-sale-adv-ok", request);
+
+        assertEquals(FiscalBillService.STATUS_SUCCESS, result.fiscalBill().status());
+    }
+
+    @Test
+    void createManualFiscalBill_acceptsNormalRefundWithNormalSaleReferent() throws Exception {
+        FiscalBillEntity ref = typedReferent("REF-NS-OK",
+                FiscalBillService.INVOICE_TYPE_NORMAL, FiscalBillService.TRANSACTION_TYPE_SALE);
+        when(fiscalBillRepository.findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
+                ORG_ID, "REF-NS-OK")).thenReturn(Optional.of(ref));
+        when(taxAuthorityService.call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString()))
+                .thenReturn(TA_SUCCESS_RESPONSE);
+
+        FiscalBillService.ManualFiscalBillRequest request = typedManualRequest(
+                FiscalBillService.INVOICE_TYPE_NORMAL,
+                FiscalBillService.TRANSACTION_TYPE_REFUND,
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                "REF-NS-OK"
+        );
+
+        FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createManualFiscalBill(
+                ORG_ID, CLIENT_ID, "key-normal-refund-ok", request);
+
+        assertEquals(FiscalBillService.STATUS_SUCCESS, result.fiscalBill().status());
     }
 
     @Test
@@ -199,6 +399,72 @@ class FiscalBillServiceManualTest {
 
         assertEquals(409, ex.getStatusCode().value());
         verify(fiscalBillRepository, never()).save(any());
+    }
+
+    @Test
+    void createManualFiscalBill_allowsRepeatedTrainingBillForSameOrder() throws Exception {
+        var existing = new FiscalBillEntity();
+        existing.setStatus(FiscalBillService.STATUS_SUCCESS);
+        when(fiscalBillRepository.findLatestByOrgAndOrderAndType(
+                ORG_ID, "ORD-TRAIN", FiscalBillService.INVOICE_TYPE_TRAINING, FiscalBillService.TRANSACTION_TYPE_SALE))
+                .thenReturn(Optional.of(existing));
+        when(taxAuthorityService.call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString()))
+                .thenReturn(TA_SUCCESS_RESPONSE);
+
+        FiscalBillService.ManualFiscalBillRequest request = new FiscalBillService.ManualFiscalBillRequest(
+                "ORD-TRAIN", null, null, false,
+                FiscalBillService.INVOICE_TYPE_TRAINING, FiscalBillService.TRANSACTION_TYPE_SALE,
+                null, null, null, null,
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                null, null, null);
+
+        FiscalBillService.FiscalBillCreateResult result = fiscalBillService.createManualFiscalBill(
+                ORG_ID, CLIENT_ID, "key-train-repeat", request);
+
+        assertEquals(FiscalBillService.STATUS_SUCCESS, result.fiscalBill().status());
+    }
+
+    @Test
+    void createFiscalBillFromOrder_allowsRepeatedTrainingBillForSameOrder() {
+        var existing = new FiscalBillEntity();
+        existing.setStatus(FiscalBillService.STATUS_SUCCESS);
+        when(fiscalBillRepository.findLatestByOrgAndOrderAndType(
+                ORG_ID, "ORD-TRAIN", FiscalBillService.INVOICE_TYPE_TRAINING, FiscalBillService.TRANSACTION_TYPE_SALE))
+                .thenReturn(Optional.of(existing));
+
+        FiscalBillService.OrderFiscalizeRequest orderData = new FiscalBillService.OrderFiscalizeRequest(
+                "ORD-TRAIN", null, null, false, null, null, null,
+                List.of(),
+                "cashier", null, null, null, null);
+
+        // Past the duplicate check the empty item list is rejected; a 409 would mean training was still blocked.
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createFiscalBillFromOrder(ORG_ID, CLIENT_ID, "key-train-order", "ORD-TRAIN",
+                        FiscalBillService.INVOICE_TYPE_TRAINING, FiscalBillService.TRANSACTION_TYPE_SALE, orderData));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals("Order has no line items to fiscalize", ex.getReason());
+    }
+
+    @Test
+    void createFiscalBillFromOrder_rejectsDuplicateNormalSaleForSameOrder() {
+        var existing = new FiscalBillEntity();
+        existing.setStatus(FiscalBillService.STATUS_SUCCESS);
+        when(fiscalBillRepository.findLatestByOrgAndOrderAndType(
+                ORG_ID, "ORD-DUP", FiscalBillService.INVOICE_TYPE_NORMAL, FiscalBillService.TRANSACTION_TYPE_SALE))
+                .thenReturn(Optional.of(existing));
+
+        FiscalBillService.OrderFiscalizeRequest orderData = new FiscalBillService.OrderFiscalizeRequest(
+                "ORD-DUP", null, null, false, null, null, null,
+                List.of(item("Product", "100.00")),
+                "cashier", null, null, null, null);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createFiscalBillFromOrder(ORG_ID, CLIENT_ID, "key-dup-order", "ORD-DUP",
+                        FiscalBillService.INVOICE_TYPE_NORMAL, FiscalBillService.TRANSACTION_TYPE_SALE, orderData));
+
+        assertEquals(409, ex.getStatusCode().value());
     }
 
     @Test
@@ -245,6 +511,7 @@ class FiscalBillServiceManualTest {
                 null,
                 new BigDecimal("20"),
                 null,
+                null,
                 null
         );
 
@@ -279,7 +546,6 @@ class FiscalBillServiceManualTest {
         when(fiscalBillRepository.findByOrgIdAndOrderIdAndInvoiceTypeAndTransactionType(
                 ORG_ID, "ORD-CHAIN", FiscalBillService.INVOICE_TYPE_ADVANCE, FiscalBillService.TRANSACTION_TYPE_SALE))
                 .thenReturn(List.of(advance));
-        stubConfig();
         stubTaxForAdvanceLabel("A");
         when(taxAuthorityService.call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString()))
                 .thenReturn(TA_SUCCESS_RESPONSE);
@@ -296,11 +562,297 @@ class FiscalBillServiceManualTest {
         assertEquals(FiscalBillService.STATUS_SUCCESS, result.fiscalBill().status());
         verify(taxAuthorityService, times(2)).call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString());
         verify(fiscalBillRepository, atLeastOnce()).save(any(FiscalBillEntity.class));
+
+        ArgumentCaptor<FiscalBillLineEntity> lineCaptor = ArgumentCaptor.forClass(FiscalBillLineEntity.class);
+        verify(fiscalBillLineRepository, atLeastOnce()).save(lineCaptor.capture());
+        // Refund is the first persisted bill (id 100); Normal Sale is 101.
+        boolean advanceRefundLineSaved = lineCaptor.getAllValues().stream()
+                .anyMatch(line -> Long.valueOf(100L).equals(line.getFiscalbillId())
+                        && "20 Advance (A)".equals(line.getName()));
+        assertTrue(advanceRefundLineSaved, "Advance Refund must persist summarized fiscalbillline rows");
+
+        ArgumentCaptor<FiscalBillPayEntity> payCaptor = ArgumentCaptor.forClass(FiscalBillPayEntity.class);
+        verify(fiscalBillPayRepository, atLeastOnce()).save(payCaptor.capture());
+        boolean advanceRefundPaySaved = payCaptor.getAllValues().stream()
+                .anyMatch(pay -> Long.valueOf(100L).equals(pay.getFiscalbillId())
+                        && pay.getAmount() != null
+                        && pay.getAmount().compareTo(new BigDecimal("100.00")) == 0);
+        assertTrue(advanceRefundPaySaved, "Advance Refund must persist fiscalbillpay rows");
+    }
+
+    @Test
+    void createManualFiscalBill_omitsDateAndTimeOfIssueOutsideAdvanceSale() throws Exception {
+        when(taxAuthorityService.call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString()))
+                .thenReturn(TA_SUCCESS_RESPONSE);
+
+        FiscalBillService.ManualFiscalBillRequest request = manualRequest(
+                null,
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00"))
+        );
+
+        fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-no-issue-date", request);
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(taxAuthorityService).call(eq(ORG_ID), eq("CREATE_INVOICE"), bodyCaptor.capture());
+        assertTrue(!bodyCaptor.getValue().contains("dateAndTimeOfIssue"),
+                "Only Advance Sale bills may carry dateAndTimeOfIssue");
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsDateAndTimeOfIssueOutsideAdvanceSale() {
+        FiscalBillService.ManualFiscalBillRequest request = new FiscalBillService.ManualFiscalBillRequest(
+                null, null, null, false,
+                FiscalBillService.INVOICE_TYPE_NORMAL,
+                FiscalBillService.TRANSACTION_TYPE_SALE,
+                null, null, null, null,
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                null,
+                null,
+                LocalDateTime.now().minusHours(1).toString()
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-issue-date-normal", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals("dateAndTimeOfIssue is allowed only for Advance Sale fiscal bills", ex.getReason());
+    }
+
+    @Test
+    void createManualFiscalBill_omitsDateAndTimeOfIssueWhenAdvanceMomentNotChosen() throws Exception {
+        stubTaxForAdvanceLabel("A");
+        when(taxAuthorityService.call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString()))
+                .thenReturn(TA_SUCCESS_RESPONSE);
+
+        FiscalBillService.ManualFiscalBillRequest request = advanceSaleRequest(
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                null,
+                null
+        );
+
+        fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-advance-no-moment", request);
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(taxAuthorityService).call(eq(ORG_ID), eq("CREATE_INVOICE"), bodyCaptor.capture());
+        assertTrue(!bodyCaptor.getValue().contains("dateAndTimeOfIssue"),
+                "Advance Sale without a chosen moment must not default to the current time");
+
+        ArgumentCaptor<FiscalBillEntity> entityCaptor = ArgumentCaptor.forClass(FiscalBillEntity.class);
+        verify(fiscalBillRepository, atLeastOnce()).save(entityCaptor.capture());
+        assertNull(entityCaptor.getValue().getDateAndTimeOfIssue());
+    }
+
+    @Test
+    void createManualFiscalBill_sendsSelectedAdvancePaymentMoment() throws Exception {
+        stubTaxForAdvanceLabel("A");
+        when(taxAuthorityService.call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString()))
+                .thenReturn(TA_SUCCESS_RESPONSE);
+
+        LocalDateTime advanceMoment = LocalDateTime.now(BELGRADE_ZONE).minusHours(2).withNano(0);
+        FiscalBillService.ManualFiscalBillRequest request = advanceSaleRequest(
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                null,
+                advanceMoment.toString()
+        );
+
+        fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-advance-moment", request);
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(taxAuthorityService).call(eq(ORG_ID), eq("CREATE_INVOICE"), bodyCaptor.capture());
+        String expected = advanceMoment.atZone(BELGRADE_ZONE).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        assertTrue(bodyCaptor.getValue().contains("\"dateAndTimeOfIssue\":\"" + expected + "\""),
+                "Advance Sale must send the selected advance payment moment, body: " + bodyCaptor.getValue());
+
+        ArgumentCaptor<FiscalBillEntity> entityCaptor = ArgumentCaptor.forClass(FiscalBillEntity.class);
+        verify(fiscalBillRepository, atLeastOnce()).save(entityCaptor.capture());
+        assertEquals(expected, entityCaptor.getValue().getDateAndTimeOfIssue(),
+                "The sent moment must be persisted for the PDF");
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsAdvancePaymentMomentOlderThanThreeDays() {
+        FiscalBillService.ManualFiscalBillRequest request = advanceSaleRequest(
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                null,
+                LocalDateTime.now(BELGRADE_ZONE).minusDays(4).toString()
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-advance-too-old", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("more than 3 days in the past"));
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsAdvancePaymentMomentInFuture() {
+        FiscalBillService.ManualFiscalBillRequest request = advanceSaleRequest(
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                null,
+                LocalDateTime.now(BELGRADE_ZONE).plusHours(1).toString()
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-advance-future", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals("dateAndTimeOfIssue must not be in the future", ex.getReason());
+    }
+
+    @Test
+    void createManualFiscalBill_advanceSaleUsesTotalPaidForTaxAuthorityItems() throws Exception {
+        stubTaxForAdvanceLabel("A");
+        when(taxAuthorityService.call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString()))
+                .thenReturn(TA_SUCCESS_RESPONSE);
+
+        FiscalBillService.ManualFiscalBillRequest request = advanceSaleRequest(
+                List.of(itemPaid("Product", "100.00", "40.00")),
+                List.of(payment(1, "40.00")),
+                null,
+                null
+        );
+
+        fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-total-paid", request);
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(taxAuthorityService).call(eq(ORG_ID), eq("CREATE_INVOICE"), bodyCaptor.capture());
+        assertTrue(bodyCaptor.getValue().contains("\"totalAmount\":40.00")
+                        || bodyCaptor.getValue().contains("\"totalAmount\":40"),
+                "Advance TA items must use totalPaid, body: " + bodyCaptor.getValue());
+
+        ArgumentCaptor<FiscalBillLineEntity> lineCaptor = ArgumentCaptor.forClass(FiscalBillLineEntity.class);
+        verify(fiscalBillLineRepository, atLeastOnce()).save(lineCaptor.capture());
+        assertEquals(new BigDecimal("100.00"), lineCaptor.getValue().getTotalAmount());
+        assertEquals(new BigDecimal("40.00"), lineCaptor.getValue().getTotalPaid());
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsTotalPaidGreaterThanTotalAmount() {
+        FiscalBillService.ManualFiscalBillRequest request = advanceSaleRequest(
+                List.of(itemPaid("Product", "100.00", "150.00")),
+                List.of(payment(1, "150.00")),
+                null,
+                null
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-paid-too-high", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("totalPaid must not exceed totalAmount"));
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsPaymentMismatchAgainstTotalPaid() {
+        FiscalBillService.ManualFiscalBillRequest request = advanceSaleRequest(
+                List.of(itemPaid("Product", "100.00", "40.00")),
+                List.of(payment(1, "100.00")),
+                null,
+                null
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-paid-pay-mismatch", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals("Payment total does not match fiscal bill total", ex.getReason());
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsCloseAdvanceWhenReferentIsNotAdvanceRefund() {
+        FiscalBillEntity advanceSale = advanceBill("ADV-NOT-REFUND", "100.00");
+        advanceSale.setEfiscalInvoicetype(FiscalBillService.INVOICE_TYPE_ADVANCE);
+        advanceSale.setEfiscalTransactiontype(FiscalBillService.TRANSACTION_TYPE_SALE);
+        when(fiscalBillRepository.findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
+                ORG_ID, "ADV-NOT-REFUND")).thenReturn(Optional.of(advanceSale));
+
+        FiscalBillService.ManualFiscalBillRequest request = new FiscalBillService.ManualFiscalBillRequest(
+                null,
+                null,
+                null,
+                false,
+                FiscalBillService.INVOICE_TYPE_NORMAL,
+                FiscalBillService.TRANSACTION_TYPE_SALE,
+                null,
+                null,
+                null,
+                null,
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00")),
+                "ADV-NOT-REFUND",
+                null,
+                null
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-close-adv-bad-ref", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals(
+                "Referentni broj zatvaranja avansa nije Avans Refundacija, molimo vas proverite",
+                ex.getReason());
+    }
+
+    @Test
+    void createManualFiscalBill_rejectsAdvanceChainWhenTotalPaidWouldExceed() {
+        FiscalBillEntity prior = advanceBill("ADV-PRIOR", "100.00");
+        prior.setEfiscalInvoicetype(FiscalBillService.INVOICE_TYPE_ADVANCE);
+        prior.setEfiscalTransactiontype(FiscalBillService.TRANSACTION_TYPE_SALE);
+        prior.setReferentFiscalbillId(null);
+        when(fiscalBillRepository.findFirstByOrgIdAndEfiscalSdcInvoicenoOrderByCreatedDesc(
+                ORG_ID, "ADV-PRIOR")).thenReturn(Optional.of(prior));
+
+        FiscalBillLineEntity priorLine = new FiscalBillLineEntity();
+        priorLine.setName("Product");
+        priorLine.setProductId("prod-1");
+        priorLine.setTotalAmount(new BigDecimal("100.00"));
+        priorLine.setTotalPaid(new BigDecimal("70.00"));
+        priorLine.setQuantity(BigDecimal.ONE);
+        priorLine.setUnitPrice(new BigDecimal("100.00"));
+        priorLine.setTaxLabel("A");
+        when(fiscalBillLineRepository.findByFiscalbillId(prior.getFiscalbillId()))
+                .thenReturn(List.of(priorLine));
+
+        FiscalBillService.ManualFiscalBillRequest request = advanceSaleRequest(
+                List.of(itemPaid("Product", "100.00", "40.00")),
+                List.of(payment(1, "40.00")),
+                "ADV-PRIOR",
+                null
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-chain-overpay", request));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("exceeds totalAmount"));
+    }
+
+    @Test
+    void createManualFiscalBill_sendsEsirNumberAsInvoiceNumber() throws Exception {
+        when(taxAuthorityService.call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString()))
+                .thenReturn(TA_SUCCESS_RESPONSE);
+
+        FiscalBillService.ManualFiscalBillRequest request = manualRequest(
+                null,
+                List.of(item("Product", "100.00")),
+                List.of(payment(1, "100.00"))
+        );
+
+        fiscalBillService.createManualFiscalBill(ORG_ID, CLIENT_ID, "key-esir", request);
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(taxAuthorityService).call(eq(ORG_ID), eq("CREATE_INVOICE"), bodyCaptor.capture());
+        assertTrue(bodyCaptor.getValue().contains("\"invoiceNumber\":\"123456/1.0.0\""));
     }
 
     @Test
     void createManualFiscalBill_sendsEmailWhenRequested() throws Exception {
-        stubConfig();
         when(taxAuthorityService.call(eq(ORG_ID), eq("CREATE_INVOICE"), anyString()))
                 .thenReturn(TA_SUCCESS_RESPONSE);
 
@@ -314,8 +866,10 @@ class FiscalBillServiceManualTest {
                 null,
                 null,
                 null,
+                null,
                 List.of(item("Product", "100.00")),
                 List.of(payment(1, "100.00")),
+                null,
                 null,
                 null
         );
@@ -332,11 +886,26 @@ class FiscalBillServiceManualTest {
         );
     }
 
-    private void stubConfig() {
-        FiscalBillConfigEntity config = new FiscalBillConfigEntity();
-        config.setEsirno("ESIR-1");
-        when(fiscalBillConfigRepository.findFirstByOrgIdAndIsactive(ORG_ID, "Y"))
-                .thenReturn(Optional.of(config));
+    @Test
+    void createFiscalBillFromOrder_rejectsShippingWhenNoShipmentProductDefined() {
+        OrgEntity org = new OrgEntity();
+        org.setIncludeShipment(true);
+        when(orgRepository.findById(ORG_ID)).thenReturn(Optional.of(org));
+        when(productRepository.findShipmentProductsByOrgId(ORG_ID)).thenReturn(List.of());
+
+        FiscalBillService.OrderFiscalizeRequest orderData = new FiscalBillService.OrderFiscalizeRequest(
+                "ORD-1", null, null, false, null, null, null,
+                List.of(item("Product", "1000.00")),
+                "cashier", null, null,
+                new BigDecimal("300.00"), new BigDecimal("20"));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                fiscalBillService.createFiscalBillFromOrder(ORG_ID, CLIENT_ID, "key-ship-1", "ORD-1",
+                        FiscalBillService.INVOICE_TYPE_NORMAL, FiscalBillService.TRANSACTION_TYPE_SALE, orderData));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertEquals("Nije pronadjen proizvod definisan za isporuku", ex.getReason());
+        verify(fiscalBillRepository, never()).save(any());
     }
 
     private void stubTaxForAdvanceLabel(String label) {
@@ -346,6 +915,40 @@ class FiscalBillServiceManualTest {
         tax.setEfiscalAdvanceprefix("20");
         tax.setEfiscalAdvancename("Advance");
         when(taxRepository.findAllByDeletedAtIsNull()).thenReturn(List.of(tax));
+    }
+
+    private static FiscalBillEntity typedReferent(String invoiceNo, int invoiceType, int transactionType) {
+        FiscalBillEntity ref = new FiscalBillEntity();
+        ref.setEfiscalSdcInvoiceno(invoiceNo);
+        ref.setEfiscalSdcdatetime("2024-05-01T12:00:00+02:00");
+        ref.setEfiscalInvoicetype(invoiceType);
+        ref.setEfiscalTransactiontype(transactionType);
+        return ref;
+    }
+
+    private static FiscalBillService.ManualFiscalBillRequest typedManualRequest(
+            int invoiceType,
+            int transactionType,
+            List<FiscalBillService.FiscalBillItemRequest> items,
+            List<FiscalBillService.PaymentRequest> payments,
+            String referentDocumentNumber) {
+        return new FiscalBillService.ManualFiscalBillRequest(
+                null,
+                null,
+                null,
+                false,
+                invoiceType,
+                transactionType,
+                null,
+                null,
+                null,
+                null,
+                items,
+                payments,
+                referentDocumentNumber,
+                null,
+                null
+        );
     }
 
     private static FiscalBillEntity advanceBill(String invoiceNo, String total) {
@@ -372,10 +975,42 @@ class FiscalBillServiceManualTest {
                 null,
                 null,
                 null,
+                null,
                 items,
                 payments,
                 null,
+                null,
                 null
+        );
+    }
+
+    private static FiscalBillService.ManualFiscalBillRequest advanceSaleRequest(
+            List<FiscalBillService.FiscalBillItemRequest> items,
+            List<FiscalBillService.PaymentRequest> payments,
+            String referentDocumentNumber,
+            String dateAndTimeOfIssue) {
+        List<FiscalBillService.FiscalBillItemRequest> withPaid = items.stream()
+                .map(i -> i.totalPaid() != null ? i : new FiscalBillService.FiscalBillItemRequest(
+                        i.name(), i.quantity(), i.unitPrice(), i.totalAmount(),
+                        i.taxLabel(), i.taxPrefix(), i.gtin(), i.productId(), i.sku(),
+                        i.taxValue(), i.taxCategoryName(), i.labels(), i.totalAmount()))
+                .toList();
+        return new FiscalBillService.ManualFiscalBillRequest(
+                null,
+                null,
+                null,
+                false,
+                FiscalBillService.INVOICE_TYPE_ADVANCE,
+                FiscalBillService.TRANSACTION_TYPE_SALE,
+                null,
+                null,
+                null,
+                null,
+                withPaid,
+                payments,
+                referentDocumentNumber,
+                null,
+                dateAndTimeOfIssue
         );
     }
 
@@ -393,9 +1028,11 @@ class FiscalBillServiceManualTest {
                 null,
                 null,
                 null,
+                null,
                 items,
                 payments,
                 referentDocumentNumber,
+                null,
                 null
         );
     }
@@ -413,7 +1050,26 @@ class FiscalBillServiceManualTest {
                 null,
                 null,
                 null,
-                List.of("A")
+                List.of("A"),
+                null
+        );
+    }
+
+    private static FiscalBillService.FiscalBillItemRequest itemPaid(String name, String total, String paid) {
+        return new FiscalBillService.FiscalBillItemRequest(
+                name,
+                BigDecimal.ONE,
+                new BigDecimal(total),
+                new BigDecimal(total),
+                "A",
+                "20",
+                null,
+                "prod-1",
+                null,
+                null,
+                null,
+                List.of("A"),
+                new BigDecimal(paid)
         );
     }
 

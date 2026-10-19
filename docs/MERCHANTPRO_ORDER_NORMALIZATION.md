@@ -54,12 +54,13 @@ These fields appear in legacy import logic and are relevant for normalization. N
 | `payment_method_code` | string | Maps to fiscal payment via `paytype_map` (separate concern) |
 | `payment_method_name` | string | Display only |
 | `shipping_status` | string | Fetch filter |
-| `shipping_amount` | decimal | Freight total (gross) |
+| `shipping_amount` | decimal | Freight total (gross). Mapped onto order view as `shippingAmount`; when `org.include_shipment` is on and the value is `> 0`, from-order fiscalization appends a line using the org's `product.is_shipment` product. |
+| `shipping_tax_percent` | decimal | Shipping tax rate. Mapped onto order view as `shippingTaxPercent`; used as the tax rate of the shipping line. |
 | `shipping_tax_amount` | decimal | Tax portion of shipping |
 | `shipping_method_name` | string | Label for synthetic shipping line |
 | `wallet_amount` | decimal | Store-credit applied to order (typically negative or positive; legacy uses `.abs()`) |
 | `total_amount` / `total` | decimal | Order total — use for **reconciliation check** after normalization |
-| `billing_name`, `billing_type`, `billing_company_vat` | string | Buyer / fiscal customer (handled separately in `FiscalBillService`) |
+| `billing_name`, `billing_type`, `billing_company_vat` | string | Mapped onto order view as `customerName` / `billingType` / `billingCompanyVat`. When `billing_type` is `company`, from-order fiscalization sets Tax Authority `buyerId` to `10:` + `billing_company_vat`. |
 | `line_items` | array | See §3.2 |
 
 ### 3.2 Line item (`line_items[]`)

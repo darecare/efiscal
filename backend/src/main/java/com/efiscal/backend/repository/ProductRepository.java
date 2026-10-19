@@ -257,6 +257,13 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long> {
 
     @Query("""
         SELECT p FROM ProductEntity p
+        WHERE p.orgId = :orgId AND p.isShipment = true AND p.deletedAt IS NULL
+        ORDER BY p.productId ASC
+        """)
+    List<ProductEntity> findShipmentProductsByOrgId(@Param("orgId") Long orgId);
+
+    @Query("""
+        SELECT p FROM ProductEntity p
         WHERE p.orgId = :orgId AND p.deletedAt IS NULL AND p.hiddenAt IS NULL AND p.isActive = true
         AND (:name IS NULL OR :name = '' OR LOWER(p.name) LIKE LOWER(CONCAT('%', :name, '%')))
         AND (:sku IS NULL OR :sku = '' OR LOWER(p.sku) = LOWER(:sku))

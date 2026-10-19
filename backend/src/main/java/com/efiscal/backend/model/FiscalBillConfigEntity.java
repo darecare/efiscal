@@ -10,8 +10,8 @@ import java.time.LocalDateTime;
 
 /**
  * JPA entity for fiscalbillconfig — org-level fiscal configuration.
- * Stores esirno (POS invoice number prefix for Tax Authority invoiceNumber field)
- * and email settings for post-fiscalization notifications.
+ * The Tax Authority {@code invoiceNumber} comes from {@link com.efiscal.backend.service.EsirNumberService}
+ * (application-level ESIR number), not from {@code esirno}.
  */
 @Entity
 @Table(name = "fiscalbillconfig")
@@ -28,7 +28,7 @@ public class FiscalBillConfigEntity {
     @Column(name = "org_id", columnDefinition = "NUMERIC(10,0)")
     private Long orgId = 0L;
 
-    /** POS invoice number / ESIR number used as invoiceNumber in Tax Authority request */
+    /** Legacy per-org POS invoice number; no longer sent to the Tax Authority */
     @Column(name = "esirno", length = 22)
     private String esirno;
 

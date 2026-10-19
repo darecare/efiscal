@@ -36,7 +36,7 @@
 - **IDE:** [i18n Ally](https://marketplace.visualstudio.com/items?itemName=Lokalise.i18n-ally) paths configured in [`.vscode/settings.json`](.vscode/settings.json)
 - **Do not translate:** `className`, `id`, API paths, enum/code `value` attributes, object keys, `console` output, server error pass-through, MerchantPro/Tax API payload field names
 - **Accessibility:** Icon-only controls (for example modal `×` close) keep the glyph but require localized `aria-label` (typically `common.close`) in every supported language
-- **Route guard feedback:** [`ActionProtectedRoute`](frontend/src/components/ActionProtectedRoute.jsx) shows `common.permissionDenied` once per denied navigation signature (avoids duplicate toasts on re-render) and uses `common.loading` for the loading state
+- **Route guard feedback:** [`ActionProtectedRoute`](frontend/src/components/ActionProtectedRoute.jsx) shows `common.permissionDenied` once per denied navigation signature (avoids duplicate toasts on re-render) and uses `common.loading` for the loading state. Denied routes redirect to `getLandingPath(user)` from [`permissions.js`](frontend/src/utils/permissions.js) (Account first, then the first permitted page); when no page is permitted it renders `common.noAccessiblePages` with a logout button instead of redirecting, so `/account` can itself be guarded without a redirect loop
 
 ## 3. Core ERP UI Patterns
 
@@ -102,7 +102,8 @@
 - **Auto-Calculations:** `totalAmount` is automatically calculated from `quantity * unitPrice`. The first payment row automatically syncs to match the remaining items total unless split explicitly by the user.
 - **Validation:** Structured inline field errors with scroll-to-first-error; submit disabled until payment balance is zero; status-aware success/failure result panel.
 - **Buyer ID Inference:** Entering a 9-digit or 13-digit `buyerIdValue` automatically pre-selects the corresponding `buyerType` (PIB or JMBG) using functional state updates to avoid stale closure bugs.
-- **Tax labels:** Item tax-label dropdown is populated from `GET /taxes` via `taxApi.list()`, with static fallback labels if the request fails.
+- **Optional customer field:** Checkbox “Opciono polje kupca” reveals type dropdown + value; composed as `buyerCostCenterId` (`{code}:{value}`) on `POST /fiscalbill/manual`.
+- **Tax labels:** Item tax-label dropdown is populated from `GET /taxes` via `taxApi.list()`, showing `label - rate%` (e.g. `A - 10%`). Static fallback labels are used if the request fails.
 - **Email:** Optional `sendEmail` checkbox and `customerEmail` field are sent on `POST /fiscalbill/manual` when enabled.
 - **Post-success actions:** Success result card offers verification link (when present), PDF download, navigation to fiscal bills list, and a reset flow for creating another bill.
 - **Payment match:** The `=` match-total control updates the payment amount without disabling single-payment auto-sync.
@@ -144,7 +145,7 @@
 - Error state: clear message with retry option and reference ID if available.
 
 ## 4. Current Reuse Scope From Kliklak_Dashboard
-- Account page: reuse baseline layout and interaction style, then extend with eFiscal-specific fields.
+- Account page: reuse baseline layout and interaction style, then extend with eFiscal-specific fields. Route `/account` is guarded by `ACCOUNT_ACCESS`. Name and email are editable inline (`PUT /users/me`, then `refreshUser()` from `AuthContext` updates the header/session data); the Edit Password button opens a modal with new + re-entered password, validated client-side (both filled, min 6, match) before `PUT /users/me/password`. Success messages use the global toast; password failures stay inside the modal.
 - Users page: reuse baseline users-management page structure and interaction style.
 - Orders page: partial reuse of structure only:
 	- Fetch Filters section

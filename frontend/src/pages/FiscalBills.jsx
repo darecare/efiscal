@@ -9,7 +9,7 @@ import { enUS, srLatn } from 'date-fns/locale'
 import 'react-date-range/dist/styles.css'
 import 'react-date-range/dist/theme/default.css'
 
-const INVOICE_TYPE_VALUES = [0, 2, 4]
+const INVOICE_TYPE_VALUES = [0, 1, 2, 3, 4]
 const TRANSACTION_TYPE_VALUES = [0, 1]
 const PAYMENT_TYPE_VALUES = [0, 1, 2, 3, 4, 5, 6]
 
@@ -28,6 +28,7 @@ export default function FiscalBills() {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('tax')
   const [downloadingPdfFormat, setDownloadingPdfFormat] = useState('')
+  const [downloadingImageFormat, setDownloadingImageFormat] = useState('')
   const [previewingHtmlFormat, setPreviewingHtmlFormat] = useState('')
   const [copyingBillIds, setCopyingBillIds] = useState({})
   const [refundingBillIds, setRefundingBillIds] = useState({})
@@ -211,6 +212,7 @@ export default function FiscalBills() {
     setIsDetailsModalOpen(false)
     setDetailsError(null)
     setDownloadingPdfFormat('')
+    setDownloadingImageFormat('')
     setPreviewingHtmlFormat('')
   }
 
@@ -235,6 +237,30 @@ export default function FiscalBills() {
       setDetailsError(typeof msg === 'string' ? msg : t('fiscalBills.downloadPdfFailed'))
     } finally {
       setDownloadingPdfFormat('')
+    }
+  }
+
+  async function handleDownloadImage(format) {
+    const fiscalBillId = details?.fiscalBill?.fiscalbillId
+    if (!fiscalBillId) return
+
+    setDetailsError(null)
+    setDownloadingImageFormat(format)
+    try {
+      const blob = await fiscalBillApi.downloadImage(fiscalBillId, format, 'png')
+      const url = window.URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `fiscal-bill-${fiscalBillId}-${format}.png`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('fiscalBills.downloadImageFailed')
+      setDetailsError(typeof msg === 'string' ? msg : t('fiscalBills.downloadImageFailed'))
+    } finally {
+      setDownloadingImageFormat('')
     }
   }
 
@@ -640,7 +666,7 @@ export default function FiscalBills() {
                   </div>
                 ) : null}
 
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
                   <button
                     type="button"
                     className="secondary-button"
@@ -664,6 +690,22 @@ export default function FiscalBills() {
                     disabled={downloadingPdfFormat !== ''}
                   >
                     {downloadingPdfFormat === 'roll80' ? t('fiscalBills.downloadingPdf') : t('fiscalBills.downloadPdfRoll80')}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => handleDownloadImage('a4')}
+                    disabled={downloadingImageFormat !== ''}
+                  >
+                    {downloadingImageFormat === 'a4' ? t('fiscalBills.downloadingImage') : t('fiscalBills.downloadImageA4')}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => handleDownloadImage('roll80')}
+                    disabled={downloadingImageFormat !== ''}
+                  >
+                    {downloadingImageFormat === 'roll80' ? t('fiscalBills.downloadingImage') : t('fiscalBills.downloadImageRoll80')}
                   </button>
                 </div>
 

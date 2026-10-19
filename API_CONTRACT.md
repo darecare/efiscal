@@ -132,22 +132,51 @@ Subscription behavior:
   - Template includes fiscal header, line items (`fiscalbillline`), tax area (`fiscalbilltax`) and payments area (`fiscalbillpay`).
   - Available templates in current implementation:
     - `a4` -> `pdf-templates/default-a4.html`
-    - `roll80` -> `pdf-templates/default-roll80.html` (57mm–80mm paper roll style)
+    - `roll80` -> `pdf-templates/default-roll80.html` (57mm–80mm paper roll style; page height fits content and ends after the advertisement)
   - Textual layout follows the fiscal receipt textual-display requirements (start/end fiscal section lines and grouped receipt metadata).
+
+### GET /fiscalbill/{id}/image
+- Description: Download a raster image of the fiscal bill PDF (same template as `/pdf`).
+- Action: `FISCAL_VIEW_BILLS`
+- Query:
+  - `format` (optional): `a4` (default) or `roll80`
+  - `media` (optional): `png` (default) or `jpeg` (`jpg` accepted)
+- 200 Response:
+  - Content-Type: `image/png` or `image/jpeg`
+  - Content-Disposition: `attachment; filename=fiscal-bill-{id}-{format}.{png|jpeg}`
+- Notes:
+  - Image is rendered from the generated PDF at 200 DPI. All pages are stacked vertically (a short gap between pages).
+  - JPEG uses compression quality `0.9`.
+- Errors: `400` (unsupported `format` or `media`), `401`, `403`, `404`, `500`
 
 ### POST /fiscalbill/from-order
 - Description: Create fiscal bill from an existing shop order.
 - Request: same as POST /fiscalbill but specifically for order-linked flows.
 - Additional request fields used by the UI:
   - `sendEmail` - default `true` on the order issuance screen
-  - `customerEmail` - taken from the sales order payload and passed through when emailing is enabled
+  - `customerName` / `customerEmail` - taken from the sales order payload; persisted on `fiscalbill.customer_name` / `fiscalbill.customer_email`
+  - `billingType` / `billingCompanyVat` - from MerchantPro `billing_type` / `billing_company_vat`. When `billingType` is `company` and VAT is present, Tax Authority request includes `buyerId` as `10:{billingCompanyVat}` (also persisted on `fiscalbill.customer_id`)
+  - `buyerCostCenterId` - optional Tax Authority optional-customer-field value (e.g. `30:099999999`). Composed in UI from optional field type + value when “Opciono polje kupca” is enabled on the Orders issue-fiscal modal. Included in CREATE_INVOICE JSON **only when** `buyerId` is also present for that order; persisted on `fiscalbill.customer_costcenterid`.
+  - `dateAndTimeOfIssue` - optional advance payment moment (`YYYY-MM-DDTHH:mm`, Belgrade wall clock, or a full ISO offset date-time). Accepted **only** with `invoiceType` 4 + `transactionType` 0, must be in the past and at most 3 days back.
+  - `items[].totalPaid` - optional; for Advance Sale (`invoiceType` 4 + `transactionType` 0), when omitted the server sets it to `totalAmount`. Persisted on `fiscalbillline.total_paid`. Used for Tax Authority item amounts (tax-grouped).
+  - `shippingAmount` / `shippingTaxPercent` - optional; from MerchantPro `shipping_amount` / `shipping_tax_percent`. The UI sends them only when the order has product lines and `shippingAmount > 0`. When the organization has `includeShipment = true`, the server appends one line (quantity 1, unit price = total = `shippingAmount`) using the org's shipping product (`product.is_shipment`) for name/GTIN/SKU/productId; the tax rate is `shippingTaxPercent` resolved through the same tax-category mapping as the order lines. Applies to every from-order invoice type.
+- Errors (in addition to the standard set):
+  - `409` `Fiscal bill already exists for order {orderId} with invoiceType={n} transactionType={n}` - a `SUCCESS` bill already exists for the same org + order + `invoiceType` + `transactionType`. Not applied to Training (`invoiceType` 3), which may be issued repeatedly for the same order.
+  - `400` `Nije pronadjen proizvod definisan za isporuku` - shipping must be included (`includeShipment = true`, `shippingAmount > 0`) but the org has no non-deleted product with `isShipment = true`.
+- 201 Response (create): same `FiscalBillView` fields as other create endpoints, plus:
+  - `emailStatus` - `NOT_REQUESTED` | `SENT` | `SKIPPED` | `FAILED` (null on non-create responses such as GET/retry)
+  - `emailError` - optional detail when status is `SKIPPED` or `FAILED`
 
 ### POST /fiscalbill/manual
 - Description: Create fiscal bill from manual input.
 - Request: [manual entry payload]
 - Additional request fields used by the UI:
   - `sendEmail` - optional boolean flag
-  - `customerEmail` - optional recipient email for future manual-email flows
+  - `customerName` / `customerEmail` - optional; persisted on `fiscalbill.customer_name` / `fiscalbill.customer_email`
+  - `buyerCostCenterId` - optional Tax Authority optional-customer-field value (e.g. `30:099999999`). Composed in UI from optional field type + value when “Opciono polje kupca” is enabled; included in CREATE_INVOICE JSON only when `buyerId` is also present; persisted on `fiscalbill.customer_costcenterid`.
+  - `dateAndTimeOfIssue` - optional advance payment moment; same rules as `/fiscalbill/from-order` (Advance Sale only, past, max 3 days back).
+  - `items[].totalPaid` - required for Advance Sale; amount paid on the line (`0 <= totalPaid <= totalAmount`). Bill total and Tax Authority advance item amounts use `sum(totalPaid)`. Persisted on `fiscalbillline.total_paid`.
+- 201 Response (create): includes `emailStatus` / `emailError` as for `/fiscalbill/from-order` when email was attempted after a successful fiscalization.
 
 ### GET /fiscalbill/status
 - Description: Get overall fiscal status summary for an organization.
@@ -180,6 +209,8 @@ Subscription behavior:
   - `createdAfter` and `shippingStatus` are the primary MVP filter fields.
   - Backend resolves and validates allowed filter keys, then maps to provider URL query parameters.
   - Order line items expose the provider `product_ean` value as `ean` when MerchantPro returns it; fiscalization uses that value as the `gtin` source.
+  - Each order includes `billingType` (`billing_type`) and `billingCompanyVat` (`billing_company_vat`) when MerchantPro returns them. Used by `POST /fiscalbill/from-order` to set Tax Authority `buyerId` (`10:` + VAT) for company customers.
+  - Each order includes `shippingAmount` (`shipping_amount`) and `shippingTaxPercent` (`shipping_tax_percent`) as nullable decimals. Forwarded to `POST /fiscalbill/from-order` for the shipping line.
 - 202 Response:
 ```json
 {
@@ -227,17 +258,19 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   "sku": "W-001",
   "ean": "1234567890123",
   "lastKnownPrice": 1200.00,
-  "isActive": true
+  "isActive": true,
+  "isShipment": false
 }
 ```
+- `isShipment` (optional, default `false`): marks the org's shipping-service product ("Usluga isporuke") used for the from-order shipping line. At most one non-deleted product per org may be marked.
 - 201 Response: `ProductDto`
-- Errors: `400` (missing/blank name, or both sku/ean missing), `401`, `403`
+- Errors: `400` (missing/blank name, or both sku/ean missing), `401`, `403`, `409` (`isShipment: true` while another product in the org is already the shipping product: `Proizvod "{name}" je već označen kao usluga isporuke`)
 
 ### PUT /products/{id}
-- Description: Update a product.
-- Request: same shape as POST body
+- Description: Update a product. `MERCHANTPRO` products cannot be edited (so only `MANUAL` products can be marked `isShipment`).
+- Request: same shape as POST body; omitted `isShipment` leaves the flag unchanged
 - 200 Response: `ProductDto`
-- Errors: `400`, `401`, `403`, `404`
+- Errors: `400`, `401`, `403`, `404`, `409` (same shipping-product conflict as POST)
 
 ### GET /products/ids
 - Description: Return product IDs for an organization (for cross-page bulk selection). Uses the same optional `q` filter as `GET /products`. Capped at 5000 IDs.
@@ -395,7 +428,7 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 ```
 - Errors: `400`, `401`, `403`, `404`, `429`, `502`
 
-`ProductDto` fields: `productId`, `clientId`, `orgId`, `mpProductId` (number), `name`, `sku`, `ean`, `lastKnownPrice`, `isActive`, `sourceType` (`MANUAL` | `MERCHANTPRO`), `syncStatus` (`ACTIVE` | `MISSING_IN_SOURCE`), `hiddenAt` (ISO-8601 timestamp or null)
+`ProductDto` fields: `productId`, `clientId`, `orgId`, `mpProductId` (number), `name`, `sku`, `ean`, `lastKnownPrice`, `isActive`, `sourceType` (`MANUAL` | `MERCHANTPRO`), `syncStatus` (`ACTIVE` | `MISSING_IN_SOURCE`), `hiddenAt` (ISO-8601 timestamp or null), `isShipment` (boolean)
 
 ## 5A. Access Control Endpoints (Role and Action Management)
 
@@ -540,6 +573,34 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 - 200 Response: No content
 - Errors: `400` (unsupported language), `401`, `404`, `500`
 
+### PUT /users/me
+- Description: Update the authenticated user's own name and email from the Account page. Requires action `ACCOUNT_ACCESS` (no `USERS_MANAGE`).
+- Request:
+```json
+{
+  "fullName": "Petar Petrović",
+  "email": "petar@example.com"
+}
+```
+- Both fields are required and trimmed; max 255 characters each; `email` must look like `local@domain.tld`.
+- Changing `email` changes the login identifier. The current session stays valid (sessions are keyed by user id); the next login must use the new email.
+- 200 Response: the updated user object (same shape as `GET /users/{userId}`).
+- Errors: `400` (`Full name is required`, `Email is required`, `Invalid email format`, length), `401`, `403` (missing `ACCOUNT_ACCESS`), `404` (user inactive or deleted), `409` (`Email already in use`, including soft-deleted accounts), `500`
+
+### PUT /users/me/password
+- Description: Set a new password for the authenticated user from the Account page Edit Password modal. Requires action `ACCOUNT_ACCESS`. The current password is not requested.
+- Request:
+```json
+{
+  "newPassword": "new-secret",
+  "confirmPassword": "new-secret"
+}
+```
+- `newPassword` must be 6–100 characters and equal `confirmPassword`. Stored as a bcrypt hash; never logged or returned.
+- Existing sessions are not revoked.
+- 204 Response: No content
+- Errors: `400` (`New password is required`, `Password must be between 6 and 100 characters`, `Passwords do not match`), `401`, `403` (missing `ACCOUNT_ACCESS`), `404`, `500`
+
 ### GET /users/{userId}
 - Description: Get detailed user profile by user ID.
 - 200 Response: Single user object matching the shape above.
@@ -640,7 +701,8 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
     "logoImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
     "createdAt": "2026-03-24T10:00:00Z",
     "advertisementHtml": "<p>Special offer!</p>",
-    "advertisementEnabled": false
+    "advertisementEnabled": false,
+    "includeShipment": true
   }
 ]
 ```
@@ -648,6 +710,7 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   - `smtpPassword` is write-only and is never returned in API responses.
   - `logoImage` is optional and, when present, should be a Data URL image string.
   - `advertisementHtml` is nullable; when non-null and `advertisementEnabled` is `true`, the HTML is injected into the `{{ADVERTISEMENT_BLOCK}}` placeholder in generated PDFs.
+  - `includeShipment` (default `true`): when `true`, `POST /fiscalbill/from-order` appends the order's shipping cost as a line item using the org's shipping product (see that endpoint).
 - Errors: `401`, `403`, `500`
 
 ### GET /orgs/{orgId}
@@ -672,10 +735,12 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   "smtpUsername": "smtp-user",
   "smtpPassword": "secret",
   "smtpConnectionSecurity": "STARTTLS",
-  "logoImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+  "logoImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+  "includeShipment": true
 }
 ```
 - Validation:
+  - `includeShipment` optional; defaults to `true` on create, unchanged on update when omitted
   - `smtpPort` range: `1..65535`
   - `smtpConnectionSecurity` allowed values: `STARTTLS`, `SSL_TLS`
   - `logoImage` max payload length: `2097152` characters
@@ -774,6 +839,7 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   "buyerId": "10:101234567",
   "buyerType": "10",
   "buyerVat": "101234567",
+  "buyerCostCenterId": "30:099999999",
   "referentDocumentNumber": null,
   "items": [
     {
@@ -793,23 +859,40 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
   ]
 }
 ```
-- `invoiceType` values: `0` = Normal, `2` = Copy, `4` = Advance.
+- `invoiceType` values: `0` = Normal, `1` = Proforma, `2` = Copy, `3` = Training, `4` = Advance.
 - `transactionType` values: `0` = Sale, `1` = Refund.
 - `buyerId` (optional, nullable): Full buyer identifier sent to the Tax Authority (for example `10:123456789`).
+- `buyerCostCenterId` (optional, nullable): Optional customer field for Tax Authority (`buyerCostCenterId`), for example `30:099999999`. Included in the CREATE_INVOICE JSON only when `buyerId` is also present.
 - Backward compatibility: clients may still send `buyerType` + `buyerVat`; backend derives `buyerId` as `<buyerType>:<buyerVat>` when `buyerId` is not explicitly provided.
 - `referentDocumentNumber` (optional, nullable): Reference document number for Copy, Refund, chained Advance, or close-advance flows. When provided, the backend looks up the referenced fiscal bill in the same organization by Tax Authority invoice number (`efiscal_sdc_invoiceno`) and populates both `referentDocumentNumber` and `referentDocumentDT` in the Tax Authority request. Returns `400` if the referenced bill is not found or is missing datetime.
-- `orderId` (optional, nullable): When provided, the backend applies **order-linked fiscal-chain checks** scoped to `orgId`: duplicate protection for the same `orderId` + `invoiceType` + `transactionType`, advance-close chain (Normal Sale after prior Advance Sale bills), and automatic referent-field resolution when `referentDocumentNumber` is omitted. Does **not** fetch or validate MerchantPro order data; use `POST /fiscalbill/from-order` for full order-based fiscalization.
-- Payment total validation: sum of `payments[].amount` must equal sum of `items[].totalAmount` (tolerance `0.01`). Each payment amount must be positive. Returns `400` with message `Payment total does not match fiscal bill total` on mismatch.
-- `cashier` is not sent by the client; it is resolved server-side from the authenticated user's `cashier` field.
+- `orderId` (optional, nullable): When provided, the backend applies **order-linked fiscal-chain checks** scoped to `orgId`: duplicate protection for the same `orderId` + `invoiceType` + `transactionType` (not applied to Training, `invoiceType` 3), advance-close chain (Normal Sale after prior Advance Sale bills), and automatic referent-field resolution when `referentDocumentNumber` is omitted. Does **not** fetch or validate MerchantPro order data; use `POST /fiscalbill/from-order` for full order-based fiscalization.
+- Payment total validation: sum of `payments[].amount` must equal the fiscal bill total (tolerance `0.01`). For Advance Sale the bill total is `sum(items[].totalPaid)`; otherwise `sum(items[].totalAmount)`. Each payment amount must be positive. Returns `400` with message `Payment total does not match fiscal bill total` on mismatch.
+- `items[].totalPaid` (Advance Sale): required; must be non-negative and `<= totalAmount`. Tax Authority CREATE_INVOICE advance lines are grouped by tax label summing `totalPaid`.
+- Advance Sale with `referentDocumentNumber`: referent (and its chain via `referent_fiscalbill_id`) must be Advance Sale bills with matching products/line counts; `sum(total_paid)` across the chain plus the new `totalPaid` must be `<=` each line’s `totalAmount`.
+- Normal Sale (0/0) with `referentDocumentNumber` (Close Advance / Zatvaranje avansa): referent must be Advance Refund; otherwise `400` with reason `Referentni broj zatvaranja avansa nije Avans Refundacija, molimo vas proverite`. Chain Advance Sale lines’ `total_amount` must equal the Normal Sale line `totalAmount` for matching products.
+- Other manual bills with `referentDocumentNumber` (when Close Advance does not apply): referenced bill’s invoice/transaction type must match:
+  - Normal Refund (0/1) → Normal Sale (0/0)
+  - Proforma Refund (1/1) → Proforma Sale (1/0)
+  - Training Refund (3/1) → Training Sale (3/0)
+  - Advance Refund (4/1) → Advance Sale (4/0)
+  - Copy Sale (2/0) → Normal Sale (0/0) or Advance Sale (4/0)
+  - Copy Refund (2/1) → Normal Refund (0/1) or Advance Refund (4/1)
+  Mismatch returns `400` with a Serbian reason describing the required referent type.
+- `cashier` is not sent by the client; it is resolved server-side from the authenticated user's `cashier` field (`users.cashier`). When non-blank, it is included in the Tax Authority CREATE_INVOICE JSON for from-order, manual, copy, refund, and auto Advance Refund.
+- `invoiceNumber` is not sent by the client either; it is the ESIR number resolved server-side from `app.esir-number`/`app.software-version` (same value shown as **ESIR broj** on PDFs) and included in the Tax Authority CREATE_INVOICE JSON for the same flows.
+- `dateAndTimeOfIssue` (optional, nullable): advance payment moment for Advance Sale bills (`invoiceType` 4 + `transactionType` 0). Accepts `YYYY-MM-DDTHH:mm[:ss]` interpreted as Belgrade wall clock, or a full ISO offset date-time; it is normalized to Belgrade ISO offset before being sent to the Tax Authority. Returns `400` when it is in the future, more than 3 days in the past, unparseable, or supplied for any other invoice/transaction type combination. When omitted or blank, the Tax Authority request omits the field as well — it is never defaulted to the current time. Copy, refund, and auto Advance Refund requests never include this field.
 - 201 Response:
 ```json
 {
   "fiscalbillId": 5001,
   "status": "SUCCESS",
   "sdcInvoiceNumber": "ABCD1234-ABCD1234-12345",
-  "lastError": null
+  "lastError": null,
+  "emailStatus": "SENT",
+  "emailError": null
 }
 ```
+- `emailStatus` values after create: `NOT_REQUESTED` (sendEmail false), `SENT`, `SKIPPED` (e.g. missing customer email), `FAILED`.
 - Errors: `400` (validation: payment total mismatch, missing line items, invalid referent document, missing tax labels), `401`, `403`, `409` (duplicate bill for order or Idempotency-Key conflict), `502` (Tax Authority failure; response body may include fiscal bill with `status: FAILED`), `500`
 
 ## 6. Error Model

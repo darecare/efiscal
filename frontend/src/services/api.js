@@ -47,6 +47,13 @@ export const usersApi = {
     const response = await api.patch('/users/me/language', { preferredLanguage })
     return response.data
   },
+  async updateMyProfile(payload) {
+    const response = await api.put('/users/me', payload)
+    return response.data
+  },
+  async changeMyPassword(newPassword, confirmPassword) {
+    await api.put('/users/me/password', { newPassword, confirmPassword })
+  },
 }
 
 export const clientsOrgsApi = {
@@ -211,6 +218,13 @@ export const fiscalBillApi = {
   async downloadPdf(fiscalbillId, format = 'a4') {
     const response = await api.get(`/fiscalbill/${fiscalbillId}/pdf`, {
       params: { format },
+      responseType: 'blob',
+    })
+    return response.data
+  },
+  async downloadImage(fiscalbillId, format = 'a4', media = 'png') {
+    const response = await api.get(`/fiscalbill/${fiscalbillId}/image`, {
+      params: { format, media },
       responseType: 'blob',
     })
     return response.data

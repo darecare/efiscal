@@ -80,6 +80,7 @@ On Organization level is defined connection to mail server. From this mail addre
 | logo_image     | TEXT         | NULL                     | Optional organization logo (typically Data URL image) |
 | advertisement_html     | TEXT         | NULL                     | HTML content rendered on fiscal bill PDFs when advertisement is enabled |
 | advertisement_enabled  | BOOLEAN      | NOT NULL, DEFAULT FALSE  | Toggle for rendering the advertisement block on PDFs |
+| include_shipment       | BOOLEAN      | NOT NULL, DEFAULT TRUE   | When true, from-order fiscalization appends a shipping line (org's `product.is_shipment` product) if the order has `shipping_amount > 0` (V51) |
 | created_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | updated_at     | TIMESTAMPTZ  | NOT NULL                 |                               |
 | deleted_at     | TIMESTAMPTZ  | NULL                     | Soft delete                   |
@@ -255,12 +256,13 @@ UNIQUE constraint: `(platform_connection_id, external_order_id)`
 ---
 
 ### 2.9 fiscal_bill
-A fiscalization request submitted to Serbian Tax Authority API, linked to a sales order.
+A fiscalization request submitted to Serbian Tax Authority API. May be linked to a sales order; `order_id` is optional for manual fiscal bill creation.
 
 | Column              | Type         | Constraints              | Notes                                    |
 |---------------------|--------------|--------------------------|------------------------------------------|
 | fiscalbill_id       | VARCHAR(64)  | PK, NOT NULL             | Internal fiscal bill identifier          |
-| order_id            | VARCHAR(64)  | NOT NULL                 | Source order identifier                  |
+| order_id            | VARCHAR(64)  | NULL                     | Source order identifier; omitted for manual bills without an order |
+| referent_fiscalbill_id | BIGINT    | FK → fiscalbill.fiscalbill_id, NULL | Referenced fiscal bill when a referent document was sent to TA |
 | status              | VARCHAR(50)  | NOT NULL                 | PENDING, SUCCESS, FAILED, RETRYING       |
 | provider_reference  | VARCHAR(128) | NULL                     | Provider response reference              |
 | last_error          | VARCHAR(512) | NULL                     | Last error                               |
@@ -280,9 +282,10 @@ A fiscalization request submitted to Serbian Tax Authority API, linked to a sale
 | efiscal_link        | VARCHAR(2000)| NULL                     |                                          |
 | efiscal_messages    | VARCHAR(22)  | NULL                     |                                          |
 | efiscal_mrc         | VARCHAR(22)  | NULL                     |                                          |
-| efiscal_name        | VARCHAR(50)  | NULL                     |                                          |
+| efiscal_locationname| VARCHAR(50)  | NULL                     | Tax Authority `locationName`             |
+| efiscal_district    | VARCHAR(50)  | NULL                     | Tax Authority `district`                 |
 | efiscal_qr          | TEXT         | NULL                     |                                          |
-| efiscal_requestedby | VARCHAR(50)  | NULL                     |                                          |
+| efiscal_requestedby | VARCHAR(50)  | NULL                     | Tax Authority `requestedBy` from the response — not the ESIR number |
 | efiscal_sdcdatetime | VARCHAR(50)  | NULL                     |                                          |
 | efiscal_sdc_invoiceno | VARCHAR(30)| NULL                     |                                          |
 | efiscal_signature   | TEXT         | NULL                     |                                          |
@@ -302,7 +305,11 @@ A fiscalization request submitted to Serbian Tax Authority API, linked to a sale
 | value               | VARCHAR(40)  | NULL                     |                                          |
 | efiscal_invoicetype | NUMERIC(10,0)| NULL                     |                                          |
 | efiscal_transactiontype | NUMERIC(10,0) | NULL                |                                          |
-| efiscal_customername| VARCHAR(100) | NULL                     |                                          |
+| customer_name       | VARCHAR(100) | NULL                     | Customer name (manual form or order)     |
+| customer_email      | VARCHAR(255) | NULL                     | Customer email (manual form or order)    |
+| customer_id         | VARCHAR(64)  | NULL                     | Tax Authority `buyerId` as sent in request |
+| customer_costcenterid | VARCHAR(128) | NULL                   | Tax Authority `buyerCostCenterId` (optional customer field) |
+| dateandtimeofissue  | VARCHAR(50)  | NULL                     | Tax Authority `dateAndTimeOfIssue` as sent (advance payment moment); Advance Sale only |
 | efiscal_orderid     | VARCHAR(22)  | NULL                     |                                          |
 
 ---
@@ -346,7 +353,7 @@ CREATE TABLE IF NOT EXISTS fiscalbill_idempotency_keys
 |---------------------|--------------|--------------------------|------------------------------------------|
 | fiscalbillconfig_id | BIGINT       | PK, NOT NULL, IDENTITY(1000,1)      |                                          |
 | org_id              | BIGINT       | FK → org.org_id, NOT NULL           |                                          |
-| esirno              | VARCHAR(22)  |                          |                                          |
+| esirno              | VARCHAR(22)  |                          | Legacy; Tax Authority `invoiceNumber` uses `app.esir-number`/`app.software-version` |
 | is_test             | BOOLEAN      | NOT NULL, DEFAULT FALSE  |                                          |
 | email_from          | VARCHAR(60)  |                          |                                          |
 | email_bcc           | VARCHAR(60)  |                          |                                          |
@@ -371,8 +378,10 @@ List of tax code and applied rates for each tax
 
 Notes:
 - Advance fiscal bill line name is resolved from tax table fields:
-    efiscal_advanceprefix + efiscal_advancename
+    `efiscal_advanceprefix` + ` ` + `efiscal_advancename` + ` (` + tax label + `)`
+  Example: `20 Avans (Ђ)`
 - Values should be configured on active tax rows used in fiscal mapping.
+- PDF rendering for Advance invoices uses the same naming (grouped by tax label).
 
 ### 2.13 Tax Category
 Table name: taxcategory
@@ -425,6 +434,7 @@ When fiscal bill is created based on sales order, then this table will be store 
 | quantity            | NUMERIC(14,3)| NOT NULL                 |                                          |
 | unit_price          | NUMERIC(14,2)| NOT NULL                 |                                          |
 | total_amount        | NUMERIC(14,2)| NOT NULL                 |                                          |
+| total_paid          | NUMERIC(14,2)| NULL                     | Advance Sale amount paid on this line (may be less than total_amount); null otherwise |
 | tax_label           | VARCHAR(10)  |                          |                                          |
 | is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                                          |
 | created_at          | TIMESTAMPTZ  | NOT NULL                 |                                          |
@@ -440,7 +450,7 @@ Organization-level fiscal configuration used during fiscal bill creation.
 |---------------------|--------------|--------------------------|------------------------------------------|
 | fiscalbillconfig_id | BIGINT       | PK, NOT NULL, IDENTITY(1000,1)      |                                          |
 | org_id              | BIGINT       | FK → org.org_id, NOT NULL           |                                          |
-| esirno              | VARCHAR(22)  |                          |                                          |
+| esirno              | VARCHAR(22)  |                          | Legacy; Tax Authority `invoiceNumber` uses `app.esir-number`/`app.software-version` |
 | is_test             | BOOLEAN      | NOT NULL, DEFAULT FALSE  |                                          |
 | is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                                          |
 | created_at          | TIMESTAMPTZ  | NOT NULL                 |                                          |
@@ -469,8 +479,10 @@ Organization-scoped product catalog for fiscal bill line item lookup. Populated 
 | source_type         | VARCHAR(16)  | NOT NULL, DEFAULT `MANUAL` | `MANUAL` or `MERCHANTPRO` |
 | sync_status         | VARCHAR(20)  | NOT NULL, DEFAULT `ACTIVE` | `ACTIVE` or `MISSING_IN_SOURCE` (synced rows only) |
 | hidden_at           | TIMESTAMPTZ  | NULL                     | Local hide/archive for `MERCHANTPRO` products |
+| is_shipment         | BOOLEAN      | NOT NULL, DEFAULT FALSE  | Marks the org's shipping-service product used for the from-order shipping line (V51) |
 
 Rules:
+- At most one non-deleted product per organization may have `is_shipment = TRUE` (partial unique index `uq_product_org_shipment` on `org_id WHERE is_shipment AND deleted_at IS NULL`). Only `MANUAL` products can be marked (shop products are read-only).
 - At least one of `sku` or `ean` is required for manual create and for live shop price lookup.
 - `last_known_price` is not authoritative for fiscal bills; use live lookup at line-item selection.
 - Visible catalog rows: `deleted_at IS NULL AND hidden_at IS NULL`.
@@ -487,6 +499,8 @@ Migrations:
 - `V35__widen_mp_product_id_to_bigint.sql` — `mp_product_id` BIGINT
 - `V36__create_product_sync_job.sql` — sync job tracking table
 - `V37__add_product_source_ownership.sql` — `source_type`, `sync_status`, `hidden_at`; backfill synced rows; visibility indexes
+- `V51__org_include_shipment_and_product_is_shipment.sql` — `org.include_shipment`, `product.is_shipment`, one-shipping-product-per-org partial unique index
+- `V52__seed_account_access_action.sql` — seeds `SYSTEM` / `ACCOUNT_ACCESS` (Account page + own name/email/password) and grants it once to every existing role so prior access is kept; no schema change
 
 ### 2.19 product_sync_job
 Table name: product_sync_job

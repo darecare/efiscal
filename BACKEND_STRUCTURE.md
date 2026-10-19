@@ -241,6 +241,9 @@ The system defines the following canonical action codes (inserted during migrati
 | `SYSTEM` | `USERS_MANAGE` | Manage Users | Allows CRUD operations on user accounts |
 | `SYSTEM` | `ROLES_MANAGE` | Manage Roles | Allows CRUD operations on custom client roles |
 | `SYSTEM` | `ORGS_MANAGE` | Manage Organizations | Allows managing organizations, API connections, and templates |
+| `SYSTEM` | `ACCOUNT_ACCESS` | Account Page | Allows opening the Account page and editing own name, email, and password |
+
+`ACCOUNT_ACCESS` is granted to roles only by `V52` (all roles existing at that time). `DataInitializerService` seeds the catalog entry but deliberately not role grants, because its startup re-grant would undo an admin revoking it.
 
 #### Endpoint → Required Action Mapping
 
@@ -250,6 +253,8 @@ The system defines the following canonical action codes (inserted during migrati
     *   *Security validation constraint:* Non-superadmins can only create/update roles with permissions that they themselves possess (`RoleManagementService.validateRoleActions`).
 *   **User Endpoints (`/api/v1/users`):**
     *   `GET`, `POST`, `PUT`, `DELETE /users` -> requires `USERS_MANAGE`
+    *   `PUT /users/me`, `PUT /users/me/password` -> requires `ACCOUNT_ACCESS` (self-service, always the caller's own user)
+    *   `PATCH /users/me/language` -> authenticated user only
 *   **Organization and Connection Endpoints:**
     *   `/api/v1/orgs` (except `/my-access`) -> requires `ORGS_MANAGE`
     *   `/api/v1/apiconn` -> requires `ORGS_MANAGE`

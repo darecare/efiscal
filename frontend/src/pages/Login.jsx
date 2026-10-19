@@ -14,6 +14,8 @@ export default function Login() {
     return <Navigate to="/orders" replace />
   }
 
+  const signInHint = t('auth.signInHint').trim()
+
   async function handleSubmit(event) {
     event.preventDefault()
     setSubmitting(true)
@@ -25,7 +27,7 @@ export default function Login() {
     <div className="centered-page">
       <form className="login-card" onSubmit={handleSubmit}>
         <h2>{t('auth.signIn')}</h2>
-        <p>{t('auth.signInHint')}</p>
+        {signInHint ? <p>{signInHint}</p> : null}
         <div className="form-grid">
           <label className="field">
             <span>{t('common.email')}</span>

@@ -143,6 +143,8 @@ public class MerchantProOrderService {
         }
         String customerEmail = extractCustomerEmail(raw);
         String paymentMethodCode = str(raw.getOrDefault("payment_method_code", raw.getOrDefault("paymentMethodCode", "")));
+        String billingType = blankToNull(str(raw.getOrDefault("billing_type", raw.getOrDefault("billingType", ""))));
+        String billingCompanyVat = blankToNull(str(raw.getOrDefault("billing_company_vat", raw.getOrDefault("billingCompanyVat", ""))));
 
         // Extract order lines — MerchantPro returns them under 'line_items' when include=line_items
         List<DemoDataService.OrderLineView> orderLines = new java.util.ArrayList<>();
@@ -165,7 +167,33 @@ public class MerchantProOrderService {
             }
         }
 
-        return new DemoDataService.OrderView(id, orderNo, customer, customerEmail, shippingStatus, total, createdAt, paymentMethodCode, orderLines);
+        BigDecimal shippingAmount = parseDecimal(raw.get("shipping_amount"));
+        BigDecimal shippingTaxPercent = parseDecimal(raw.get("shipping_tax_percent"));
+
+        return new DemoDataService.OrderView(
+                id, orderNo, customer, customerEmail, shippingStatus, total, createdAt, paymentMethodCode,
+                billingType, billingCompanyVat, orderLines, shippingAmount, shippingTaxPercent);
+    }
+
+    private static BigDecimal parseDecimal(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal bd) {
+            return bd;
+        }
+        if (value instanceof Number n) {
+            return new BigDecimal(n.toString());
+        }
+        String s = String.valueOf(value).trim();
+        if (s.isEmpty()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(s);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private String extractCustomerEmail(Map<String, Object> raw) {
@@ -205,6 +233,13 @@ public class MerchantProOrderService {
 
     private static String str(Object o) {
         return o == null ? "" : String.valueOf(o);
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     public record OrderFetchResult(List<DemoDataService.OrderView> data, int total) {}

@@ -60,6 +60,9 @@ public class OrgEntity {
     @Column(name = "advertisement_enabled", nullable = false)
     private boolean advertisementEnabled = false;
 
+    @Column(name = "include_shipment", nullable = false)
+    private boolean includeShipment = true;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -103,6 +106,8 @@ public class OrgEntity {
     public void setAdvertisementHtml(String advertisementHtml) { this.advertisementHtml = advertisementHtml; }
     public boolean isAdvertisementEnabled() { return advertisementEnabled; }
     public void setAdvertisementEnabled(boolean advertisementEnabled) { this.advertisementEnabled = advertisementEnabled; }
+    public boolean isIncludeShipment() { return includeShipment; }
+    public void setIncludeShipment(boolean includeShipment) { this.includeShipment = includeShipment; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public OffsetDateTime getDeletedAt() { return deletedAt; }

@@ -46,6 +46,10 @@ public class FiscalBillLineEntity {
     @Column(name = "total_amount", nullable = false, precision = 14, scale = 2)
     private BigDecimal totalAmount;
 
+    /** Amount paid on this line for Advance Sale (may be less than totalAmount). Null for other invoice types. */
+    @Column(name = "total_paid", precision = 14, scale = 2)
+    private BigDecimal totalPaid;
+
     /** Tax label applied to this line (e.g. "A", "E") */
     @Column(name = "tax_label", length = 10)
     private String taxLabel;
@@ -98,6 +102,9 @@ public class FiscalBillLineEntity {
 
     public BigDecimal getTotalAmount() { return totalAmount; }
     public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
+
+    public BigDecimal getTotalPaid() { return totalPaid; }
+    public void setTotalPaid(BigDecimal totalPaid) { this.totalPaid = totalPaid; }
 
     public String getTaxLabel() { return taxLabel; }
     public void setTaxLabel(String taxLabel) { this.taxLabel = taxLabel; }

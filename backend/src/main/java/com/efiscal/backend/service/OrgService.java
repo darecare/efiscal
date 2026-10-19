@@ -95,6 +95,7 @@ public class OrgService {
         org.setLogoImage(validateAndNormalizeLogoImage(req.logoImage()));
         org.setAdvertisementHtml(normalizeOptional(req.advertisementHtml()));
         org.setAdvertisementEnabled(req.advertisementEnabled() != null && req.advertisementEnabled());
+        org.setIncludeShipment(req.includeShipment() == null || req.includeShipment());
         return toDto(orgRepository.save(org));
     }
 
@@ -131,6 +132,7 @@ public class OrgService {
         if (req.logoImage() != null) org.setLogoImage(validateAndNormalizeLogoImage(req.logoImage()));
         if (req.advertisementHtml() != null) org.setAdvertisementHtml(normalizeOptional(req.advertisementHtml()));
         if (req.advertisementEnabled() != null) org.setAdvertisementEnabled(req.advertisementEnabled());
+        if (req.includeShipment() != null) org.setIncludeShipment(req.includeShipment());
         return toDto(orgRepository.save(org));
     }
 
@@ -193,7 +195,8 @@ public class OrgService {
             o.getCreatedAt(),
             o.getLogoImage(),
             o.getAdvertisementHtml(),
-            o.isAdvertisementEnabled()
+            o.isAdvertisementEnabled(),
+            o.isIncludeShipment()
         );
     }
 
@@ -255,7 +258,8 @@ public class OrgService {
         @Size(max = 2097152, message = "Organization logo image payload must not exceed 2MB")
         String logoImage,
         String advertisementHtml,
-        boolean advertisementEnabled
+        boolean advertisementEnabled,
+        boolean includeShipment
     ) {}
 
     public record CreateOrgRequest(
@@ -301,7 +305,8 @@ public class OrgService {
         String logoImage,
 
         String advertisementHtml,
-        Boolean advertisementEnabled
+        Boolean advertisementEnabled,
+        Boolean includeShipment
     ) {}
 
     public record UpdateOrgRequest(
@@ -342,6 +347,7 @@ public class OrgService {
         String logoImage,
 
         String advertisementHtml,
-        Boolean advertisementEnabled
+        Boolean advertisementEnabled,
+        Boolean includeShipment
     ) {}
 }

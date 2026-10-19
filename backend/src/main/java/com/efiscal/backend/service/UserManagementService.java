@@ -18,6 +18,7 @@ import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,10 @@ import org.springframework.web.server.ResponseStatusException;
 public class UserManagementService {
 
     private static final Set<String> SUPPORTED_LANGUAGES = Set.of("en", "sr");
+    private static final int MIN_PASSWORD_LENGTH = 6;
+    private static final int MAX_PASSWORD_LENGTH = 100;
+    private static final int MAX_TEXT_LENGTH = 255;
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     private final AppUserRepository userRepository;
     private final ClientRepository clientRepository;
@@ -184,13 +189,67 @@ public class UserManagementService {
         if (normalized != null && !SUPPORTED_LANGUAGES.contains(normalized)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported language. Supported: en, sr");
         }
+        AppUserEntity user = requireActiveUser(userId);
+        user.setPreferredLanguage(normalized);
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public UserDto updateMyProfile(Long userId, UpdateMyProfileRequest req) {
+        String fullName = req == null ? null : normalizeOptional(req.fullName());
+        String email = req == null ? null : normalizeOptional(req.email());
+        if (fullName == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Full name is required");
+        }
+        if (fullName.length() > MAX_TEXT_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Full name must not exceed 255 characters");
+        }
+        if (email == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email is required");
+        }
+        if (email.length() > MAX_TEXT_LENGTH || !EMAIL_PATTERN.matcher(email).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid email format");
+        }
+
+        AppUserEntity user = requireActiveUser(userId);
+        if (!email.equals(user.getEmail())) {
+            // Soft-deleted users still hold their email under the DB unique constraint, so check all rows.
+            userRepository.findByEmail(email)
+                .filter(other -> !other.getUserId().equals(user.getUserId()))
+                .ifPresent(other -> {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already in use");
+                });
+        }
+        user.setFullName(fullName);
+        user.setEmail(email);
+        return toDto(userRepository.save(user));
+    }
+
+    @Transactional
+    public void changeMyPassword(Long userId, ChangeMyPasswordRequest req) {
+        String newPassword = req == null ? null : req.newPassword();
+        String confirmPassword = req == null ? null : req.confirmPassword();
+        if (newPassword == null || newPassword.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password is required");
+        }
+        if (newPassword.length() < MIN_PASSWORD_LENGTH || newPassword.length() > MAX_PASSWORD_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be between 6 and 100 characters");
+        }
+        if (!newPassword.equals(confirmPassword)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Passwords do not match");
+        }
+        AppUserEntity user = requireActiveUser(userId);
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
+
+    private AppUserEntity requireActiveUser(Long userId) {
         AppUserEntity user = userRepository.findById(userId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
         if (!user.isActive() || user.getDeletedAt() != null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
         }
-        user.setPreferredLanguage(normalized);
-        userRepository.save(user);
+        return user;
     }
 
     @Transactional
@@ -333,4 +392,8 @@ public class UserManagementService {
         @Size(max = 10, message = "Preferred language must not exceed 10 characters")
         String preferredLanguage
     ) {}
+
+    public record UpdateMyProfileRequest(String fullName, String email) {}
+
+    public record ChangeMyPasswordRequest(String newPassword, String confirmPassword) {}
 }
