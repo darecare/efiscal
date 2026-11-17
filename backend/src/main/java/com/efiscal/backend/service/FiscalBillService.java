@@ -2067,9 +2067,32 @@ public class FiscalBillService {
                 e.getAttemptCount(),
                 e.getCreated() != null ? e.getCreated().toString() : null,
                 e.getUpdated() != null ? e.getUpdated().toString() : null,
+                e.getCustomerName(),
+                e.getCustomerEmail(),
+                e.getCustomerId(),
                 emailResult != null ? emailResult.status() : null,
                 emailResult != null ? emailResult.errorMessage() : null
         );
+    }
+
+    /**
+     * Resend (or send) the fiscal bill email using stored customer name/email.
+     * Allowed for SUCCESS bills only; uses the same template/SMTP path as create flows.
+     */
+    @Transactional
+    public FiscalBillEmailService.EmailSendResult sendFiscalBillEmail(Long fiscalBillId) {
+        FiscalBillEntity entity = fiscalBillRepository.findById(fiscalBillId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Fiscal bill not found"));
+        if (!STATUS_SUCCESS.equals(entity.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email can only be sent for successful fiscal bills");
+        }
+        return fiscalBillEmailService.sendIfRequested(
+                entity.getOrgId(),
+                entity,
+                true,
+                entity.getCustomerEmail(),
+                entity.getCustomerName(),
+                entity.getOrderId());
     }
 
     private FiscalBillListView toListView(FiscalBillEntity e) {
@@ -2164,6 +2187,9 @@ public class FiscalBillService {
             Integer attemptCount,
             String createdAt,
             String updatedAt,
+            String customerName,
+            String customerEmail,
+            String customerId,
             String emailStatus,
             String emailError
     ) {}

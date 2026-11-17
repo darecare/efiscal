@@ -375,6 +375,7 @@ select {
   border-radius: 8px;
   font-weight: 500;
   transition: background 0.15s;
+  margin-bottom: 2px;
 }
 
 .nav-group-toggle {
@@ -820,10 +821,97 @@ input.form-input:focus {
   border-radius: 10px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
   overflow: hidden;
+  width: max-content;
+  max-width: min(640px, calc(100vw - 24px));
+}
+
+.fiscal-date-range-popover .rdrDateRangePickerWrapper {
+  display: flex;
+  max-width: 100%;
+}
+
+.fiscal-date-range-popover .rdrDefinedRangesWrapper {
+  width: 140px;
+  min-width: 140px;
+  font-size: 0.8125rem;
+}
+
+.fiscal-date-range-popover .rdrStaticRangeLabel {
+  padding: 8px 12px;
+}
+
+.fiscal-date-range-popover .rdrInputRanges {
+  padding: 8px 12px;
 }
 
 .fiscal-date-range-popover .rdrCalendarWrapper {
-  font-size: 13px;
+  font-size: 12px;
+  max-width: 100%;
+}
+
+.fiscal-date-range-popover .rdrDateDisplayWrapper {
+  background: var(--color-bg);
+  padding: 6px 8px;
+}
+
+.fiscal-date-range-popover .rdrDateDisplay {
+  margin: 0;
+  gap: 6px;
+}
+
+.fiscal-date-range-popover .rdrDateDisplayItem {
+  margin: 0;
+  box-shadow: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.fiscal-date-range-popover .rdrDateDisplayItem input,
+.fiscal-date-range-popover .rdrDateInput input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.fiscal-date-range-popover .rdrMonth {
+  width: 210px;
+  padding: 0 0.6em 1em 0.6em;
+}
+
+.fiscal-date-range-popover .rdrMonthName,
+.fiscal-date-range-popover .rdrWeekDay {
+  font-size: 0.75rem;
+}
+
+.fiscal-date-range-popover .rdrDayNumber span {
+  font-size: 0.75rem;
+}
+
+@media (max-width: 720px) {
+  .fiscal-date-range-popover {
+    max-width: calc(100vw - 16px);
+  }
+
+  .fiscal-date-range-popover .rdrDateRangePickerWrapper {
+    flex-wrap: wrap;
+  }
+
+  .fiscal-date-range-popover .rdrMonths {
+    flex-wrap: wrap;
+  }
+
+  .fiscal-date-range-popover .rdrDefinedRangesWrapper {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
 }
 
 .fiscal-date-range-actions {
@@ -1015,9 +1103,13 @@ input.form-input:focus {
 
 .fiscalbills-summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 8px 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 20px;
   margin-bottom: 14px;
+}
+
+.fiscalbills-summary-invoice {
+  white-space: nowrap;
 }
 
 .fiscalbills-link-row {
@@ -1036,35 +1128,14 @@ input.form-input:focus {
   text-decoration: none;
 }
 
-.external-link-icon {
-  position: relative;
-  width: 14px;
-  height: 14px;
-  border: 1px solid currentColor;
-  border-radius: 2px;
+.icon-link:hover {
+  color: var(--color-primary);
 }
 
-.external-link-icon::before {
-  content: '';
-  position: absolute;
-  width: 6px;
-  height: 1px;
-  right: -1px;
-  top: 1px;
-  background: currentColor;
-  transform: rotate(-45deg);
-  transform-origin: right center;
-}
-
-.external-link-icon::after {
-  content: '';
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  right: -1px;
-  top: -1px;
-  border-right: 1px solid currentColor;
-  border-top: 1px solid currentColor;
+.icon-link .fas,
+.icon-link .far,
+.icon-link .fal {
+  font-size: 0.95rem;
 }
 
 .fiscalbills-qr-wrap {
@@ -1380,6 +1451,43 @@ input.form-input:focus {
 .tab-button.active {
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
+}
+
+.fiscalbills-customer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 20px;
+  margin-bottom: 14px;
+}
+
+.fiscalbills-export-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1rem;
+}
+
+.fiscalbills-export-dropdown > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fiscalbills-export-dropdown .action-dropdown-menu {
+  left: 0;
+  right: auto;
+  min-width: 240px;
+}
+
+.fiscalbills-detail-tabs {
+  margin: 8px -20px 16px;
+  padding: 0 20px;
+}
+
+.fiscalbills-detail-tabs .tab-button {
+  font: inherit;
+  font-size: 0.9375rem;
 }
 
 /* ─── Banners ──────────────────────────────────────── */

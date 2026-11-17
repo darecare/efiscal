@@ -23,6 +23,7 @@ If behavior is unspecified by any of the above, ask before inventing a solution.
 - **FRONTEND_STRUCTURE.md** – React component and routing structure
 - **docs/MERCHANTPRO_ORDER_NORMALIZATION.md** – Order normalization pipeline
 - **docs/PRODUCT_SYNC_JOBS_AND_INCREMENTAL_HANDOFF.md** – Product sync and incremental fetch jobs
+- **docs/REPORTS_MODULE.md** – Reports hub, fiscal report registry, CSV export
 
 ## Before Coding
 

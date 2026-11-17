@@ -119,7 +119,25 @@ Subscription behavior:
 
 ### GET /fiscalbill/{id}/details
 - Description: Get detailed bill data including tax and payment rows.
-- 200 Response: [bill object with items, taxes, and payments]
+- Action: `FISCAL_VIEW_BILLS`
+- 200 Response: object with `fiscalBill`, tax/line/payment collections. `fiscalBill` includes customer fields:
+  - `customerName` / `customerEmail` / `customerId` (nullable; from `fiscalbill.customer_*`)
+
+### POST /fiscalbill/{id}/email
+- Description: Send (or resend) the fiscal bill PDF email to the customer stored on the bill, using the same org SMTP + email-template path as create flows (`sendIfRequested`).
+- Action: `FISCAL_VIEW_BILLS`
+- Headers:
+  - `Idempotency-Key: <uuid>` (required; each call may send again — key is not used for email dedupe)
+- Preconditions: bill must be `SUCCESS`. Recipient is `fiscalbill.customer_email` (and name from `customer_name`).
+- 200 Response:
+```json
+{
+  "emailStatus": "SENT",
+  "emailError": null
+}
+```
+- `emailStatus`: `SENT` | `SKIPPED` | `FAILED` (e.g. missing customer email → `SKIPPED`)
+- Errors: `400` (not SUCCESS / missing Idempotency-Key), `401`, `403`, `404`
 
 ### GET /fiscalbill/{id}/pdf
 - Description: Download fiscal bill as PDF generated from selected HTML template.
@@ -894,6 +912,53 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 ```
 - `emailStatus` values after create: `NOT_REQUESTED` (sendEmail false), `SENT`, `SKIPPED` (e.g. missing customer email), `FAILED`.
 - Errors: `400` (validation: payment total mismatch, missing line items, invalid referent document, missing tax labels), `401`, `403`, `409` (duplicate bill for order or Idempotency-Key conflict), `502` (Tax Authority failure; response body may include fiscal bill with `status: FAILED`), `500`
+
+## 5G. Reports Endpoints
+
+All report endpoints require action `REPORTS_VIEW` and (where `orgId` is used) organization access via `requireOrgAccess(orgId)`.
+
+### GET /reports/fiscal/catalog
+- Description: List available fiscal-bill report definitions for the Reports hub selector.
+- 200 Response:
+```json
+[
+  {
+    "code": "products-sold-net-normal",
+    "labelKey": "reports.catalog.productsSoldNetNormal",
+    "descriptionKey": "reports.catalog.productsSoldNetNormalDescription"
+  }
+]
+```
+- Errors: `401`, `403`, `500`
+
+### GET /reports/fiscal
+- Description: Run a fiscal report with server-side aggregation and pagination.
+- Query params:
+  - `orgId` (required)
+  - `report` (required) — report code from catalog (first: `products-sold-net-normal`)
+  - `from` / `to` (required) — Belgrade calendar dates `YYYY-MM-DD` (inclusive days) **or** ISO offset date-times. Date-only values expand to Belgrade midnight start and exclusive next-day midnight. Compared against `fiscalbill.efiscal_sdcdatetime`.
+  - `page` (default `0`), `size` (default `50`, max `200`)
+- First report (`products-sold-net-normal`): SUCCESS Normal (`invoiceType=0`) only; Sale amounts/qty positive, Refund counted in refunded columns and subtracted in net; grouped by `product_id` → `sku` → `gtin` → `name`. Bills with null `efiscal_sdcdatetime` are excluded.
+- 200 Response:
+```json
+{
+  "report": "products-sold-net-normal",
+  "filters": { "orgId": 1, "from": "2024-06-01T00:00:00+02:00", "to": "2024-06-02T00:00:00+02:00" },
+  "page": 0,
+  "size": 50,
+  "totalElements": 12,
+  "columns": [{ "key": "name", "labelKey": "reports.columns.name" }],
+  "rows": [{ "name": "Widget", "qtyNet": 8, "amountNet": 800.00, "billCount": 3 }]
+}
+```
+- Errors: `400` (missing/invalid dates, unknown report), `401`, `403`, `500`
+
+### GET /reports/fiscal/export
+- Description: Export the same filtered result set as CSV (all matching rows, not only the current page). UTF-8 with BOM. Localized headers via `lang=en|sr`.
+- Query params: same as `GET /reports/fiscal` plus optional `lang` (default `en`). No pagination.
+- Cap: `app.reports.export-max-rows` (default 50000). Over-cap → `400` `Export exceeds maximum of N rows (…)`.
+- 200 Response: `text/csv` attachment (`Content-Disposition: attachment; filename="products-sold-net-normal_{orgId}_{from}_{to}.csv"`)
+- Errors: `400`, `401`, `403`, `500`
 
 ## 6. Error Model
 All non-2xx responses should follow:

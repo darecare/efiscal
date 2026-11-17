@@ -92,6 +92,16 @@
       "templates_other": "{{count}} šablona"
     }
   },
+  "dateRangePresets": {
+    "today": "Danas",
+    "yesterday": "Juče",
+    "thisWeek": "Ova nedelja",
+    "lastWeek": "Prošla nedelja",
+    "thisMonth": "Ovaj mesec",
+    "lastMonth": "Prošli mesec",
+    "daysUpToToday": "dana do danas",
+    "daysStartingToday": "dana od danas"
+  },
   "orgSwitcher": {
     "label": "Organizacija",
     "triggerAriaLabel": "Izaberite aktivnu organizaciju",
@@ -121,6 +131,8 @@
     "apiConfiguration": "API konfiguracija",
     "emailTemplates": "Email šabloni",
     "paymentTypeMapping": "Mapiranje tipova plaćanja",
+    "reports": "Izveštaji",
+    "reportsFiscal": "Fiskalni računi",
     "expandGroup": "Proširite meni",
     "collapseGroup": "Skupite meni"
   },
@@ -167,6 +179,38 @@
     "passwordMismatch": "Lozinke se ne podudaraju",
     "passwordChanged": "Lozinka je uspešno promenjena",
     "passwordChangeFailed": "Greška prilikom čuvanja nove lozinke"
+  },
+  "reports": {
+    "fiscalTitle": "Izveštaji fiskalnih računa",
+    "fiscalSubtitle": "Analitika proizvoda i fiskalnih računa za aktivnu organizaciju.",
+    "reportLabel": "Izveštaj",
+    "sdcDateRange": "SDC period",
+    "pageSize": "Redova po strani",
+    "run": "Pokrenite izveštaj",
+    "running": "Pokretanje…",
+    "exportCsv": "Izvezite CSV",
+    "exporting": "Izvoz…",
+    "runFailed": "Pokretanje izveštaja nije uspelo",
+    "exportFailed": "Izvoz CSV-a nije uspeo",
+    "dateRangeRequired": "Datumi Od i Do su obavezni",
+    "dateRangeInvalid": "Datum Od mora biti pre ili jednak datumu Do",
+    "noRows": "Nema proizvoda za izabrani period.",
+    "catalog": {
+      "productsSoldNetNormal": "Prodati proizvodi",
+      "productsSoldNetNormalDescription": "Normalna prodaja minus normalni refundacija, grupisano po proizvodu. Period koristi sdcDateTime poreske uprave (kalendarski dani u Beogradu)."
+    },
+    "columns": {
+      "name": "Naziv",
+      "sku": "SKU",
+      "gtin": "GTIN",
+      "qtySold": "Količina prodato",
+      "qtyRefunded": "Količina refundirano",
+      "qtyNet": "Količina neto",
+      "amountSold": "Iznos prodato",
+      "amountRefunded": "Iznos refundirano",
+      "amountNet": "Iznos neto",
+      "billCount": "Broj računa"
+    }
   },
   "clients": {
     "title": "Klijenti",
@@ -304,7 +348,8 @@
     "permissionModules": {
       "FISCAL": "Fiskalno",
       "MERCHANTPRO": "MerchantPro",
-      "SYSTEM": "Sistem"
+      "SYSTEM": "Sistem",
+      "REPORTS": "Izveštaji"
     },
     "actionLabels": {
       "FISCAL_CREATE_BILL": "Kreirajte fiskalni račun",
@@ -315,7 +360,8 @@
       "ROLES_MANAGE": "Upravljanje ulogama",
       "ORGS_MANAGE": "Upravljanje organizacijama",
       "FISCAL_MANAGE_PRODUCTS": "Upravljanje proizvodima",
-      "ACCOUNT_ACCESS": "Stranica naloga"
+      "ACCOUNT_ACCESS": "Stranica naloga",
+      "REPORTS_VIEW": "Pregled izveštaja"
     },
     "permissionDescriptions": {
       "FISCAL_CREATE_BILL": "Dozvoljava izdavanje novih fiskalnih računa",
@@ -326,7 +372,8 @@
       "ROLES_MANAGE": "Dozvoljava kreiranje i izmenu uloga",
       "ORGS_MANAGE": "Dozvoljava upravljanje organizacijama i API podešavanjima",
       "FISCAL_MANAGE_PRODUCTS": "Dozvoljava upravljanje kataloga proizvoda i sinhronizaciju iz prodavnice",
-      "ACCOUNT_ACCESS": "Dozvoljava otvaranje stranice naloga i izmenu sopstvenog imena, email-a i lozinke"
+      "ACCOUNT_ACCESS": "Dozvoljava otvaranje stranice naloga i izmenu sopstvenog imena, email-a i lozinke",
+      "REPORTS_VIEW": "Dozvoljava otvaranje izveštaja i izvoz fiskalnih izveštaja"
     }
   },
   "apiConfig": {
@@ -485,8 +532,8 @@
     "selectOrgRequired": "Izaberite organizaciju.",
     "loadFailed": "Učitavanje fiskalnih računa nije uspelo.",
     "loadDetailsFailed": "Učitavanje detalja fiskalnog računa nije uspelo.",
-    "taDateRange": "TA opseg datuma",
-    "taInvoiceNo": "TA broj računa",
+    "taDateRange": "Opseg datuma",
+    "taInvoiceNo": "Broj računa",
     "taInvoiceNoPlaceholder": "npr. A9ZA2WRE-…",
     "orderId": "ID porudžbine",
     "orderIdPlaceholder": "Pretraga po ID porudžbine…",
@@ -511,6 +558,7 @@
     "copyFailed": "Kreiranje kopije fiskalnog računa nije uspelo.",
     "refundFailed": "Kreiranje refundacije fiskalnog računa nije uspelo.",
     "detailsTitle": "Detalji fiskalnog računa",
+    "downloadPreviewMenu": "Preuzimanje / Pregled",
     "previewHtmlA4": "Pregled HTML-a (A4)",
     "previewingHtml": "Otvaranje pregleda…",
     "downloadPdfA4": "Preuzmite PDF (A4)",
@@ -521,12 +569,19 @@
     "downloadImageRoll80": "Preuzmite PNG (rolna 57-80mm)",
     "downloadingImage": "Preuzimanje slike…",
     "downloadImageFailed": "Preuzimanje slike fiskalnog računa nije uspelo.",
+    "sendEmail": "Pošaljite email",
+    "sendingEmail": "Slanje emaila…",
+    "sendEmailSuccess": "Email je uspešno poslat.",
+    "sendEmailSkipped": "Email nije poslat: {{reason}}",
+    "sendEmailFailed": "Slanje emaila fiskalnog računa nije uspelo.",
     "previewPopupBlocked": "Popup je blokiran. Dozvolite otvaranje popup prozora za HTML pregled.",
     "previewHtmlFailed": "Otvaranje HTML pregleda nije uspelo.",
     "loadingDetails": "Učitavanje detalja…",
     "fiscalBillId": "ID fiskalnog računa:",
-    "taInvoiceNoLabel": "TA broj računa",
+    "taInvoiceNoLabel": "Broj računa",
     "updated": "Ažurirano:",
+    "customerEmail": "Email kupca",
+    "customerId": "ID kupca",
     "verificationLink": "Link za verifikaciju:",
     "openVerificationLink": "Otvorite link za verifikaciju",
     "qrAlt": "QR fiskalnog računa",

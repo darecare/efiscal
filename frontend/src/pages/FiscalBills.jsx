@@ -6,6 +6,7 @@ import { fiscalBillApi } from '../services/api'
 import { useOrg } from '../contexts/OrgContext'
 import { DateRangePicker } from 'react-date-range'
 import { enUS, srLatn } from 'date-fns/locale'
+import { buildInputRanges, buildStaticRanges } from '../utils/dateRangePresets'
 import 'react-date-range/dist/styles.css'
 import 'react-date-range/dist/theme/default.css'
 
@@ -30,6 +31,8 @@ export default function FiscalBills() {
   const [downloadingPdfFormat, setDownloadingPdfFormat] = useState('')
   const [downloadingImageFormat, setDownloadingImageFormat] = useState('')
   const [previewingHtmlFormat, setPreviewingHtmlFormat] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailSuccessMsg, setEmailSuccessMsg] = useState('')
   const [copyingBillIds, setCopyingBillIds] = useState({})
   const [refundingBillIds, setRefundingBillIds] = useState({})
   const [copyConfirmBill, setCopyConfirmBill] = useState(null)
@@ -43,6 +46,8 @@ export default function FiscalBills() {
     () => (i18n.language?.toLowerCase().startsWith('sr') ? srLatn : enUS),
     [i18n.language],
   )
+  const staticRanges = useMemo(() => buildStaticRanges(t), [t, i18n.language])
+  const inputRanges = useMemo(() => buildInputRanges(t), [t, i18n.language])
 
   // Filter states
   const [dateRange, setDateRange] = useState([
@@ -204,6 +209,7 @@ export default function FiscalBills() {
   async function openDetailsModal(fiscalbillId) {
     closeAllActionDropdowns()
     setActiveTab('tax')
+    setEmailSuccessMsg('')
     setIsDetailsModalOpen(true)
     await handleSelectFiscalBill(fiscalbillId)
   }
@@ -211,9 +217,38 @@ export default function FiscalBills() {
   function closeDetailsModal() {
     setIsDetailsModalOpen(false)
     setDetailsError(null)
+    setEmailSuccessMsg('')
     setDownloadingPdfFormat('')
     setDownloadingImageFormat('')
     setPreviewingHtmlFormat('')
+    setSendingEmail(false)
+  }
+
+  async function handleSendEmail() {
+    const fiscalBillId = details?.fiscalBill?.fiscalbillId
+    if (!fiscalBillId || sendingEmail) return
+
+    setDetailsError(null)
+    setEmailSuccessMsg('')
+    setSendingEmail(true)
+    try {
+      const result = await fiscalBillApi.sendEmail(fiscalBillId, createIdempotencyKey())
+      const status = result?.emailStatus
+      if (status === 'SENT') {
+        setEmailSuccessMsg(t('fiscalBills.sendEmailSuccess'))
+      } else if (status === 'SKIPPED') {
+        setDetailsError(t('fiscalBills.sendEmailSkipped', {
+          reason: result?.emailError || t('common.dash'),
+        }))
+      } else {
+        setDetailsError(result?.emailError || t('fiscalBills.sendEmailFailed'))
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data || err?.message || t('fiscalBills.sendEmailFailed')
+      setDetailsError(typeof msg === 'string' ? msg : t('fiscalBills.sendEmailFailed'))
+    } finally {
+      setSendingEmail(false)
+    }
   }
 
   async function handleDownloadPdf(format) {
@@ -413,10 +448,16 @@ export default function FiscalBills() {
                   onChange={handleDateRangeChange}
                   ranges={dateRange}
                   locale={datePickerLocale}
+                  staticRanges={staticRanges}
+                  inputRanges={inputRanges}
                   moveRangeOnFirstSelection={false}
+                  retainEndDateOnFirstSelection={false}
                   direction="horizontal"
-                  showDateDisplay={false}
-                  months={1}
+                  showDateDisplay
+                  editableDateInputs
+                  dateDisplayFormat="dd.MM.yyyy"
+                  showMonthAndYearPickers
+                  months={2}
                 />
                 <div className="fiscal-date-range-actions">
                   <button type="button" className="secondary-button" onClick={clearDateRange}>{t('common.clear')}</button>
@@ -629,17 +670,20 @@ export default function FiscalBills() {
             </div>
 
             {detailsError ? <div className="error-banner" style={{ marginBottom: '1rem' }}>{detailsError}</div> : null}
+            {emailSuccessMsg ? <div className="success-banner" style={{ marginBottom: '1rem' }}>{emailSuccessMsg}</div> : null}
             {detailsLoading ? <p>{t('fiscalBills.loadingDetails')}</p> : null}
 
             {!detailsLoading && details?.fiscalBill && (
               <>
                 <div className="fiscalbills-summary-grid">
                   <div><strong>{t('fiscalBills.fiscalBillId')}</strong> {details.fiscalBill.fiscalbillId}</div>
+                  <div className="fiscalbills-summary-invoice">
+                    <strong>{t('fiscalBills.taInvoiceNoLabel')}:</strong>{' '}
+                    {details.fiscalBill.sdcInvoiceNumber || t('common.dash')}
+                  </div>
+                  <div><strong>{t('common.created')}</strong> {formatDateTime(details.fiscalBill.createdAt)}</div>
                   <div><strong>{t('account.statusLabel')}:</strong> {details.fiscalBill.status}</div>
                   <div><strong>{t('fiscalBills.orderId')}</strong> {details.fiscalBill.orderId || t('common.dash')}</div>
-                  <div><strong>{t('fiscalBills.taInvoiceNoLabel')}:</strong> {details.fiscalBill.sdcInvoiceNumber || t('common.dash')}</div>
-                  <div><strong>{t('common.created')}</strong> {formatDateTime(details.fiscalBill.createdAt)}</div>
-                  <div><strong>{t('fiscalBills.updated')}</strong> {formatDateTime(details.fiscalBill.updatedAt)}</div>
                   <div className="fiscalbills-link-row">
                     <strong>{t('fiscalBills.verificationLink')}</strong>
                     {details.fiscalBill.efiscalLink ? (
@@ -649,10 +693,26 @@ export default function FiscalBills() {
                         rel="noreferrer"
                         className="icon-link"
                         title={t('fiscalBills.openVerificationLink')}
+                        aria-label={t('fiscalBills.openVerificationLink')}
                       >
-                        <span className="external-link-icon" aria-hidden="true"></span>
+                        <i className="fas fa-external-link-alt" aria-hidden="true" />
                       </a>
                     ) : ` ${t('common.dash')}`}
+                  </div>
+                </div>
+
+                <div className="fiscalbills-customer-grid">
+                  <div>
+                    <strong>{t('fiscalBills.customerName')}:</strong>{' '}
+                    {details.fiscalBill.customerName || t('common.dash')}
+                  </div>
+                  <div>
+                    <strong>{t('fiscalBills.customerEmail')}:</strong>{' '}
+                    {details.fiscalBill.customerEmail || t('common.dash')}
+                  </div>
+                  <div>
+                    <strong>{t('fiscalBills.customerId')}:</strong>{' '}
+                    {details.fiscalBill.customerId || t('common.dash')}
                   </div>
                 </div>
 
@@ -666,68 +726,122 @@ export default function FiscalBills() {
                   </div>
                 ) : null}
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+                <div className="fiscalbills-export-bar">
+                  <details className="action-dropdown fiscalbills-export-dropdown">
+                    <summary
+                      className="secondary-button"
+                      aria-busy={Boolean(downloadingPdfFormat || downloadingImageFormat || previewingHtmlFormat)}
+                    >
+                      <i className="fas fa-download" aria-hidden="true" />
+                      {' '}
+                      {downloadingPdfFormat || downloadingImageFormat || previewingHtmlFormat
+                        ? (previewingHtmlFormat
+                          ? t('fiscalBills.previewingHtml')
+                          : downloadingPdfFormat
+                            ? t('fiscalBills.downloadingPdf')
+                            : t('fiscalBills.downloadingImage'))
+                        : t('fiscalBills.downloadPreviewMenu')}
+                    </summary>
+                    <div className="action-dropdown-menu">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={Boolean(downloadingPdfFormat || downloadingImageFormat || previewingHtmlFormat)}
+                        onClick={(e) => {
+                          e.currentTarget.closest('details')?.removeAttribute('open')
+                          handleDownloadPdf('a4')
+                        }}
+                      >
+                        {t('fiscalBills.downloadPdfA4')}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={Boolean(downloadingPdfFormat || downloadingImageFormat || previewingHtmlFormat)}
+                        onClick={(e) => {
+                          e.currentTarget.closest('details')?.removeAttribute('open')
+                          handleDownloadPdf('roll80')
+                        }}
+                      >
+                        {t('fiscalBills.downloadPdfRoll80')}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={Boolean(downloadingPdfFormat || downloadingImageFormat || previewingHtmlFormat)}
+                        onClick={(e) => {
+                          e.currentTarget.closest('details')?.removeAttribute('open')
+                          handleDownloadImage('a4')
+                        }}
+                      >
+                        {t('fiscalBills.downloadImageA4')}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={Boolean(downloadingPdfFormat || downloadingImageFormat || previewingHtmlFormat)}
+                        onClick={(e) => {
+                          e.currentTarget.closest('details')?.removeAttribute('open')
+                          handleDownloadImage('roll80')
+                        }}
+                      >
+                        {t('fiscalBills.downloadImageRoll80')}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={Boolean(downloadingPdfFormat || downloadingImageFormat || previewingHtmlFormat)}
+                        onClick={(e) => {
+                          e.currentTarget.closest('details')?.removeAttribute('open')
+                          handlePreviewHtml('a4')
+                        }}
+                      >
+                        {t('fiscalBills.previewHtmlA4')}
+                      </button>
+                    </div>
+                  </details>
                   <button
                     type="button"
                     className="secondary-button"
-                    onClick={() => handlePreviewHtml('a4')}
-                    disabled={previewingHtmlFormat !== ''}
+                    disabled={
+                      sendingEmail
+                      || details.fiscalBill.status !== 'SUCCESS'
+                      || !details.fiscalBill.customerEmail
+                    }
+                    onClick={handleSendEmail}
+                    aria-busy={sendingEmail}
                   >
-                    {previewingHtmlFormat === 'a4' ? t('fiscalBills.previewingHtml') : t('fiscalBills.previewHtmlA4')}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => handleDownloadPdf('a4')}
-                    disabled={downloadingPdfFormat !== ''}
-                  >
-                    {downloadingPdfFormat === 'a4' ? t('fiscalBills.downloadingPdf') : t('fiscalBills.downloadPdfA4')}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => handleDownloadPdf('roll80')}
-                    disabled={downloadingPdfFormat !== ''}
-                  >
-                    {downloadingPdfFormat === 'roll80' ? t('fiscalBills.downloadingPdf') : t('fiscalBills.downloadPdfRoll80')}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => handleDownloadImage('a4')}
-                    disabled={downloadingImageFormat !== ''}
-                  >
-                    {downloadingImageFormat === 'a4' ? t('fiscalBills.downloadingImage') : t('fiscalBills.downloadImageA4')}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => handleDownloadImage('roll80')}
-                    disabled={downloadingImageFormat !== ''}
-                  >
-                    {downloadingImageFormat === 'roll80' ? t('fiscalBills.downloadingImage') : t('fiscalBills.downloadImageRoll80')}
+                    <i className="fas fa-envelope" aria-hidden="true" />
+                    {' '}
+                    {sendingEmail ? t('fiscalBills.sendingEmail') : t('fiscalBills.sendEmail')}
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                <div className="modal-tabs fiscalbills-detail-tabs" role="tablist" aria-label={t('fiscalBills.detailsTitle')}>
                   <button
-                    className={activeTab === 'tax' ? 'primary-button' : 'secondary-button'}
-                    onClick={() => setActiveTab('tax')}
                     type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'tax'}
+                    className={`tab-button ${activeTab === 'tax' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('tax')}
                   >
                     {t('fiscalBills.taxItems')}
                   </button>
                   <button
-                    className={activeTab === 'lines' ? 'primary-button' : 'secondary-button'}
-                    onClick={() => setActiveTab('lines')}
                     type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'lines'}
+                    className={`tab-button ${activeTab === 'lines' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('lines')}
                   >
                     {t('fiscalBills.lineItems')}
                   </button>
                   <button
-                    className={activeTab === 'payment' ? 'primary-button' : 'secondary-button'}
-                    onClick={() => setActiveTab('payment')}
                     type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'payment'}
+                    className={`tab-button ${activeTab === 'payment' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('payment')}
                   >
                     {t('fiscalBills.paymentItems')}
                   </button>
