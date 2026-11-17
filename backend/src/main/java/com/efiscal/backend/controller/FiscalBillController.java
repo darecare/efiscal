@@ -295,6 +295,20 @@ public class FiscalBillController {
         return ResponseEntity.status(HttpStatus.CREATED).body(result.fiscalBill());
     }
 
+    /** POST /api/v1/fiscalbill/{id}/email — Send / resend fiscal bill email to stored customer */
+    @PostMapping("/{id}/email")
+    public ResponseEntity<?> sendFiscalBillEmail(
+            @PathVariable Long id,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        authorizationService.requireAction("FISCAL_VIEW_BILLS");
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("Idempotency-Key header is required"));
+        }
+        validateFiscalBill(id);
+        var result = fiscalBillService.sendFiscalBillEmail(id);
+        return ResponseEntity.ok(new EmailSendResponse(result.status(), result.errorMessage()));
+    }
+
     /** POST /api/v1/fiscalbill/{id}/retry — Retry failed fiscal bill */
     @PostMapping("/{id}/retry")
     public ResponseEntity<?> retryFiscalBill(
@@ -414,5 +428,7 @@ public class FiscalBillController {
             String dateAndTimeOfIssue) {} // optional advance payment moment; Advance Sale only
 
     public record ErrorResponse(String message) {}
+
+    public record EmailSendResponse(String emailStatus, String emailError) {}
 }
 

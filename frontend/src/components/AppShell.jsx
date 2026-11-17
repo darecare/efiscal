@@ -252,6 +252,13 @@ const getNavItems = (user) => {
       ],
     },
     {
+      labelKey: 'nav.reports',
+      show: can('REPORTS_VIEW'),
+      children: [
+        { path: '/reports/fiscal', labelKey: 'nav.reportsFiscal', show: can('REPORTS_VIEW') },
+      ],
+    },
+    {
       labelKey: 'nav.administration',
       show: hasAnyAction(user, ['ACCOUNT_ACCESS', 'USERS_MANAGE', 'ROLES_MANAGE', 'ORGS_MANAGE']) || user?.roleName === 'SUPERADMIN',
       children: [

@@ -92,11 +92,11 @@ public class DataInitializerService implements CommandLineRunner {
         // Seed role-action mappings
         seedRoleActions(superAdminRole, List.of(
             "FISCAL_CREATE_BILL", "FISCAL_RETRY_BILL", "FISCAL_VIEW_BILLS", "FISCAL_MANAGE_PRODUCTS",
-            "MERCHANTPRO_FETCH_ORDERS", "USERS_MANAGE", "ROLES_MANAGE", "ORGS_MANAGE"
+            "MERCHANTPRO_FETCH_ORDERS", "USERS_MANAGE", "ROLES_MANAGE", "ORGS_MANAGE", "REPORTS_VIEW"
         ));
         seedRoleActions(clientAdminRole, List.of(
             "FISCAL_CREATE_BILL", "FISCAL_RETRY_BILL", "FISCAL_VIEW_BILLS", "FISCAL_MANAGE_PRODUCTS",
-            "MERCHANTPRO_FETCH_ORDERS", "USERS_MANAGE", "ROLES_MANAGE", "ORGS_MANAGE"
+            "MERCHANTPRO_FETCH_ORDERS", "USERS_MANAGE", "ROLES_MANAGE", "ORGS_MANAGE", "REPORTS_VIEW"
         ));
         seedRoleActions(operatorRole, List.of(
             "FISCAL_VIEW_BILLS", "MERCHANTPRO_FETCH_ORDERS"
@@ -194,6 +194,8 @@ public class DataInitializerService implements CommandLineRunner {
         seedAction("SYSTEM", "ORGS_MANAGE", "Manage Organizations", "Allows managing organizations and API settings");
         // Role grants come from V52 only; re-granting here on every startup would undo an admin revoking it.
         seedAction("SYSTEM", "ACCOUNT_ACCESS", "Account Page", "Allows opening the Account page and editing own name, email and password");
+        // Role grants come from V53 only (SUPERADMIN / CLIENT_ADMIN); do not re-grant on every startup.
+        seedAction("REPORTS", "REPORTS_VIEW", "View Reports", "Allows opening Reports and running fiscal report exports");
     }
 
     private void seedAction(String moduleCode, String actionCode, String name, String description) {

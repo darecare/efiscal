@@ -235,6 +235,12 @@ export const fiscalBillApi = {
     })
     return response.data
   },
+  async sendEmail(fiscalbillId, idempotencyKey) {
+    const response = await api.post(`/fiscalbill/${fiscalbillId}/email`, null, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    })
+    return response.data
+  },
   async createFromOrder(payload, idempotencyKey, orgId, clientId) {
     const response = await api.post('/fiscalbill/from-order', payload, {
       headers: { 'Idempotency-Key': idempotencyKey },
@@ -495,5 +501,30 @@ export const taxApi = {
   async update(id, payload) {
     const response = await api.put(`/taxes/${id}`, payload)
     return response.data
+  },
+}
+
+export const reportsApi = {
+  async fiscalCatalog() {
+    const response = await api.get('/reports/fiscal/catalog')
+    return response.data
+  },
+  async runFiscal({ orgId, report, from, to, page = 0, size = 50 }) {
+    const response = await api.get('/reports/fiscal', {
+      params: { orgId, report, from, to, page, size },
+    })
+    return response.data
+  },
+  async exportFiscalCsv({ orgId, report, from, to, lang = 'en' }) {
+    const response = await api.get('/reports/fiscal/export', {
+      params: { orgId, report, from, to, lang },
+      responseType: 'blob',
+    })
+    const disposition = response.headers?.['content-disposition'] || ''
+    const match = /filename="([^"]+)"/i.exec(disposition)
+    return {
+      blob: response.data,
+      fileName: match?.[1] || `${report || 'report'}.csv`,
+    }
   },
 }

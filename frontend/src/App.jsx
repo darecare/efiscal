@@ -20,6 +20,7 @@ import CreateFiscalBill from './pages/CreateFiscalBill'
 import PayTypeMap from './pages/PayTypeMap'
 import Products from './pages/Products'
 import Roles from './pages/Roles'
+import ReportsFiscal from './pages/ReportsFiscal'
 import Toast from './components/Toast'
 
 function guarded(element, options = {}) {
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="/fiscal-bills/products" element={guarded(<Products />, { action: 'FISCAL_MANAGE_PRODUCTS' })} />
         <Route path="/fiscal-bills/paytype-map" element={guarded(<PayTypeMap />, { action: 'ORGS_MANAGE' })} />
         <Route path="/taxes" element={guarded(<Taxes />, { action: 'ORGS_MANAGE' })} />
+        <Route path="/reports/fiscal" element={guarded(<ReportsFiscal />, { action: 'REPORTS_VIEW' })} />
         <Route path="*" element={<Navigate to="/orders" replace />} />
       </Routes>
       <Toast />

@@ -16,6 +16,7 @@ const LANDING_CANDIDATES = [
   { path: '/fiscal-bills', action: 'FISCAL_VIEW_BILLS' },
   { path: '/fiscal-bills/create', action: 'FISCAL_CREATE_BILL' },
   { path: '/fiscal-bills/products', action: 'FISCAL_MANAGE_PRODUCTS' },
+  { path: '/reports/fiscal', action: 'REPORTS_VIEW' },
   { path: '/users', action: 'USERS_MANAGE' },
   { path: '/roles', action: 'ROLES_MANAGE' },
   { path: '/organizations', action: 'ORGS_MANAGE' },

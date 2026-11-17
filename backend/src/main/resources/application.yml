@@ -23,3 +23,5 @@ app:
   serial-number: ${APP_SERIAL_NUMBER:ELEF-VPS-001}
   software-version: ${APP_SOFTWARE_VERSION:1.1.0}
   esir-number: ${APP_ESIR_NUMBER:1702}
+  reports:
+    export-max-rows: ${APP_REPORTS_EXPORT_MAX_ROWS:50000}

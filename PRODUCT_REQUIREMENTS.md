@@ -50,7 +50,7 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - Inline product search on Create Fiscal Bill line item Name (name, SKU, or EAN) with live MerchantPro price verification on selection
 - Fiscalization flow (fiscal bill issue) through Serbian Tax Authority API
 - Status tracking for submitted fiscal bills (via `GET_STATUS` template)
-- Basic reporting/export
+- Basic reporting/export (Reports → Fiscal bills hub; first report Products sold Net Normal; CSV export)
 
 ## 5. Out of Scope (MVP)
 - [example: multi-tenant white-labeling]
@@ -138,6 +138,8 @@ Example 3: Create product for module "Slanje paketa", based on product from Merc
 - FR-024: Web UI must support user-selectable display language. MVP languages: English (`en`) and Serbian (`sr`).
 - FR-025: All user-visible labels, messages, navigation text, and accessibility strings on protected pages must resolve through the frontend i18n catalog (no hardcoded UI copy in React components).
 - FR-026: Role and permission UI labels (module group names, action display names, permission tooltips) must be localizable by action code while backend permission codes remain unchanged.
+- FR-027: System must provide a Reports section gated by `REPORTS_VIEW`. Fiscal-bill reports live on a hub page (`/reports/fiscal`) with a report selector and shared date filters.
+- FR-028: First fiscal report must show products sold as Net Normal (SUCCESS Normal Sale minus Normal Refund) for a Belgrade calendar period on Tax Authority `sdcDateTime`, with server pagination and CSV export of the filtered result set.
 
 
 ## 8. Non-Functional Requirements (Product-Level)

@@ -83,6 +83,16 @@
       "templates_other": "{{count}} templates"
     }
   },
+  "dateRangePresets": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This Week",
+    "lastWeek": "Last Week",
+    "thisMonth": "This Month",
+    "lastMonth": "Last Month",
+    "daysUpToToday": "days up to today",
+    "daysStartingToday": "days starting today"
+  },
   "orgSwitcher": {
     "label": "Organization",
     "triggerAriaLabel": "Select active organization",
@@ -112,6 +122,8 @@
     "apiConfiguration": "API Configuration",
     "emailTemplates": "Email Templates",
     "paymentTypeMapping": "Payment Type Mapping",
+    "reports": "Reports",
+    "reportsFiscal": "Fiscal bills",
     "expandGroup": "Expand menu",
     "collapseGroup": "Collapse menu"
   },
@@ -158,6 +170,38 @@
     "passwordMismatch": "Passwords do not match",
     "passwordChanged": "Password is successfully changed",
     "passwordChangeFailed": "Error while saving new password"
+  },
+  "reports": {
+    "fiscalTitle": "Fiscal bill reports",
+    "fiscalSubtitle": "Product and fiscal analytics for the active organization.",
+    "reportLabel": "Report",
+    "sdcDateRange": "SDC Date Range",
+    "pageSize": "Rows per page",
+    "run": "Run report",
+    "running": "Running…",
+    "exportCsv": "Export CSV",
+    "exporting": "Exporting…",
+    "runFailed": "Failed to run report",
+    "exportFailed": "Failed to export CSV",
+    "dateRangeRequired": "From and To dates are required",
+    "dateRangeInvalid": "From date must be on or before To date",
+    "noRows": "No products found for the selected period.",
+    "catalog": {
+      "productsSoldNetNormal": "Products sold (Net Normal)",
+      "productsSoldNetNormalDescription": "SUCCESS Normal Sale minus Normal Refund, grouped by product. Period uses Tax Authority sdcDateTime (Belgrade calendar days)."
+    },
+    "columns": {
+      "name": "Name",
+      "sku": "SKU",
+      "gtin": "GTIN",
+      "qtySold": "Qty sold",
+      "qtyRefunded": "Qty refunded",
+      "qtyNet": "Qty net",
+      "amountSold": "Amount sold",
+      "amountRefunded": "Amount refunded",
+      "amountNet": "Amount net",
+      "billCount": "Bill count"
+    }
   },
   "clients": {
     "title": "Clients",
@@ -295,7 +339,8 @@
     "permissionModules": {
       "FISCAL": "Fiscal",
       "MERCHANTPRO": "MerchantPro",
-      "SYSTEM": "System"
+      "SYSTEM": "System",
+      "REPORTS": "Reports"
     },
     "actionLabels": {
       "FISCAL_CREATE_BILL": "Create Fiscal Bill",
@@ -306,7 +351,8 @@
       "ROLES_MANAGE": "Manage Roles",
       "ORGS_MANAGE": "Manage Organizations",
       "FISCAL_MANAGE_PRODUCTS": "Manage Products",
-      "ACCOUNT_ACCESS": "Account Page"
+      "ACCOUNT_ACCESS": "Account Page",
+      "REPORTS_VIEW": "View Reports"
     },
     "permissionDescriptions": {
       "FISCAL_CREATE_BILL": "Allows issuing new fiscal bills",
@@ -317,7 +363,8 @@
       "ROLES_MANAGE": "Allows creating and editing roles",
       "ORGS_MANAGE": "Allows managing organizations and API settings",
       "FISCAL_MANAGE_PRODUCTS": "Allows managing product catalog and syncing from shop",
-      "ACCOUNT_ACCESS": "Allows opening the Account page and editing own name, email and password"
+      "ACCOUNT_ACCESS": "Allows opening the Account page and editing own name, email and password",
+      "REPORTS_VIEW": "Allows opening Reports and running fiscal report exports"
     }
   },
   "apiConfig": {
@@ -502,6 +549,7 @@
     "copyFailed": "Failed to create copy fiscal bill.",
     "refundFailed": "Failed to create refund fiscal bill.",
     "detailsTitle": "Fiscal Bill Details",
+    "downloadPreviewMenu": "Download / Preview",
     "previewHtmlA4": "Preview HTML (A4)",
     "previewingHtml": "Opening preview…",
     "downloadPdfA4": "Download PDF (A4)",
@@ -512,12 +560,19 @@
     "downloadImageRoll80": "Download PNG (Roll 57-80mm)",
     "downloadingImage": "Downloading image…",
     "downloadImageFailed": "Failed to download fiscal bill image.",
+    "sendEmail": "Send email",
+    "sendingEmail": "Sending email…",
+    "sendEmailSuccess": "Email sent successfully.",
+    "sendEmailSkipped": "Email was not sent: {{reason}}",
+    "sendEmailFailed": "Failed to send fiscal bill email.",
     "previewPopupBlocked": "Popup blocked. Allow popups to open the HTML preview.",
     "previewHtmlFailed": "Failed to open HTML preview.",
     "loadingDetails": "Loading details…",
     "fiscalBillId": "Fiscal Bill ID:",
     "taInvoiceNoLabel": "TA Invoice No",
     "updated": "Updated:",
+    "customerEmail": "Customer Email",
+    "customerId": "Customer ID",
     "verificationLink": "Verification Link:",
     "openVerificationLink": "Open verification link",
     "qrAlt": "Fiscal bill QR",

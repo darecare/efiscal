@@ -58,11 +58,12 @@
 - **Tests:** [`OrgContext.test.js`](frontend/src/contexts/OrgContext.test.js) covers `storageKey`, `resolveInitialOrgId`, provider API selection, and load-failure state.
 
 ### 3.2 List Workspace Pattern
-- For operational pages (Orders, Fiscal Bills, Products, Users):
+- For operational pages (Orders, Fiscal Bills, Products, Users, Reports):
 	- Fetch Filters section
 	- Actions Bar section
 	- Table section
 	- Pagination section
+- **Reports hub:** [`ReportsFiscal`](frontend/src/pages/ReportsFiscal.jsx) at `/reports/fiscal` (action `REPORTS_VIEW`). Shared header filters (report selector + Belgrade date range on SDC datetime) + Run + Export CSV; table columns come from the API `columns[]` payload. Server-side pagination only (do not load the full result into the browser). Future non-fiscal hubs (orders/logs) get their own routes under the Reports nav group.
 
 ### 3.3 Two-Phase Filtering Pattern
 - Phase 1: server-side fetch filters (date/status/org/platform) before loading data.

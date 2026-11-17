@@ -242,8 +242,11 @@ The system defines the following canonical action codes (inserted during migrati
 | `SYSTEM` | `ROLES_MANAGE` | Manage Roles | Allows CRUD operations on custom client roles |
 | `SYSTEM` | `ORGS_MANAGE` | Manage Organizations | Allows managing organizations, API connections, and templates |
 | `SYSTEM` | `ACCOUNT_ACCESS` | Account Page | Allows opening the Account page and editing own name, email, and password |
+| `REPORTS` | `REPORTS_VIEW` | View Reports | Allows opening Reports and running fiscal report exports |
 
 `ACCOUNT_ACCESS` is granted to roles only by `V52` (all roles existing at that time). `DataInitializerService` seeds the catalog entry but deliberately not role grants, because its startup re-grant would undo an admin revoking it.
+
+`REPORTS_VIEW` is granted by `V53` to built-in `SUPERADMIN` / `CLIENT_ADMIN`. `DataInitializerService` seeds the catalog entry and may grant it on first seed of those roles, but does not re-grant on every startup for existing role_action_access rows.
 
 #### Endpoint → Required Action Mapping
 
@@ -265,6 +268,9 @@ The system defines the following canonical action codes (inserted during migrati
   *   `smtpPassword` is treated as sensitive write-only input and is not returned from organization DTO responses.
 *   **Sync Endpoints (`/api/v1/merchantpro/orders`):**
     *   `GET /merchantpro/orders` -> requires `MERCHANTPRO_FETCH_ORDERS` and organization access validation.
+*   **Reports Endpoints (`/api/v1/reports/fiscal`):**
+    *   `GET /reports/fiscal/catalog`, `GET /reports/fiscal`, `GET /reports/fiscal/export` -> requires `REPORTS_VIEW`; run/export also require organization access.
+    *   Handlers live under `com.efiscal.backend.service.report` and are registered in `FiscalReportRegistry`. Native SQL for aggregations is in `FiscalBillReportRepository`.
 *   **Fiscalization Endpoints (`/api/v1/fiscalbill`):**
     *   `GET /fiscalbill`, `GET /fiscalbill/{id}`, `GET /fiscalbill/{id}/details` -> requires `FISCAL_VIEW_BILLS` and organization access validation.
     *   `POST /from-order`, `POST /manual`, `POST /{id}/copy`, `POST /{id}/refund` -> requires `FISCAL_CREATE_BILL` and organization access validation.

@@ -436,9 +436,12 @@ When fiscal bill is created based on sales order, then this table will be store 
 | total_amount        | NUMERIC(14,2)| NOT NULL                 |                                          |
 | total_paid          | NUMERIC(14,2)| NULL                     | Advance Sale amount paid on this line (may be less than total_amount); null otherwise |
 | tax_label           | VARCHAR(10)  |                          |                                          |
+| gtin                | VARCHAR(14)  |                          | EAN / barcode (optional)                 |
+| product_id          | VARCHAR(50)  |                          | External product id from shop/manual     |
+| sku                 | VARCHAR(100) |                          | SKU (optional)                           |
 | is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE   |                                          |
-| created_at          | TIMESTAMPTZ  | NOT NULL                 |                                          |
-| updated_at          | TIMESTAMPTZ  | NOT NULL                 |                                          |
+| created             | TIMESTAMP    | NOT NULL                 | App timestamp (column name `created`)    |
+| updated             | TIMESTAMP    | NOT NULL                 | App timestamp (column name `updated`)    |
 
 CREATE INDEX IF NOT EXISTS idx_fiscalbillline_bill ON fiscalbillline (fiscalbill_id);
 
@@ -501,6 +504,7 @@ Migrations:
 - `V37__add_product_source_ownership.sql` — `source_type`, `sync_status`, `hidden_at`; backfill synced rows; visibility indexes
 - `V51__org_include_shipment_and_product_is_shipment.sql` — `org.include_shipment`, `product.is_shipment`, one-shipping-product-per-org partial unique index
 - `V52__seed_account_access_action.sql` — seeds `SYSTEM` / `ACCOUNT_ACCESS` (Account page + own name/email/password) and grants it once to every existing role so prior access is kept; no schema change
+- `V53__seed_reports_view_action_and_index.sql` — seeds `REPORTS` / `REPORTS_VIEW`, grants to built-in SUPERADMIN/CLIENT_ADMIN, partial index `idx_fiscalbill_report_org_sdc` on SUCCESS Normal bills `(org_id, efiscal_sdcdatetime)`
 
 ### 2.19 product_sync_job
 Table name: product_sync_job
