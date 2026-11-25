@@ -45,6 +45,9 @@ export default function ApiConfig() {
   const [tplFormError, setTplFormError] = useState(null)
   const [tplSaving, setTplSaving] = useState(false)
 
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+
   useEffect(() => {
     orgsApi.list().then(setOrgs).catch(() => setOrgs([]))
     loadConnections()
@@ -180,6 +183,53 @@ export default function ApiConfig() {
     }
   }
 
+  function openDeleteConn(c) {
+    setDeleteTarget({ type: 'connection', item: c })
+  }
+
+  function openDeleteTpl(tpl) {
+    setDeleteTarget({ type: 'template', item: tpl })
+  }
+
+  function closeDeleteModal() {
+    if (deleting) return
+    setDeleteTarget(null)
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return
+    try {
+      setDeleting(true)
+      setError(null)
+      if (deleteTarget.type === 'connection') {
+        const c = deleteTarget.item
+        await apiConnApi.remove(c.apiconnId)
+        setSuccessMsg(t('apiConfig.connectionDeleted'))
+        if (selectedConn?.apiconnId === c.apiconnId) {
+          setSelectedConn(null)
+          setTemplates([])
+        }
+        setConnections(await apiConnApi.list())
+      } else {
+        const tpl = deleteTarget.item
+        await apiTemplateApi.remove(tpl.apitemplateId)
+        setSuccessMsg(t('apiConfig.templateDeleted'))
+        if (selectedConn) {
+          setTemplates(await apiTemplateApi.list(selectedConn.apiconnId))
+        }
+      }
+      setDeleteTarget(null)
+    } catch (err) {
+      const fallback = deleteTarget.type === 'connection'
+        ? t('apiConfig.connectionDeleteFailed')
+        : t('apiConfig.templateDeleteFailed')
+      setError(err.response?.data?.message || err.response?.data || fallback)
+      setDeleteTarget(null)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <AppShell
       title={t('apiConfig.title')}
@@ -234,7 +284,26 @@ export default function ApiConfig() {
                   </td>
                   {isSuperAdmin && (
                     <td onClick={ev => ev.stopPropagation()}>
-                      <button className="secondary-button" onClick={() => openEditConn(c)}>{t('common.edit')}</button>
+                      <div className="table-row-actions">
+                        <button
+                          type="button"
+                          className="secondary-button icon-action-button"
+                          onClick={() => openEditConn(c)}
+                          aria-label={t('apiConfig.editConnectionAria')}
+                          title={t('apiConfig.editConnectionAria')}
+                        >
+                          <i className="fas fa-pencil-alt" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-button icon-action-button danger"
+                          onClick={() => openDeleteConn(c)}
+                          aria-label={t('apiConfig.deleteConnectionAria')}
+                          title={t('apiConfig.deleteConnectionAria')}
+                        >
+                          <i className="fas fa-trash-alt" aria-hidden="true" />
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -299,7 +368,26 @@ export default function ApiConfig() {
                     </td>
                     {isSuperAdmin && (
                       <td>
-                        <button className="secondary-button" onClick={() => openEditTpl(tpl)}>{t('common.edit')}</button>
+                        <div className="table-row-actions">
+                          <button
+                            type="button"
+                            className="secondary-button icon-action-button"
+                            onClick={() => openEditTpl(tpl)}
+                            aria-label={t('apiConfig.editTemplateAria')}
+                            title={t('apiConfig.editTemplateAria')}
+                          >
+                            <i className="fas fa-pencil-alt" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button icon-action-button danger"
+                            onClick={() => openDeleteTpl(tpl)}
+                            aria-label={t('apiConfig.deleteTemplateAria')}
+                            title={t('apiConfig.deleteTemplateAria')}
+                          >
+                            <i className="fas fa-trash-alt" aria-hidden="true" />
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -483,6 +571,42 @@ export default function ApiConfig() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={closeDeleteModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>
+                {deleteTarget.type === 'connection'
+                  ? t('apiConfig.deleteConnTitle', { name: deleteTarget.item.displayName })
+                  : t('apiConfig.deleteTplTitle', { name: deleteTarget.item.operationKey })}
+              </h3>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={closeDeleteModal}
+                disabled={deleting}
+                aria-label={t('common.close')}
+              >
+                ×
+              </button>
+            </div>
+            <p style={{ marginTop: 0 }}>
+              {deleteTarget.type === 'connection'
+                ? t('apiConfig.confirmDeleteConnection', { name: deleteTarget.item.displayName })
+                : t('apiConfig.confirmDeleteTemplate', { name: deleteTarget.item.operationKey })}
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={closeDeleteModal} disabled={deleting}>
+                {t('common.cancel')}
+              </button>
+              <button type="button" className="primary-button danger" onClick={handleConfirmDelete} disabled={deleting}>
+                {deleting ? t('common.deleting') : t('common.confirmDelete')}
+              </button>
+            </div>
           </div>
         </div>
       )}

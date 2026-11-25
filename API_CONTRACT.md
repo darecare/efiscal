@@ -838,6 +838,44 @@ All endpoints require `orgId` scope validation via user's `allowedOrgIds` (excep
 - 204 Response: No Content
 - Errors: `401`, `403`, `404`, `500`
 
+## 5E. API Configuration Endpoints
+
+Action for all endpoints below: `ORGS_MANAGE`.
+
+### GET /apiconn
+- Description: List API connections (optionally filtered by `orgId`). Soft-deleted connections are excluded.
+- Errors: `401`, `403`, `500`
+
+### POST /apiconn
+- Description: Create an API connection for an organization.
+- Errors: `400`, `401`, `403`, `500`
+
+### PUT /apiconn/{id}
+- Description: Update an API connection.
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### DELETE /apiconn/{id}
+- Description: Soft-delete an API connection (`deleted_at`); also marks it inactive.
+- 204 Response: empty body
+- Errors: `401`, `403`, `404`, `500`
+
+### GET /apitemplate?apiconnId=
+- Description: List operation templates for a connection.
+- Errors: `401`, `403`, `404`, `500`
+
+### POST /apitemplate
+- Description: Create an operation template.
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### PUT /apitemplate/{id}
+- Description: Update an operation template.
+- Errors: `400`, `401`, `403`, `404`, `500`
+
+### DELETE /apitemplate/{id}
+- Description: Hard-delete an operation template.
+- 204 Response: empty body
+- Errors: `401`, `403`, `404`, `500`
+
 ## 5F. Fiscal Bill Endpoints
 
 ### POST /fiscalbill/manual
@@ -973,6 +1011,7 @@ All non-2xx responses should follow:
   "details": []
 }
 ```
+- Bean Validation failures (`@Valid` / `@NotBlank`, etc.) are mapped by `GlobalExceptionHandler` to HTTP `400` with `code: VALIDATION_ERROR`. `message` is the first field error (e.g. `Tax ID is required`); `details` lists all field messages.
 
 ## 7. Reliability and Timeouts
 - Inbound request timeout: [e.g., 30s]

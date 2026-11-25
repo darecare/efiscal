@@ -58,6 +58,17 @@ public class ApiConfigController {
         );
     }
 
+    @DeleteMapping("/apiconn/{id}")
+    public ResponseEntity<?> deleteConnection(@PathVariable Long id) {
+        authorizationService.requireAction("ORGS_MANAGE");
+        apiConnService.deleteConnection(
+            id,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()
+        );
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/apitemplate")
     public List<ApiTemplateDto> listTemplates(@RequestParam Long apiconnId) {
         authorizationService.requireAction("ORGS_MANAGE");
@@ -91,5 +102,16 @@ public class ApiConfigController {
                 authorizationService.isSuperAdmin()
             )
         );
+    }
+
+    @DeleteMapping("/apitemplate/{id}")
+    public ResponseEntity<?> deleteTemplate(@PathVariable Long id) {
+        authorizationService.requireAction("ORGS_MANAGE");
+        apiConnService.deleteTemplate(
+            id,
+            authorizationService.getClientId(),
+            authorizationService.isSuperAdmin()
+        );
+        return ResponseEntity.noContent().build();
     }
 }
