@@ -203,6 +203,10 @@ export default function Organizations() {
       setFormError(t('organizations.nameRequired'))
       return
     }
+    if (!form.taxId.trim()) {
+      setFormError(t('organizations.taxIdRequired'))
+      return
+    }
     if (!form.clientId) {
       setFormError(t('organizations.clientRequired'))
       return
@@ -378,11 +382,12 @@ export default function Organizations() {
                     />
                   </div>
                   <div className="field">
-                    <label>{t('organizations.taxId')}</label>
+                    <label>{t('organizations.taxId')} *</label>
                     <input
                       value={form.taxId}
                       onChange={(e) => handleChange('taxId', e.target.value)}
                       placeholder={t('organizations.taxIdPlaceholder', { example: '101234567' })}
+                      required
                     />
                   </div>
                   <div className="field">

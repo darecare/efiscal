@@ -127,6 +127,27 @@ public class ApiConnService {
         return toTemplateDto(apiTemplateRepository.save(t));
     }
 
+    @Transactional
+    public void deleteConnection(Long apiconnId, Long callerClientId, boolean isSuperAdmin) {
+        ApiConnEntity e = apiConnRepository.findById(apiconnId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Connection not found"));
+        if (e.getDeletedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Connection not found");
+        }
+        authorizationService.requireOrgAccess(e.getOrg().getOrgId());
+        e.setDeletedAt(OffsetDateTime.now());
+        e.setActive(false);
+        apiConnRepository.save(e);
+    }
+
+    @Transactional
+    public void deleteTemplate(Long apitemplateId, Long callerClientId, boolean isSuperAdmin) {
+        ApiTemplateEntity t = apiTemplateRepository.findById(apitemplateId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Template not found"));
+        authorizationService.requireOrgAccess(t.getApiConn().getOrg().getOrgId());
+        apiTemplateRepository.delete(t);
+    }
+
     private ApiConnDto toConnDto(ApiConnEntity e) {
         return new ApiConnDto(e.getApiconnId(), e.getOrg().getOrgId(), e.getOrg().getName(),
             e.getDisplayName(), e.getApiPlatform(), e.getApiBaseUrl(),

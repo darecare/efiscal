@@ -179,6 +179,9 @@ export const apiConnApi = {
     const response = await api.put(`/apiconn/${id}`, payload)
     return response.data
   },
+  async remove(id) {
+    await api.delete(`/apiconn/${id}`)
+  },
 }
 
 export const apiTemplateApi = {
@@ -193,6 +196,9 @@ export const apiTemplateApi = {
   async update(id, payload) {
     const response = await api.put(`/apitemplate/${id}`, payload)
     return response.data
+  },
+  async remove(id) {
+    await api.delete(`/apitemplate/${id}`)
   },
 }
 

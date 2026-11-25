@@ -1172,6 +1172,15 @@ input.form-input:focus {
   white-space: nowrap;
 }
 
+.table-row-actions .icon-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+
 .table-card th {
   color: var(--color-text-muted);
   font-weight: 600;

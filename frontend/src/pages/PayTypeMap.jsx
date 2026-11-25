@@ -26,6 +26,8 @@ export default function PayTypeMap() {
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     clientsApi.list().then(setClients).catch(() => setClients([]))
@@ -104,13 +106,28 @@ export default function PayTypeMap() {
     }
   }
 
-  async function handleDelete(mapping) {
-    if (!window.confirm(t('payTypeMap.confirmDelete', { code: mapping.paymentMethodCode }))) return
+  function openDeleteModal(mapping) {
+    setDeleteTarget(mapping)
+  }
+
+  function closeDeleteModal() {
+    if (deleting) return
+    setDeleteTarget(null)
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return
     try {
-      await paytypeMapApi.remove(mapping.paytypeMapId)
-      setMappings(prev => prev.filter(m => m.paytypeMapId !== mapping.paytypeMapId))
+      setDeleting(true)
+      setErrorKey(null)
+      await paytypeMapApi.remove(deleteTarget.paytypeMapId)
+      setMappings((prev) => prev.filter((m) => m.paytypeMapId !== deleteTarget.paytypeMapId))
+      setDeleteTarget(null)
     } catch {
       setErrorKey('payTypeMap.deleteFailed')
+      setDeleteTarget(null)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -197,9 +214,27 @@ export default function PayTypeMap() {
                     <td><code>{m.paymentMethodCode}</code></td>
                     <td>{paymentTypeLabel(m.paymentType)}</td>
                     <td>{m.description || t('common.dash')}</td>
-                    <td style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button className="secondary-button" style={{ padding: '0.25rem 0.75rem' }} onClick={() => openEdit(m)}>{t('common.edit')}</button>
-                      <button className="secondary-button" style={{ padding: '0.25rem 0.75rem', color: 'red' }} onClick={() => handleDelete(m)}>{t('common.delete')}</button>
+                    <td>
+                      <div className="table-row-actions">
+                        <button
+                          type="button"
+                          className="secondary-button icon-action-button"
+                          onClick={() => openEdit(m)}
+                          aria-label={t('payTypeMap.editAria')}
+                          title={t('payTypeMap.editAria')}
+                        >
+                          <i className="fas fa-pencil-alt" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-button icon-action-button danger"
+                          onClick={() => openDeleteModal(m)}
+                          aria-label={t('payTypeMap.deleteAria')}
+                          title={t('payTypeMap.deleteAria')}
+                        >
+                          <i className="fas fa-trash-alt" aria-hidden="true" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -210,6 +245,36 @@ export default function PayTypeMap() {
       )}
 
       {loading && <p>{t('common.loadingDots')}</p>}
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={closeDeleteModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{t('payTypeMap.deleteTitle')}</h3>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={closeDeleteModal}
+                disabled={deleting}
+                aria-label={t('common.close')}
+              >
+                ×
+              </button>
+            </div>
+            <p style={{ marginTop: 0 }}>
+              {t('payTypeMap.confirmDelete', { code: deleteTarget.paymentMethodCode })}
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={closeDeleteModal} disabled={deleting}>
+                {t('common.cancel')}
+              </button>
+              <button type="button" className="primary-button danger" onClick={handleConfirmDelete} disabled={deleting}>
+                {deleting ? t('common.deleting') : t('common.confirmDelete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   )
 }

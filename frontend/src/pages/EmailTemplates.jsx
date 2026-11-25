@@ -28,6 +28,8 @@ export default function EmailTemplates() {
   const [form, setForm] = useState(emptyForm)
   const [formError, setFormError] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     orgsApi.list().then(setOrgs).catch(() => setOrgs([]))
@@ -127,15 +129,29 @@ export default function EmailTemplates() {
     }
   }
 
-  async function handleDelete(template) {
-    const confirmed = window.confirm(t('emailTemplates.confirmDelete', { name: template.templateName }))
-    if (!confirmed) return
+  function openDeleteModal(template) {
+    setDeleteTarget(template)
+  }
+
+  function closeDeleteModal() {
+    if (deleting) return
+    setDeleteTarget(null)
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return
     try {
-      await emailTemplatesApi.remove(template.emailTemplateId)
+      setDeleting(true)
+      setError(null)
+      await emailTemplatesApi.remove(deleteTarget.emailTemplateId)
       setSuccessMsg(t('emailTemplates.deletedSuccess'))
+      setDeleteTarget(null)
       await loadTemplates(activeOrgId)
     } catch (err) {
       setError(err?.response?.data?.message || err?.response?.data || t('common.operationFailed'))
+      setDeleteTarget(null)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -179,8 +195,24 @@ export default function EmailTemplates() {
                   </td>
                   <td>
                     <div className="table-row-actions">
-                      <button className="secondary-button" onClick={() => openEditModal(template)}>{t('common.edit')}</button>
-                      <button className="secondary-button danger" onClick={() => handleDelete(template)}>{t('common.delete')}</button>
+                      <button
+                        type="button"
+                        className="secondary-button icon-action-button"
+                        onClick={() => openEditModal(template)}
+                        aria-label={t('emailTemplates.editAria')}
+                        title={t('emailTemplates.editAria')}
+                      >
+                        <i className="fas fa-pencil-alt" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button icon-action-button danger"
+                        onClick={() => openDeleteModal(template)}
+                        aria-label={t('emailTemplates.deleteAria')}
+                        title={t('emailTemplates.deleteAria')}
+                      >
+                        <i className="fas fa-trash-alt" aria-hidden="true" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -253,6 +285,36 @@ export default function EmailTemplates() {
                 <button type="submit" className="primary-button" disabled={saving}>{saving ? t('common.saving') : t('common.saveChanges')}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={closeDeleteModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{t('emailTemplates.deleteTitle')}</h3>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={closeDeleteModal}
+                disabled={deleting}
+                aria-label={t('common.close')}
+              >
+                ×
+              </button>
+            </div>
+            <p style={{ marginTop: 0 }}>
+              {t('emailTemplates.confirmDelete', { name: deleteTarget.templateName })}
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={closeDeleteModal} disabled={deleting}>
+                {t('common.cancel')}
+              </button>
+              <button type="button" className="primary-button danger" onClick={handleConfirmDelete} disabled={deleting}>
+                {deleting ? t('common.deleting') : t('common.confirmDelete')}
+              </button>
+            </div>
           </div>
         </div>
       )}

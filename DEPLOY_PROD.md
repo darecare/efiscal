@@ -53,10 +53,16 @@ Install Docker Compose **v2** (plugin or standalone 2.x). The scripts detect whi
 ```bash
 docker compose version                  # plugin: "Docker Compose version v2.x"
 docker-compose version --short          # standalone: must start with 2 (1.x is not enough)
-# If missing:
+# If "docker: unknown command: docker compose" / Unable to locate package docker-compose-plugin:
 dpkg -l | grep -E 'docker-ce|docker.io'
-sudo apt update && sudo apt install -y docker-compose-plugin   # Docker from download.docker.com (docker-ce)
-# sudo apt install -y docker-compose-v2                        # Ubuntu's docker.io package
+sudo apt update && sudo apt install -y docker-compose-plugin   # only if Docker is from download.docker.com (docker-ce)
+# sudo apt install -y docker-compose-v2                        # Ubuntu's docker.io package (if available)
+# Neither package available? Install the plugin binary manually (works with any Docker Engine):
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+sudo curl -fSL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+     -o /usr/local/lib/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+docker compose version                  # expect "Docker Compose version v2.x"
 
 sudo ss -tlnp | grep -E ':(8090|8091)\b' # must print nothing; if busy, pick other ports in .env AND the Apache vhost
 
@@ -98,7 +104,7 @@ chmod 600 ~/.ssh/config
 Clone directly into `/opt/elef`. The repo root becomes `/opt/elef`, with no nested `efiscal/` folder.
 
 ```bash
-git clone git@github-efiscal:darecare/efiscal.git /opt/elef
+git clone git@github.com:darecare/efiscal.git /opt/elef
 # public repo / default SSH key: git clone git@github.com:darecare/efiscal.git /opt/elef
 cd /opt/elef
 ```
